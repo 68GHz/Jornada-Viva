@@ -1,26 +1,21 @@
 {
   "expo": {
     "name": "JornadaViva",
-    "slug": "JornadaViva",
+    "slug": "jornadaviva",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.brigadas.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1A6B4A"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.brigadas.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
