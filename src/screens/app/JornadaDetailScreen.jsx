@@ -248,12 +248,14 @@ const confirmarInscripcion = async () => {
       {/* Botón de inscripción */}
       <View style={styles.accion}>{renderBotonInscripcion()}</View>
 
-      <View style={styles.confirmacionCard}>
-        <Text style={styles.confirmacionTitulo}>🎉 ¡Estás inscrito!</Text>
-        <Text style={styles.confirmacionTexto}>
-          Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado.
+      {inscrito && (
+        <View style={styles.confirmacionCard}>
+          <Text style={styles.confirmacionTitulo}>🎉 ¡Estás inscrito!</Text>
+          <Text style={styles.confirmacionTexto}>
+            Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado.
           </Text>
-      </View>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -396,5 +398,24 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: "700",
+  },
+  confirmacionCard: {
+    backgroundColor: colors.primaryPale,
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+    gap: 6,
+    marginTop: 4,
+  },
+  confirmacionTitulo: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.primary,
+  },
+  confirmacionTexto: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
   },
 });
