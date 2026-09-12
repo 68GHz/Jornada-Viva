@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
 
@@ -18,7 +19,10 @@ export default function HomeScreen({ navigation }) {
     <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
       {/* Saludo */}
       <View style={styles.saludo}>
-        <Text style={styles.bienvenida}>Hola, {nombre.split(" ")[0]} 👋</Text>
+        <View style={styles.saludoFila}>
+          <Ionicons name="hand-right" size={22} color={colors.primary} />
+          <Text style={styles.bienvenida}>Hola, {nombre.split(" ")[0]}</Text>
+        </View>
         <Text style={styles.descripcion}>
           Aquí puedes explorar las jornadas comunitarias disponibles e inscribirte
           de forma rápida y segura.
@@ -32,7 +36,7 @@ export default function HomeScreen({ navigation }) {
           onPress={() => navigation.navigate("JornadasList")}
           activeOpacity={0.85}
         >
-          <Text style={styles.tarjetaIcono}>📋</Text>
+          <Ionicons name="list-circle-outline" size={40} color={colors.white} />
           <Text style={styles.tarjetaTitulo}>Ver jornadas</Text>
           <Text style={styles.tarjetaDescripcion}>
             Explora todas las jornadas disponibles en tu comunidad
@@ -75,11 +79,16 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
   },
+  saludoFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
   bienvenida: {
     fontSize: 22,
     fontWeight: "800",
     color: colors.primary,
-    marginBottom: 6,
   },
   descripcion: {
     fontSize: 14,
@@ -95,9 +104,6 @@ const styles = StyleSheet.create({
     padding: 22,
     alignItems: "center",
     gap: 8,
-  },
-  tarjetaIcono: {
-    fontSize: 36,
   },
   tarjetaTitulo: {
     fontSize: 18,

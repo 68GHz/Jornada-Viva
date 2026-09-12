@@ -19,6 +19,7 @@ import {
   updateDoc,
   increment,
 } from "firebase/firestore";
+import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
 import { db } from "../../../firebaseConfig";
@@ -139,7 +140,8 @@ const confirmarInscripcion = async () => {
     if (inscrito) {
       return (
         <View style={styles.botonInscrito}>
-          <Text style={styles.botonTexto}>✅ Ya estás inscrito</Text>
+          <Ionicons name="checkmark-circle" size={20} color={colors.white} />
+          <Text style={styles.botonTexto}>Ya estás inscrito</Text>
         </View>
       );
     }
@@ -199,7 +201,7 @@ const confirmarInscripcion = async () => {
         <Text style={styles.seccionTitulo}>Información de la jornada</Text>
 
         <View style={styles.filaInfo}>
-          <Text style={styles.filaIcono}>📅</Text>
+          <Ionicons name="calendar-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Fecha</Text>
             <Text style={styles.filaValor}>
@@ -211,7 +213,7 @@ const confirmarInscripcion = async () => {
         <View style={styles.separador} />
 
         <View style={styles.filaInfo}>
-          <Text style={styles.filaIcono}>🕐</Text>
+          <Ionicons name="time-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Hora</Text>
             <Text style={styles.filaValor}>{jornada.hora}</Text>
@@ -221,7 +223,7 @@ const confirmarInscripcion = async () => {
         <View style={styles.separador} />
 
         <View style={styles.filaInfo}>
-          <Text style={styles.filaIcono}>📍</Text>
+          <Ionicons name="location-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Lugar</Text>
             <Text style={styles.filaValor}>{jornada.lugar}</Text>
@@ -231,7 +233,7 @@ const confirmarInscripcion = async () => {
         <View style={styles.separador} />
 
         <View style={styles.filaInfo}>
-          <Text style={styles.filaIcono}>👤</Text>
+          <Ionicons name="person-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Responsable</Text>
             <Text style={styles.filaValor}>{jornada.responsable}</Text>
@@ -250,7 +252,10 @@ const confirmarInscripcion = async () => {
 
       {inscrito && (
         <View style={styles.confirmacionCard}>
-          <Text style={styles.confirmacionTitulo}>🎉 ¡Estás inscrito!</Text>
+          <View style={styles.confirmacionFila}>
+            <Ionicons name="sparkles" size={18} color={colors.primary} />
+            <Text style={styles.confirmacionTitulo}>¡Estás inscrito!</Text>
+          </View>
           <Text style={styles.confirmacionTexto}>
             Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado.
           </Text>
@@ -331,8 +336,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   filaIcono: {
-    fontSize: 18,
     marginTop: 1,
+    width: 20,
+    textAlign: "center",
   },
   filaTexto: {
     flex: 1,
@@ -387,6 +393,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     minHeight: 54,
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
   },
   botonAgotado: {
     backgroundColor: colors.textDisabled,
@@ -407,6 +415,11 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.success,
     gap: 6,
     marginTop: 4,
+  },
+  confirmacionFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   confirmacionTitulo: {
     fontSize: 16,

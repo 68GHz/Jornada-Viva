@@ -13,6 +13,7 @@ import {
   orderBy,
   getDocs,
 } from "firebase/firestore";
+import { Ionicons } from "@expo/vector-icons";
 import { db } from "../../../firebaseConfig";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -65,7 +66,7 @@ export default function JornadasListScreen({ navigation }) {
   if (error) {
     return (
       <View style={styles.centrado}>
-        <Text style={styles.errorIcono}>⚠️</Text>
+        <Ionicons name="warning-outline" size={44} color={colors.error} />
         <Text style={styles.errorTexto}>{error}</Text>
       </View>
     );
@@ -103,7 +104,7 @@ export default function JornadasListScreen({ navigation }) {
       }
       ListEmptyComponent={
         <View style={styles.centrado}>
-          <Text style={styles.vacioCicono}>📭</Text>
+          <Ionicons name="file-tray-outline" size={44} color={colors.textDisabled} />
           <Text style={styles.vacioTexto}>
             No hay jornadas disponibles en este momento.{"\n"}
             Vuelve a revisar pronto.
@@ -137,17 +138,11 @@ const styles = StyleSheet.create({
     padding: 32,
     gap: 12,
   },
-  errorIcono: {
-    fontSize: 40,
-  },
   errorTexto: {
     fontSize: 15,
     color: colors.error,
     textAlign: "center",
     lineHeight: 22,
-  },
-  vacioCicono: {
-    fontSize: 40,
   },
   vacioTexto: {
     fontSize: 15,

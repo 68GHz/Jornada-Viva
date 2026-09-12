@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import { colors } from "../theme/colors";
 
@@ -44,17 +45,17 @@ export default function JornadaCard({ jornada, onPress }) {
         {/* Detalles */}
         <View style={styles.detalles}>
           <View style={styles.detalleFila}>
-            <Text style={styles.detalleIcono}>📅</Text>
+            <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} />
             <Text style={styles.detalleTexto}>
               {dayjs(jornada.fecha).format("DD [de] MMMM [de] YYYY")}
             </Text>
           </View>
           <View style={styles.detalleFila}>
-            <Text style={styles.detalleIcono}>🕐</Text>
+            <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
             <Text style={styles.detalleTexto}>{jornada.hora}</Text>
           </View>
           <View style={styles.detalleFila}>
-            <Text style={styles.detalleIcono}>📍</Text>
+            <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
             <Text style={styles.detalleTexto} numberOfLines={1}>
               {jornada.lugar}
             </Text>
@@ -142,9 +143,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  detalleIcono: {
-    fontSize: 12,
   },
   detalleTexto: {
     fontSize: 12,

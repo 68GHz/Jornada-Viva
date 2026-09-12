@@ -34,6 +34,8 @@ export function AuthProvider({ children }) {
       email,
       creadoEn: serverTimestamp(),
     });
+    
+    setUsuario({ ...auth.currentUser });
 
     return credencial.user;
   };
