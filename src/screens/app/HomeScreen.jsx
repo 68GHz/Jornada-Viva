@@ -1,19 +1,109 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+} from "firebase/firestore";
+import dayjs from "dayjs";
+import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
+
+function combinarFechaHora(fecha, hora) {
+  const base = dayjs(fecha);
+  if (!base.isValid()) return null;
+
+  const coincidencia = /^(\d{1,2}):(\d{2})/.exec(hora || "");
+  if (!coincidencia) return base.endOf("day");
+
+  const horas = parseInt(coincidencia[1], 10);
+  const minutos = parseInt(coincidencia[2], 10);
+  return base.hour(horas).minute(minutos).second(0).millisecond(0);
+}
+
+function formatearDiasFaltan(fechaHora) {
+  const dias = fechaHora.startOf("day").diff(dayjs().startOf("day"), "day");
+  if (dias <= 0) return "Hoy";
+  if (dias === 1) return "Mañana";
+  return `En ${dias} días`;
+}
 
 export default function HomeScreen({ navigation }) {
   const { usuario, cerrarSesion } = useAuth();
 
   const nombre = usuario?.displayName || usuario?.email || "Usuario";
+
+  const [misJornadas, setMisJornadas] = useState([]);
+  const [cargandoJornadas, setCargandoJornadas] = useState(true);
+  const [errorJornadas, setErrorJornadas] = useState(null);
+
+  const cargarMisJornadas = useCallback(async () => {
+    if (!usuario?.uid) return;
+
+    try {
+      setErrorJornadas(null);
+      const q = query(
+        collection(db, "inscripciones"),
+        where("userId", "==", usuario.uid)
+      );
+      const snapshot = await getDocs(q);
+      const inscripciones = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const jornadasInscritas = await Promise.all(
+        inscripciones.map(async (inscripcion) => {
+          try {
+            const jornadaSnap = await getDoc(doc(db, "jornadas", inscripcion.jornadaId));
+            if (jornadaSnap.exists()) {
+              return { id: jornadaSnap.id, ...jornadaSnap.data() };
+            }
+          } catch (err) {
+            console.error("Error cargando jornada de inscripción:", err);
+          }
+          return {
+            id: inscripcion.jornadaId,
+            titulo: inscripcion.tituloJornada,
+            fecha: inscripcion.fechaJornada,
+            hora: null,
+          };
+        })
+      );
+
+      const ahora = dayjs();
+      const proximas = jornadasInscritas
+        .map((jornada) => ({
+          ...jornada,
+          fechaHora: combinarFechaHora(jornada.fecha, jornada.hora),
+        }))
+        .filter((jornada) => jornada.fechaHora?.isValid() && jornada.fechaHora.isAfter(ahora))
+        .sort((a, b) => a.fechaHora.valueOf() - b.fechaHora.valueOf());
+
+      setMisJornadas(proximas);
+    } catch (err) {
+      console.error("Error cargando mis jornadas:", err);
+      setErrorJornadas("No se pudieron cargar tus jornadas inscritas.");
+    } finally {
+      setCargandoJornadas(false);
+    }
+  }, [usuario?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarMisJornadas();
+    }, [cargarMisJornadas])
+  );
 
   return (
     <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
@@ -36,18 +126,70 @@ export default function HomeScreen({ navigation }) {
           onPress={() => navigation.navigate("JornadasList")}
           activeOpacity={0.85}
         >
-          <Ionicons name="list-circle-outline" size={40} color={colors.white} />
-          <Text style={styles.tarjetaTitulo}>Ver jornadas</Text>
+          <View style={styles.tarjetaEncabezado}>
+            <Ionicons name="list-circle-outline" size={30} color={colors.white} />
+            <Text style={styles.tarjetaTitulo}>Ver jornadas</Text>
+          </View>
           <Text style={styles.tarjetaDescripcion}>
             Explora todas las jornadas disponibles en tu comunidad
           </Text>
         </TouchableOpacity>
       </View>
 
+      {/* Mis jornadas inscritas */}
+      <View style={styles.misJornadas}>
+        <Text style={styles.misJornadasTitulo}>Mis próximas jornadas</Text>
+
+        {cargandoJornadas ? (
+          <View style={styles.misJornadasEstado}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.misJornadasEstadoTexto}>Cargando tus jornadas...</Text>
+          </View>
+        ) : errorJornadas ? (
+          <View style={styles.misJornadasEstado}>
+            <Ionicons name="warning-outline" size={20} color={colors.error} />
+            <Text style={[styles.misJornadasEstadoTexto, { color: colors.error }]}>
+              {errorJornadas}
+            </Text>
+          </View>
+        ) : misJornadas.length === 0 ? (
+          <View style={styles.misJornadasEstado}>
+            <Ionicons name="calendar-outline" size={20} color={colors.textDisabled} />
+            <Text style={styles.misJornadasEstadoTexto}>
+              No tienes jornadas próximas. ¡Explora las disponibles!
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.misJornadasLista}>
+            {misJornadas.map((jornada) => (
+              <View key={jornada.id} style={styles.jornadaItem}>
+                <Text style={styles.jornadaTitulo} numberOfLines={2}>
+                  {jornada.titulo}
+                </Text>
+                <View style={styles.jornadaDetalles}>
+                  <View style={styles.jornadaDetalleFila}>
+                    <Ionicons name="hourglass-outline" size={13} color={colors.primary} />
+                    <Text style={styles.jornadaDetalleTexto}>
+                      {formatearDiasFaltan(jornada.fechaHora)}
+                    </Text>
+                  </View>
+                  <View style={styles.jornadaDetalleFila}>
+                    <Ionicons name="time-outline" size={13} color={colors.primary} />
+                    <Text style={styles.jornadaDetalleTexto}>
+                      {jornada.hora || "Hora por confirmar"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
       {/* Info de sesión */}
       <View style={styles.sesionInfo}>
         <Text style={styles.sesionTexto}>
-          Sesión activa: {usuario?.email}
+          Sesión activa: {usuario?.displayName}
         </Text>
       </View>
 
@@ -105,6 +247,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  tarjetaEncabezado: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   tarjetaTitulo: {
     fontSize: 18,
     fontWeight: "800",
@@ -115,6 +262,59 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     textAlign: "center",
     lineHeight: 18,
+  },
+  misJornadas: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  misJornadasTitulo: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.textPrimary,
+  },
+  misJornadasEstado: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  misJornadasEstadoTexto: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  misJornadasLista: {
+    gap: 10,
+  },
+  jornadaItem: {
+    backgroundColor: colors.primaryPale,
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  jornadaTitulo: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    lineHeight: 19,
+  },
+  jornadaDetalles: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  jornadaDetalleFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  jornadaDetalleTexto: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "600",
   },
   sesionInfo: {
     backgroundColor: colors.surface,

@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+yarn.lock
+
+# Claude Code local config (not synced to remote)
+.claude/

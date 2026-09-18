@@ -17,7 +17,7 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
 - Firebase (Auth + Firestore)
 - dayjs para formato de fechas
 
-> Este proyecto usa Expo SDK 54+. Consulta la documentación versionada en https://docs.expo.dev/versions/v54.0.0/ antes de modificar la configuración nativa.
+> Este proyecto usa Expo SDK 54+. Consulta la documentación versionada en <https://docs.expo.dev/versions/v54.0.0/> antes de modificar la configuración nativa.
 
 ## Requisitos previos
 
@@ -54,8 +54,7 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
 
 ## Estructura del proyecto
 
-```
-src/
+```src/
 ├── components/      # JornadaCard, LoadingSpinner
 ├── context/         # AuthContext (estado de autenticación)
 ├── navigation/      # AppNavigator (stacks auth y app)

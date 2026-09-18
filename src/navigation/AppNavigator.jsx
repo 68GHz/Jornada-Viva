@@ -1,7 +1,7 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { View, ActivityIndicator } from "react-native";
+import { View, Text, Image, ActivityIndicator } from "react-native";
 
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
@@ -37,7 +37,29 @@ function AppStack() {
       <Stack.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: "Jornada Viva" }}
+        options={{
+          headerTitle: () => (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View
+                style={{
+                  backgroundColor: colors.white,
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 4,
+                }}
+              >
+                <Image
+                  source={require("../../assets/Horizontal-tdea.png")}
+                  style={{ width: 62, height: 16 }}
+                  resizeMode="contain"
+                />
+              </View>
+              <Text style={{ fontWeight: "700", fontSize: 17, color: colors.white }}>
+                Jornada Viva
+              </Text>
+            </View>
+          ),
+        }}
       />
       <Stack.Screen
         name="JornadasList"
