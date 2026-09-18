@@ -14,10 +14,12 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
+import dayjs from "dayjs";
 import { db } from "../../../firebaseConfig";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colors } from "../../theme/colors";
+import { combinarFechaHora } from "../../utils/jornadaFecha";
 
 export default function JornadasListScreen({ navigation }) {
   const [jornadas, setJornadas] = useState([]);
@@ -33,10 +35,13 @@ export default function JornadasListScreen({ navigation }) {
         where("activa", "==", true)
       );
       const snapshot = await getDocs(q);
-      const datos = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const ahora = dayjs();
+      const datos = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((jornada) => {
+          const fechaHora = combinarFechaHora(jornada.fecha, jornada.hora);
+          return fechaHora?.isValid() && fechaHora.isAfter(ahora);
+        });
 
       // Ordenar por fecha en el cliente
       datos.sort((a, b) => (a.fecha > b.fecha ? 1 : -1));
