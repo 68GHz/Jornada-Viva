@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
 
@@ -68,98 +70,109 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.wrapper}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.wrapper} edges={["top"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.encabezado}>
-          <Text style={styles.titulo}>Crear cuenta</Text>
-          <Text style={styles.subtitulo}>
-            Únete para inscribirte en jornadas
-          </Text>
+        <View style={styles.logoContenedor}>
+          <Image
+            source={require("../../../assets/Horizontal-tdea.png")}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Logo del TdeA"
+          />
         </View>
 
-        <View style={styles.formulario}>
-          <Text style={styles.label}>Nombre completo</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Tu nombre"
-            placeholderTextColor={colors.textDisabled}
-            autoCapitalize="words"
-            value={nombre}
-            onChangeText={setNombre}
-            returnKeyType="next"
-            onSubmitEditing={() => emailRef.current?.focus()}
-            blurOnSubmit={false}
-          />
-
-          <Text style={styles.label}>Correo electrónico</Text>
-          <TextInput
-            ref={emailRef}
-            style={styles.input}
-            placeholder="tucorreo@ejemplo.com"
-            placeholderTextColor={colors.textDisabled}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={email}
-            onChangeText={setEmail}
-            returnKeyType="next"
-            onSubmitEditing={() => passwordRef.current?.focus()}
-            blurOnSubmit={false}
-          />
-
-          <Text style={styles.label}>Contraseña</Text>
-          <TextInput
-            ref={passwordRef}
-            style={styles.input}
-            placeholder="Mínimo 6 caracteres"
-            placeholderTextColor={colors.textDisabled}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            returnKeyType="next"
-            onSubmitEditing={() => confirmarRef.current?.focus()}
-            blurOnSubmit={false}
-          />
-
-          <Text style={styles.label}>Confirmar contraseña</Text>
-          <TextInput
-            ref={confirmarRef}
-            style={styles.input}
-            placeholder="Repite tu contraseña"
-            placeholderTextColor={colors.textDisabled}
-            secureTextEntry
-            value={confirmar}
-            onChangeText={setConfirmar}
-            returnKeyType="done"
-            onSubmitEditing={manejarRegistro}
-          />
-
-          <TouchableOpacity
-            style={[styles.boton, cargando && styles.botonDeshabilitado]}
-            onPress={manejarRegistro}
-            disabled={cargando}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.botonTexto}>
-              {cargando ? "Creando cuenta..." : "Crear cuenta"}
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.encabezado}>
+            <Text style={styles.titulo}>Crear cuenta</Text>
+            <Text style={styles.subtitulo}>
+              Únete para inscribirte en jornadas
             </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        <View style={styles.piePagina}>
-          <Text style={styles.pieTexto}>¿Ya tienes cuenta?</Text>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.enlace}> Inicia sesión</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={styles.formulario}>
+            <Text style={styles.label}>Nombre completo</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Tu nombre"
+              placeholderTextColor={colors.textDisabled}
+              autoCapitalize="words"
+              value={nombre}
+              onChangeText={setNombre}
+              returnKeyType="next"
+              onSubmitEditing={() => emailRef.current?.focus()}
+              blurOnSubmit={false}
+            />
+
+            <Text style={styles.label}>Correo electrónico</Text>
+            <TextInput
+              ref={emailRef}
+              style={styles.input}
+              placeholder="tucorreo@ejemplo.com"
+              placeholderTextColor={colors.textDisabled}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={email}
+              onChangeText={setEmail}
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
+            />
+
+            <Text style={styles.label}>Contraseña</Text>
+            <TextInput
+              ref={passwordRef}
+              style={styles.input}
+              placeholder="Mínimo 6 caracteres"
+              placeholderTextColor={colors.textDisabled}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              returnKeyType="next"
+              onSubmitEditing={() => confirmarRef.current?.focus()}
+              blurOnSubmit={false}
+            />
+
+            <Text style={styles.label}>Confirmar contraseña</Text>
+            <TextInput
+              ref={confirmarRef}
+              style={styles.input}
+              placeholder="Repite tu contraseña"
+              placeholderTextColor={colors.textDisabled}
+              secureTextEntry
+              value={confirmar}
+              onChangeText={setConfirmar}
+              returnKeyType="done"
+              onSubmitEditing={manejarRegistro}
+            />
+
+            <TouchableOpacity
+              style={[styles.boton, cargando && styles.botonDeshabilitado]}
+              onPress={manejarRegistro}
+              disabled={cargando}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.botonTexto}>
+                {cargando ? "Creando cuenta..." : "Crear cuenta"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.piePagina}>
+            <Text style={styles.pieTexto}>¿Ya tienes cuenta?</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Text style={styles.enlace}> Inicia sesión</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -168,10 +181,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  flex: {
+    flex: 1,
+  },
+  logoContenedor: {
+    alignItems: "center",
+    paddingTop: 16,
+  },
+  logo: {
+    width: 150,
+    height: 38,
+  },
   scroll: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 8,
   },
   encabezado: {
     alignItems: "center",
