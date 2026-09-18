@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
 
@@ -49,70 +51,81 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.wrapper}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Encabezado */}
-        <View style={styles.encabezado}>
-          <Text style={styles.titulo}>Jornada Viva</Text>
-          <Text style={styles.subtitulo}>
-            Accede para ver y registrarte en las jornadas de tu comunidad
-          </Text>
+    <SafeAreaView style={styles.wrapper} edges={["top"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.logoContenedor}>
+          <Image
+            source={require("../../../assets/Horizontal-tdea.png")}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="Logo del TdeA"
+          />
         </View>
 
-        {/* Formulario */}
-        <View style={styles.formulario}>
-          <Text style={styles.label}>Correo electrónico</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="tucorreo@ejemplo.com"
-            placeholderTextColor={colors.textDisabled}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={email}
-            onChangeText={setEmail}
-            returnKeyType="next"
-            onSubmitEditing={() => passwordRef.current?.focus()}
-            blurOnSubmit={false}
-          />
-
-          <Text style={styles.label}>Contraseña</Text>
-          <TextInput
-            ref={passwordRef}
-            style={styles.input}
-            placeholder="••••••••"
-            placeholderTextColor={colors.textDisabled}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            returnKeyType="done"
-            onSubmitEditing={manejarLogin}
-          />
-
-          <TouchableOpacity
-            style={[styles.boton, cargando && styles.botonDeshabilitado]}
-            onPress={manejarLogin}
-            disabled={cargando}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.botonTexto}>
-              {cargando ? "Ingresando..." : "Ingresar"}
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Encabezado */}
+          <View style={styles.encabezado}>
+            <Text style={styles.titulo}>Jornada Viva</Text>
+            <Text style={styles.subtitulo}>
+              Accede para ver y registrarte en las jornadas de tu comunidad
             </Text>
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* Registro */}
-        <View style={styles.piePagina}>
-          <Text style={styles.pieTexto}>¿Aún no tienes cuenta?</Text>
-          <TouchableOpacity onPress={() => navigation.navigate("Register")}>
-            <Text style={styles.enlace}> Regístrate aquí</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {/* Formulario */}
+          <View style={styles.formulario}>
+            <Text style={styles.label}>Correo electrónico</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="tucorreo@ejemplo.com"
+              placeholderTextColor={colors.textDisabled}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={email}
+              onChangeText={setEmail}
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
+            />
+
+            <Text style={styles.label}>Contraseña</Text>
+            <TextInput
+              ref={passwordRef}
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={colors.textDisabled}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+              returnKeyType="done"
+              onSubmitEditing={manejarLogin}
+            />
+
+            <TouchableOpacity
+              style={[styles.boton, cargando && styles.botonDeshabilitado]}
+              onPress={manejarLogin}
+              disabled={cargando}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.botonTexto}>
+                {cargando ? "Ingresando..." : "Ingresar"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Registro */}
+          <View style={styles.piePagina}>
+            <Text style={styles.pieTexto}>¿Aún no tienes cuenta?</Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Register")}>
+              <Text style={styles.enlace}> Regístrate aquí</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -121,10 +134,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  flex: {
+    flex: 1,
+  },
+  logoContenedor: {
+    alignItems: "center",
+    paddingTop: 16,
+  },
+  logo: {
+    width: 150,
+    height: 38,
+  },
   scroll: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 20,
   },
   encabezado: {
     alignItems: "center",
