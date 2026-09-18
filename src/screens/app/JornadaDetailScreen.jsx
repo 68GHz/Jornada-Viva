@@ -29,8 +29,10 @@ import { colors } from "../../theme/colors";
 dayjs.locale("es");
 
 export default function JornadaDetailScreen({ route }) {
-  const { jornada } = route.params;
+  const { jornada: jornadaInicial } = route.params;
   const { usuario } = useAuth();
+
+  const [jornada, setJornada] = useState(jornadaInicial);
 
   const [inscrito, setInscrito] = useState(false);
   const [verificando, setVerificando] = useState(true);
@@ -111,6 +113,7 @@ const confirmarInscripcion = async () => {
       cuposOcupados: increment(1),
     });
 
+    setJornada((prev) => ({ ...prev, cuposOcupados: prev.cuposOcupados + 1 }));
     setInscrito(true);
     Alert.alert(
       "¡Inscripción exitosa! ✅",
