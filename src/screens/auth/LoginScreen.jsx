@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [cargando, setCargando] = useState(false);
+  const passwordRef = useRef(null);
 
   const manejarLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -73,16 +74,22 @@ export default function LoginScreen({ navigation }) {
             autoCorrect={false}
             value={email}
             onChangeText={setEmail}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            blurOnSubmit={false}
           />
 
           <Text style={styles.label}>Contraseña</Text>
           <TextInput
+            ref={passwordRef}
             style={styles.input}
             placeholder="••••••••"
             placeholderTextColor={colors.textDisabled}
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={manejarLogin}
           />
 
           <TouchableOpacity

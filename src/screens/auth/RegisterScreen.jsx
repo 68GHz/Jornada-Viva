@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,9 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [confirmar, setConfirmar] = useState("");
   const [cargando, setCargando] = useState(false);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmarRef = useRef(null);
 
   const manejarRegistro = async () => {
     if (!nombre.trim() || !email.trim() || !password || !confirmar) {
@@ -89,10 +92,14 @@ export default function RegisterScreen({ navigation }) {
             autoCapitalize="words"
             value={nombre}
             onChangeText={setNombre}
+            returnKeyType="next"
+            onSubmitEditing={() => emailRef.current?.focus()}
+            blurOnSubmit={false}
           />
 
           <Text style={styles.label}>Correo electrónico</Text>
           <TextInput
+            ref={emailRef}
             style={styles.input}
             placeholder="tucorreo@ejemplo.com"
             placeholderTextColor={colors.textDisabled}
@@ -101,26 +108,36 @@ export default function RegisterScreen({ navigation }) {
             autoCorrect={false}
             value={email}
             onChangeText={setEmail}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            blurOnSubmit={false}
           />
 
           <Text style={styles.label}>Contraseña</Text>
           <TextInput
+            ref={passwordRef}
             style={styles.input}
             placeholder="Mínimo 6 caracteres"
             placeholderTextColor={colors.textDisabled}
             secureTextEntry
             value={password}
             onChangeText={setPassword}
+            returnKeyType="next"
+            onSubmitEditing={() => confirmarRef.current?.focus()}
+            blurOnSubmit={false}
           />
 
           <Text style={styles.label}>Confirmar contraseña</Text>
           <TextInput
+            ref={confirmarRef}
             style={styles.input}
             placeholder="Repite tu contraseña"
             placeholderTextColor={colors.textDisabled}
             secureTextEntry
             value={confirmar}
             onChangeText={setConfirmar}
+            returnKeyType="done"
+            onSubmitEditing={manejarRegistro}
           />
 
           <TouchableOpacity
