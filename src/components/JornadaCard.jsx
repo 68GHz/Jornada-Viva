@@ -68,12 +68,14 @@ export default function JornadaCard({ jornada, onPress, estado }) {
             <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
             <Text style={styles.detalleTexto}>{formatearHora(jornada.fecha)}</Text>
           </View>
-          <View style={styles.detalleFila}>
-            <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
-            <Text style={styles.detalleTexto} numberOfLines={1}>
-              {jornada.lugar}
-            </Text>
-          </View>
+          {!!jornada.lugar && (
+            <View style={styles.detalleFila}>
+              <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
+              <Text style={styles.detalleTexto} numberOfLines={1}>
+                {jornada.lugar}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>

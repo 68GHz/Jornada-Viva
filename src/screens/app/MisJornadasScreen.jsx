@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -53,19 +54,30 @@ export default function MisJornadasScreen({ navigation }) {
         where("userId", "==", usuario.uid)
       );
       const snapshot = await getDocs(q);
-      const idsJornadas = [...new Set(snapshot.docs.map((d) => d.data().jornadaId))];
+      // Una inscripción por jornada (se ignoran duplicados)
+      const inscripciones = [
+        ...new Map(snapshot.docs.map((d) => [d.data().jornadaId, d.data()])).values(),
+      ];
 
       const resultados = await Promise.all(
-        idsJornadas.map(async (jornadaId) => {
-          const jornadaSnap = await getDoc(doc(db, "jornadas", jornadaId));
-          return jornadaSnap.exists()
-            ? normalizarJornada(jornadaSnap.id, jornadaSnap.data())
-            : null;
+        inscripciones.map(async (inscripcion) => {
+          const jornadaSnap = await getDoc(doc(db, "jornadas", inscripcion.jornadaId));
+          if (jornadaSnap.exists()) {
+            return normalizarJornada(jornadaSnap.id, jornadaSnap.data());
+          }
+          // Jornada eliminada: se conserva la inscripción con los datos guardados
+          // en ella (igual que en el Home), marcada como no disponible.
+          return {
+            ...normalizarJornada(inscripcion.jornadaId, {
+              titulo: inscripcion.tituloJornada,
+              fecha: inscripcion.fechaJornada,
+            }),
+            noDisponible: true,
+          };
         })
       );
 
       const datos = resultados
-        .filter(Boolean)
         .map((jornada) => ({ ...jornada, finalizada: jornadaYaPaso(jornada.fecha) }))
         // Próximas primero (más cercanas arriba), luego las finalizadas
         .sort((a, b) => {
@@ -164,11 +176,20 @@ export default function MisJornadasScreen({ navigation }) {
         <JornadaCard
           jornada={item}
           estado={
-            item.finalizada
+            item.noDisponible
+              ? { texto: "No disponible", color: colors.textDisabled }
+              : item.finalizada
               ? { texto: "Finalizada", color: colors.textDisabled }
               : { texto: "Inscrito", color: colors.success }
           }
           onPress={() => {
+            if (item.noDisponible) {
+              Alert.alert(
+                "Jornada no disponible",
+                "Esta jornada ya no existe. Tu inscripción se muestra solo como registro."
+              );
+              return;
+            }
             // `finalizada` es solo de la lista; el detalle la calcula por su cuenta
             const { finalizada, ...jornada } = item;
             navigation.navigate("JornadaDetail", { jornada });
