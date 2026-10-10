@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -22,8 +22,13 @@ import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
+import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
-import { combinarFechaHora } from "../../utils/jornadaFecha";
+import { combinarFechaHora, coincideFiltroFecha } from "../../utils/jornadaFecha";
+
+// Búsqueda sin distinguir mayúsculas ni tildes
+const normalizar = (texto = "") =>
+  texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export default function MisJornadasScreen({ navigation }) {
   const { usuario } = useAuth();
@@ -32,6 +37,7 @@ export default function MisJornadasScreen({ navigation }) {
   const [cargando, setCargando] = useState(true);
   const [actualizando, setActualizando] = useState(false);
   const [error, setError] = useState(null);
+  const [filtros, setFiltros] = useState(FILTROS_INICIALES);
 
   const cargarMisJornadas = useCallback(async () => {
     if (!usuario?.uid) return;
@@ -94,6 +100,31 @@ export default function MisJornadasScreen({ navigation }) {
     cargarMisJornadas();
   };
 
+  const categorias = useMemo(
+    () => [...new Set(jornadas.map((j) => j.categoria).filter(Boolean))].sort(),
+    [jornadas]
+  );
+  const lugares = useMemo(
+    () => [...new Set(jornadas.map((j) => j.lugar).filter(Boolean))].sort(),
+    [jornadas]
+  );
+
+  const jornadasFiltradas = useMemo(() => {
+    const texto = normalizar(filtros.busqueda.trim());
+    return jornadas.filter((j) => {
+      if (texto && !normalizar(j.titulo).includes(texto)) return false;
+      if (filtros.categoria && j.categoria !== filtros.categoria) return false;
+      if (filtros.lugar && j.lugar !== filtros.lugar) return false;
+      return coincideFiltroFecha(j.fecha, filtros.fecha);
+    });
+  }, [jornadas, filtros]);
+
+  const hayFiltros =
+    filtros.busqueda.trim() !== "" ||
+    filtros.categoria ||
+    filtros.lugar ||
+    filtros.fecha !== "todas";
+
   if (cargando) {
     return <LoadingSpinner mensaje="Cargando tus jornadas..." />;
   }
@@ -120,8 +151,18 @@ export default function MisJornadasScreen({ navigation }) {
   }
 
   return (
+    <View style={styles.contenedor}>
+    {jornadas.length > 0 && (
+      <FiltrosJornadas
+        filtros={filtros}
+        onCambiar={setFiltros}
+        categorias={categorias}
+        lugares={lugares}
+      />
+    )}
     <FlatList
-      data={jornadas}
+      keyboardShouldPersistTaps="handled"
+      data={jornadasFiltradas}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
         <JornadaCard
@@ -138,7 +179,7 @@ export default function MisJornadasScreen({ navigation }) {
           }}
         />
       )}
-      contentContainerStyle={jornadas.length === 0 ? styles.listaVacia : styles.lista}
+      contentContainerStyle={jornadasFiltradas.length === 0 ? styles.listaVacia : styles.lista}
       style={{ backgroundColor: colors.background }}
       refreshControl={
         <RefreshControl
@@ -149,35 +190,50 @@ export default function MisJornadasScreen({ navigation }) {
         />
       }
       ListHeaderComponent={
-        jornadas.length > 0 ? (
+        jornadasFiltradas.length > 0 ? (
           <Text style={styles.encabezadoLista}>
-            {jornadas.length} inscripción{jornadas.length !== 1 ? "es" : ""}
+            {jornadasFiltradas.length} inscripción{jornadasFiltradas.length !== 1 ? "es" : ""}
           </Text>
         ) : null
       }
       ListEmptyComponent={
-        <View style={styles.centrado}>
-          <Ionicons name="calendar-outline" size={44} color={colors.textDisabled} />
-          <Text style={styles.vacioTexto}>
-            Aún no te has inscrito a ninguna jornada.{"\n"}
-            ¡Explora las disponibles!
-          </Text>
-          <TouchableOpacity
-            style={styles.botonReintentar}
-            onPress={() => navigation.navigate("JornadasList")}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Ver jornadas disponibles"
-          >
-            <Text style={styles.botonReintentarTexto}>Ver jornadas</Text>
-          </TouchableOpacity>
-        </View>
+        jornadas.length > 0 ? (
+          <View style={styles.centrado}>
+            <Ionicons name="search-outline" size={44} color={colors.textDisabled} />
+            <Text style={styles.vacioTexto}>
+              No encontramos inscripciones con esos criterios.{"\n"}
+              Prueba con otra búsqueda o limpia los filtros.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.centrado}>
+            <Ionicons name="calendar-outline" size={44} color={colors.textDisabled} />
+            <Text style={styles.vacioTexto}>
+              Aún no te has inscrito a ninguna jornada.{"\n"}
+              ¡Explora las disponibles!
+            </Text>
+            <TouchableOpacity
+              style={styles.botonReintentar}
+              onPress={() => navigation.navigate("JornadasList")}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Ver jornadas disponibles"
+            >
+              <Text style={styles.botonReintentarTexto}>Ver jornadas</Text>
+            </TouchableOpacity>
+          </View>
+        )
       }
     />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  contenedor: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   lista: {
     paddingVertical: 8,
     paddingBottom: 24,

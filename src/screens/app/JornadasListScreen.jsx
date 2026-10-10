@@ -20,7 +20,7 @@ import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
-import { combinarFechaHora } from "../../utils/jornadaFecha";
+import { combinarFechaHora, coincideFiltroFecha } from "../../utils/jornadaFecha";
 
 // Búsqueda sin distinguir mayúsculas ni tildes
 const normalizar = (texto = "") =>
@@ -82,20 +82,13 @@ export default function JornadasListScreen({ navigation }) {
 
   const jornadasFiltradas = useMemo(() => {
     const texto = normalizar(filtros.busqueda.trim());
-    const hoy = dayjs().startOf("day");
 
     return jornadas.filter((j) => {
       if (texto && !normalizar(j.titulo).includes(texto)) return false;
       if (filtros.categoria && j.categoria !== filtros.categoria) return false;
       if (filtros.lugar && j.lugar !== filtros.lugar) return false;
 
-      if (filtros.fecha !== "todas") {
-        const fecha = dayjs(j.fecha).startOf("day");
-        if (filtros.fecha === "hoy" && !fecha.isSame(hoy, "day")) return false;
-        if (filtros.fecha === "semana" && fecha.diff(hoy, "day") > 7) return false;
-        if (filtros.fecha === "mes" && !fecha.isSame(hoy, "month")) return false;
-      }
-      return true;
+      return coincideFiltroFecha(j.fecha, filtros.fecha);
     });
   }, [jornadas, filtros]);
 

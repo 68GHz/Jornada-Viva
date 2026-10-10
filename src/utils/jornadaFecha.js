@@ -22,6 +22,21 @@ export function puedeCancelarInscripcion(fecha) {
   return dias >= DIAS_LIMITE_CANCELACION;
 }
 
+// Filtro de fecha usado en las listas: "todas" | "hoy" | "semana" | "mes"
+export function coincideFiltroFecha(fecha, filtro) {
+  if (filtro === "todas") return true;
+  const hoy = dayjs().startOf("day");
+  const dia = dayjs(fecha).startOf("day");
+  if (!dia.isValid()) return false;
+  if (filtro === "hoy") return dia.isSame(hoy, "day");
+  if (filtro === "semana") {
+    const dias = dia.diff(hoy, "day");
+    return dias >= 0 && dias <= 7;
+  }
+  if (filtro === "mes") return dia.isSame(hoy, "month");
+  return true;
+}
+
 export function formatearDiasFaltan(fechaHora) {
   const dias = fechaHora.startOf("day").diff(dayjs().startOf("day"), "day");
   if (dias <= 0) return "Hoy";
