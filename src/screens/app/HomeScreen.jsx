@@ -120,7 +120,20 @@ export default function HomeScreen({ navigation }) {
 
       {/* Mis jornadas inscritas */}
       <View style={styles.misJornadas}>
-        <Text style={styles.misJornadasTitulo}>Mis próximas jornadas</Text>
+        <View style={styles.misJornadasEncabezado}>
+          <Text style={styles.misJornadasTitulo}>Mis próximas jornadas</Text>
+          <TouchableOpacity
+            style={styles.misJornadasAcceso}
+            onPress={() => navigation.navigate("MisJornadas")}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Mis jornadas"
+            accessibilityHint="Abre la lista de tus inscripciones"
+          >
+            <Text style={styles.misJornadasAccesoTexto}>Mis jornadas</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
 
         {cargandoJornadas ? (
           <View style={styles.misJornadasEstado}>
@@ -244,6 +257,24 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     textAlign: "center",
     lineHeight: 18,
+  },
+  misJornadasEncabezado: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  misJornadasAcceso: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    minHeight: 44,
+    paddingLeft: 12,
+  },
+  misJornadasAccesoTexto: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
   },
   misJornadas: {
     backgroundColor: colors.surface,

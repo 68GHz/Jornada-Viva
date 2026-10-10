@@ -11,6 +11,7 @@ import RegisterScreen from "../screens/auth/RegisterScreen";
 import HomeScreen from "../screens/app/HomeScreen";
 import JornadasListScreen from "../screens/app/JornadasListScreen";
 import JornadaDetailScreen from "../screens/app/JornadaDetailScreen";
+import MisJornadasScreen from "../screens/app/MisJornadasScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -65,6 +66,11 @@ function AppStack() {
         name="JornadasList"
         component={JornadasListScreen}
         options={{ title: "Jornadas Disponibles" }}
+      />
+      <Stack.Screen
+        name="MisJornadas"
+        component={MisJornadasScreen}
+        options={{ title: "Mis jornadas" }}
       />
       <Stack.Screen
         name="JornadaDetail"

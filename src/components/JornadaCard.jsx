@@ -4,9 +4,11 @@ import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import { colors } from "../theme/colors";
 
-export default function JornadaCard({ jornada, onPress }) {
+// `estado` (opcional): { texto, color } reemplaza el badge de cupos,
+// útil cuando se lista la inscripción del usuario (ej. "Inscrito").
+export default function JornadaCard({ jornada, onPress, estado }) {
   const cuposRestantes = jornada.cuposTotales - jornada.cuposOcupados;
-  const sinCupos = cuposRestantes <= 0;
+  const sinCupos = !estado && cuposRestantes <= 0;
   const pocosCupos = cuposRestantes > 0 && cuposRestantes <= 10;
 
   return (
@@ -14,9 +16,17 @@ export default function JornadaCard({ jornada, onPress }) {
       style={[styles.card, sinCupos && styles.cardAgotada]}
       onPress={onPress}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${jornada.titulo}${estado ? `, ${estado.texto}` : ""}`}
     >
       {/* Barra lateral de color */}
-      <View style={[styles.barraLateral, sinCupos && styles.barraAgotada]} />
+      <View
+        style={[
+          styles.barraLateral,
+          sinCupos && styles.barraAgotada,
+          estado && { backgroundColor: estado.color },
+        ]}
+      />
 
       <View style={styles.contenido}>
         {/* Encabezado */}
@@ -24,7 +34,11 @@ export default function JornadaCard({ jornada, onPress }) {
           <Text style={styles.titulo} numberOfLines={2}>
             {jornada.titulo}
           </Text>
-          {sinCupos ? (
+          {estado ? (
+            <View style={[styles.badge, { backgroundColor: estado.color }]}>
+              <Text style={styles.badgeTexto}>{estado.texto}</Text>
+            </View>
+          ) : sinCupos ? (
             <View style={[styles.badge, styles.badgeAgotado]}>
               <Text style={styles.badgeTexto}>Sin cupos</Text>
             </View>
