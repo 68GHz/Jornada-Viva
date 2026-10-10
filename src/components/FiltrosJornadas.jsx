@@ -160,7 +160,7 @@ export default function FiltrosJornadas({
               titulo="Categoría"
               opciones={[
                 { valor: null, etiqueta: "Todas" },
-                ...categorias.map((c) => ({ valor: c, etiqueta: c })),
+                ...categorias,
               ]}
               seleccionado={filtros.categoria}
               onSeleccionar={(v) => actualizar("categoria", v)}
@@ -171,7 +171,7 @@ export default function FiltrosJornadas({
               titulo="Lugar"
               opciones={[
                 { valor: null, etiqueta: "Todos" },
-                ...lugares.map((l) => ({ valor: l, etiqueta: l })),
+                ...lugares,
               ]}
               seleccionado={filtros.lugar}
               onSeleccionar={(v) => actualizar("lugar", v)}

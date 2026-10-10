@@ -19,16 +19,13 @@ import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
+import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
 import {
   normalizarJornada,
   jornadaYaPaso,
   coincideFiltroFecha,
 } from "../../utils/jornadaFecha";
 
-
-// Búsqueda sin distinguir mayúsculas ni tildes
-const normalizar = (texto = "") =>
-  texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export default function JornadasListScreen({ navigation }) {
   const [jornadas, setJornadas] = useState([]);
@@ -71,22 +68,16 @@ export default function JornadasListScreen({ navigation }) {
   };
 
   // Opciones de filtro derivadas de los datos cargados
-  const categorias = useMemo(
-    () => [...new Set(jornadas.map((j) => j.categoria).filter(Boolean))].sort(),
-    [jornadas]
-  );
-  const lugares = useMemo(
-    () => [...new Set(jornadas.map((j) => j.lugar).filter(Boolean))].sort(),
-    [jornadas]
-  );
+  const categorias = useMemo(() => opcionesUnicas(jornadas, "categoria"), [jornadas]);
+  const lugares = useMemo(() => opcionesUnicas(jornadas, "lugar"), [jornadas]);
 
   const jornadasFiltradas = useMemo(() => {
-    const texto = normalizar(filtros.busqueda.trim());
+    const texto = normalizarTexto(filtros.busqueda);
 
     return jornadas.filter((j) => {
-      if (texto && !normalizar(j.titulo).includes(texto)) return false;
-      if (filtros.categoria && j.categoria !== filtros.categoria) return false;
-      if (filtros.lugar && j.lugar !== filtros.lugar) return false;
+      if (texto && !normalizarTexto(j.titulo).includes(texto)) return false;
+      if (filtros.categoria && normalizarTexto(j.categoria) !== filtros.categoria) return false;
+      if (filtros.lugar && normalizarTexto(j.lugar) !== filtros.lugar) return false;
 
       return coincideFiltroFecha(j.fecha, filtros.fecha, filtros.desde, filtros.hasta);
     });
