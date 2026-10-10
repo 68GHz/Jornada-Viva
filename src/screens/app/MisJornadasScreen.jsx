@@ -29,6 +29,7 @@ import {
   coincideFiltroFecha,
 } from "../../utils/jornadaFecha";
 
+
 // Búsqueda sin distinguir mayúsculas ni tildes
 const normalizar = (texto = "") =>
   texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -110,7 +111,7 @@ export default function MisJornadasScreen({ navigation }) {
       if (texto && !normalizar(j.titulo).includes(texto)) return false;
       if (filtros.categoria && j.categoria !== filtros.categoria) return false;
       if (filtros.lugar && j.lugar !== filtros.lugar) return false;
-      return coincideFiltroFecha(j.fecha, filtros.fecha);
+      return coincideFiltroFecha(j.fecha, filtros.fecha, filtros.desde, filtros.hasta);
     });
   }, [jornadas, filtros]);
 

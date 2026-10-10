@@ -8,7 +8,10 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import dayjs from "dayjs";
+import "dayjs/locale/es";
 import { colors } from "../theme/colors";
+import CalendarioRango from "./CalendarioRango";
 
 export const OPCIONES_FECHA = [
   { valor: "todas", etiqueta: "Todas" },
@@ -22,7 +25,15 @@ export const FILTROS_INICIALES = {
   categoria: null,
   lugar: null,
   fecha: "todas",
+  desde: null, // "YYYY-MM-DD", solo con fecha === "rango"
+  hasta: null,
 };
+
+function etiquetaRango(desde, hasta) {
+  if (!desde) return "Elegir fecha o rango";
+  const f = (d) => dayjs(d).locale("es").format("D MMM");
+  return !hasta || hasta === desde ? f(desde) : `${f(desde)} – ${f(hasta)}`;
+}
 
 function Chip({ etiqueta, activo, onPress }) {
   return (
@@ -71,6 +82,7 @@ export default function FiltrosJornadas({
   lugares,
 }) {
   const [abierto, setAbierto] = useState(false);
+  const [calendarioVisible, setCalendarioVisible] = useState(false);
 
   const activos =
     (filtros.categoria ? 1 : 0) +
@@ -132,9 +144,16 @@ export default function FiltrosJornadas({
         <View style={styles.panel}>
           <GrupoChips
             titulo="Fecha"
-            opciones={OPCIONES_FECHA}
+            opciones={[
+              ...OPCIONES_FECHA,
+              { valor: "rango", etiqueta: etiquetaRango(filtros.desde, filtros.hasta) },
+            ]}
             seleccionado={filtros.fecha}
-            onSeleccionar={(v) => actualizar("fecha", v)}
+            onSeleccionar={(v) =>
+              v === "rango"
+                ? setCalendarioVisible(true)
+                : onCambiar({ ...filtros, fecha: v, desde: null, hasta: null })
+            }
           />
           {categorias.length > 0 && (
             <GrupoChips
@@ -160,6 +179,17 @@ export default function FiltrosJornadas({
           )}
         </View>
       )}
+
+      <CalendarioRango
+        visible={calendarioVisible}
+        desde={filtros.desde}
+        hasta={filtros.hasta}
+        onCerrar={() => setCalendarioVisible(false)}
+        onAplicar={(desde, hasta) => {
+          onCambiar({ ...filtros, fecha: "rango", desde, hasta });
+          setCalendarioVisible(false);
+        }}
+      />
 
       {hayCriterios && (
         <TouchableOpacity

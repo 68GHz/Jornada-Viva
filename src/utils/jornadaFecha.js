@@ -80,11 +80,17 @@ export function puedeCancelarInscripcion(millis) {
   return d.startOf("day").diff(hoyNegocio(), "day") >= DIAS_LIMITE_CANCELACION;
 }
 
-// Filtro de fecha usado en las listas: "todas" | "hoy" | "semana" | "mes"
-export function coincideFiltroFecha(millis, filtro) {
+// Filtro de fecha usado en las listas:
+// "todas" | "hoy" | "semana" | "mes" | "rango" (desde/hasta: "YYYY-MM-DD")
+export function coincideFiltroFecha(millis, filtro, desde, hasta) {
   if (filtro === "todas") return true;
   const d = aDayjsNegocio(millis);
   if (!d) return false;
+  if (filtro === "rango") {
+    if (!desde) return true;
+    const dia = d.format("YYYY-MM-DD");
+    return dia >= desde && dia <= (hasta || desde);
+  }
   const hoy = hoyNegocio();
   const dia = d.startOf("day");
   if (filtro === "hoy") return dia.isSame(hoy, "day");
