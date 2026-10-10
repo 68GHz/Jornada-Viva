@@ -15,23 +15,22 @@ import {
   where,
   getDocs,
   serverTimestamp,
+  Timestamp,
   doc,
   updateDoc,
   deleteDoc,
   increment,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
-import "dayjs/locale/es";
 import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
 import {
   puedeCancelarInscripcion,
   DIAS_LIMITE_CANCELACION,
+  formatearFecha,
+  formatearHora,
 } from "../../utils/jornadaFecha";
-
-dayjs.locale("es");
 
 export default function JornadaDetailScreen({ route }) {
   const { jornada: jornadaInicial } = route.params;
@@ -77,7 +76,7 @@ export default function JornadaDetailScreen({ route }) {
 
     Alert.alert(
       "Confirmar inscripción",
-      `¿Deseas inscribirte en "${jornada.titulo}"?\n\nFecha: ${dayjs(jornada.fecha).format("DD [de] MMMM [de] YYYY")}\nLugar: ${jornada.lugar}`,
+      `¿Deseas inscribirte en "${jornada.titulo}"?\n\nFecha: ${formatearFecha(jornada.fecha, "DD [de] MMMM [de] YYYY")}\nHora: ${formatearHora(jornada.fecha)}\nLugar: ${jornada.lugar}`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -111,7 +110,8 @@ const confirmarInscripcion = async () => {
       nombreUsuario: usuario.displayName || usuario.email,
       emailUsuario: usuario.email,
       tituloJornada: jornada.titulo,
-      fechaJornada: jornada.fecha,
+      fechaJornada:
+        jornada.fecha != null ? Timestamp.fromMillis(jornada.fecha) : null,
       inscritoEn: serverTimestamp(),
       asistio: false,
     });
@@ -124,7 +124,7 @@ const confirmarInscripcion = async () => {
     setInscrito(true);
     Alert.alert(
       "¡Inscripción exitosa! ✅",
-      `Quedaste registrado en "${jornada.titulo}".\n\nRecuerda presentarte el ${dayjs(jornada.fecha).format("DD [de] MMMM")} a las ${jornada.hora} en ${jornada.lugar}.`
+      `Quedaste registrado en "${jornada.titulo}".\n\nRecuerda presentarte el ${formatearFecha(jornada.fecha, "DD [de] MMMM")} a las ${formatearHora(jornada.fecha)} en ${jornada.lugar}.`
     );
   } catch (err) {
     console.error("Error al inscribirse:", err);
@@ -276,7 +276,7 @@ const confirmarInscripcion = async () => {
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Fecha</Text>
             <Text style={styles.filaValor}>
-              {dayjs(jornada.fecha).format("dddd, DD [de] MMMM [de] YYYY")}
+              {formatearFecha(jornada.fecha, "dddd, DD [de] MMMM [de] YYYY")}
             </Text>
           </View>
         </View>
@@ -287,7 +287,7 @@ const confirmarInscripcion = async () => {
           <Ionicons name="time-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Hora</Text>
-            <Text style={styles.filaValor}>{jornada.hora}</Text>
+            <Text style={styles.filaValor}>{formatearHora(jornada.fecha)}</Text>
           </View>
         </View>
 

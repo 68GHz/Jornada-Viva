@@ -14,13 +14,16 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
 import { db } from "../../../firebaseConfig";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
-import { combinarFechaHora, coincideFiltroFecha } from "../../utils/jornadaFecha";
+import {
+  normalizarJornada,
+  jornadaYaPaso,
+  coincideFiltroFecha,
+} from "../../utils/jornadaFecha";
 
 // Búsqueda sin distinguir mayúsculas ni tildes
 const normalizar = (texto = "") =>
@@ -41,16 +44,12 @@ export default function JornadasListScreen({ navigation }) {
         where("activa", "==", true)
       );
       const snapshot = await getDocs(q);
-      const ahora = dayjs();
       const datos = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((jornada) => {
-          const fechaHora = combinarFechaHora(jornada.fecha, jornada.hora);
-          return fechaHora?.isValid() && fechaHora.isAfter(ahora);
-        });
+        .map((doc) => normalizarJornada(doc.id, doc.data()))
+        .filter((jornada) => !jornadaYaPaso(jornada.fecha));
 
       // Ordenar por fecha en el cliente
-      datos.sort((a, b) => (a.fecha > b.fecha ? 1 : -1));
+      datos.sort((a, b) => a.fecha - b.fecha);
       setJornadas(datos);
     } catch (err) {
       console.error("Error cargando jornadas:", err);

@@ -17,11 +17,15 @@ import {
   getDoc,
   doc,
 } from "firebase/firestore";
-import dayjs from "dayjs";
 import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
-import { combinarFechaHora, formatearDiasFaltan } from "../../utils/jornadaFecha";
+import {
+  normalizarJornada,
+  jornadaYaPaso,
+  formatearDiasFaltan,
+  formatearHora,
+} from "../../utils/jornadaFecha";
 
 export default function HomeScreen({ navigation }) {
   const { usuario, cerrarSesion } = useAuth();
@@ -49,28 +53,21 @@ export default function HomeScreen({ navigation }) {
           try {
             const jornadaSnap = await getDoc(doc(db, "jornadas", inscripcion.jornadaId));
             if (jornadaSnap.exists()) {
-              return { id: jornadaSnap.id, ...jornadaSnap.data() };
+              return normalizarJornada(jornadaSnap.id, jornadaSnap.data());
             }
           } catch (err) {
             console.error("Error cargando jornada de inscripción:", err);
           }
-          return {
-            id: inscripcion.jornadaId,
+          return normalizarJornada(inscripcion.jornadaId, {
             titulo: inscripcion.tituloJornada,
             fecha: inscripcion.fechaJornada,
-            hora: null,
-          };
+          });
         })
       );
 
-      const ahora = dayjs();
       const proximas = jornadasInscritas
-        .map((jornada) => ({
-          ...jornada,
-          fechaHora: combinarFechaHora(jornada.fecha, jornada.hora),
-        }))
-        .filter((jornada) => jornada.fechaHora?.isValid() && jornada.fechaHora.isAfter(ahora))
-        .sort((a, b) => a.fechaHora.valueOf() - b.fechaHora.valueOf());
+        .filter((jornada) => !jornadaYaPaso(jornada.fecha))
+        .sort((a, b) => a.fecha - b.fecha);
 
       setMisJornadas(proximas);
     } catch (err) {
@@ -165,13 +162,13 @@ export default function HomeScreen({ navigation }) {
                   <View style={styles.jornadaDetalleFila}>
                     <Ionicons name="hourglass-outline" size={13} color={colors.primary} />
                     <Text style={styles.jornadaDetalleTexto}>
-                      {formatearDiasFaltan(jornada.fechaHora)}
+                      {formatearDiasFaltan(jornada.fecha)}
                     </Text>
                   </View>
                   <View style={styles.jornadaDetalleFila}>
                     <Ionicons name="time-outline" size={13} color={colors.primary} />
                     <Text style={styles.jornadaDetalleTexto}>
-                      {jornada.hora || "Hora por confirmar"}
+                      {formatearHora(jornada.fecha)}
                     </Text>
                   </View>
                 </View>

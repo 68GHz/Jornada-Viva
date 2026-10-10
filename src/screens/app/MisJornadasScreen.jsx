@@ -17,14 +17,17 @@ import {
   doc,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
 import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
-import { combinarFechaHora, coincideFiltroFecha } from "../../utils/jornadaFecha";
+import {
+  normalizarJornada,
+  jornadaYaPaso,
+  coincideFiltroFecha,
+} from "../../utils/jornadaFecha";
 
 // Búsqueda sin distinguir mayúsculas ni tildes
 const normalizar = (texto = "") =>
@@ -55,26 +58,18 @@ export default function MisJornadasScreen({ navigation }) {
         idsJornadas.map(async (jornadaId) => {
           const jornadaSnap = await getDoc(doc(db, "jornadas", jornadaId));
           return jornadaSnap.exists()
-            ? { id: jornadaSnap.id, ...jornadaSnap.data() }
+            ? normalizarJornada(jornadaSnap.id, jornadaSnap.data())
             : null;
         })
       );
 
-      const ahora = dayjs();
       const datos = resultados
         .filter(Boolean)
-        .map((jornada) => {
-          const fechaHora = combinarFechaHora(jornada.fecha, jornada.hora);
-          return {
-            ...jornada,
-            fechaHora,
-            finalizada: !fechaHora?.isValid() || !fechaHora.isAfter(ahora),
-          };
-        })
+        .map((jornada) => ({ ...jornada, finalizada: jornadaYaPaso(jornada.fecha) }))
         // Próximas primero (más cercanas arriba), luego las finalizadas
         .sort((a, b) => {
           if (a.finalizada !== b.finalizada) return a.finalizada ? 1 : -1;
-          const diff = (a.fechaHora?.valueOf() || 0) - (b.fechaHora?.valueOf() || 0);
+          const diff = (a.fecha || 0) - (b.fecha || 0);
           return a.finalizada ? -diff : diff;
         });
 
@@ -173,8 +168,8 @@ export default function MisJornadasScreen({ navigation }) {
               : { texto: "Inscrito", color: colors.success }
           }
           onPress={() => {
-            // Los objetos dayjs no son serializables en los params de navegación
-            const { fechaHora, finalizada, ...jornada } = item;
+            // `finalizada` es solo de la lista; el detalle la calcula por su cuenta
+            const { finalizada, ...jornada } = item;
             navigation.navigate("JornadaDetail", { jornada });
           }}
         />

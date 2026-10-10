@@ -1,8 +1,8 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
 import { colors } from "../theme/colors";
+import { formatearFecha, formatearHora } from "../utils/jornadaFecha";
 
 // `estado` (opcional): { texto, color } reemplaza el badge de cupos,
 // útil cuando se lista la inscripción del usuario (ej. "Inscrito").
@@ -61,12 +61,12 @@ export default function JornadaCard({ jornada, onPress, estado }) {
           <View style={styles.detalleFila}>
             <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} />
             <Text style={styles.detalleTexto}>
-              {dayjs(jornada.fecha).format("DD [de] MMMM [de] YYYY")}
+              {formatearFecha(jornada.fecha, "DD [de] MMMM [de] YYYY")}
             </Text>
           </View>
           <View style={styles.detalleFila}>
             <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-            <Text style={styles.detalleTexto}>{jornada.hora}</Text>
+            <Text style={styles.detalleTexto}>{formatearHora(jornada.fecha)}</Text>
           </View>
           <View style={styles.detalleFila}>
             <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
