@@ -17,6 +17,7 @@ import {
   serverTimestamp,
   doc,
   updateDoc,
+  deleteDoc,
   increment,
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +26,10 @@ import "dayjs/locale/es";
 import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import { colors } from "../../theme/colors";
+import {
+  puedeCancelarInscripcion,
+  DIAS_LIMITE_CANCELACION,
+} from "../../utils/jornadaFecha";
 
 dayjs.locale("es");
 
@@ -37,9 +42,11 @@ export default function JornadaDetailScreen({ route }) {
   const [inscrito, setInscrito] = useState(false);
   const [verificando, setVerificando] = useState(true);
   const [inscribiendo, setInscribiendo] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
 
   const cuposRestantes = jornada.cuposTotales - jornada.cuposOcupados;
   const sinCupos = cuposRestantes <= 0;
+  const puedeCancelar = puedeCancelarInscripcion(jornada.fecha);
 
   // Verificar si el usuario ya está inscrito
   useEffect(() => {
@@ -129,6 +136,67 @@ const confirmarInscripcion = async () => {
     setInscribiendo(false);
   }
 };
+
+  const manejarCancelacion = () => {
+    if (!puedeCancelarInscripcion(jornada.fecha)) {
+      Alert.alert(
+        "Plazo vencido",
+        `Solo puedes cancelar hasta ${DIAS_LIMITE_CANCELACION} días antes de la jornada.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Cancelar inscripción",
+      `¿Seguro que deseas cancelar tu inscripción en "${jornada.titulo}"?\n\nTu cupo quedará disponible para otras personas.`,
+      [
+        { text: "Mantener inscripción", style: "cancel" },
+        {
+          text: "Sí, cancelar",
+          style: "destructive",
+          onPress: confirmarCancelacion,
+        },
+      ]
+    );
+  };
+
+  const confirmarCancelacion = async () => {
+    setCancelando(true);
+    try {
+      const q = query(
+        collection(db, "inscripciones"),
+        where("userId", "==", usuario.uid),
+        where("jornadaId", "==", jornada.id)
+      );
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        setInscrito(false);
+        Alert.alert("Sin inscripción", "No tienes una inscripción activa en esta jornada.");
+        return;
+      }
+
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      await updateDoc(doc(db, "jornadas", jornada.id), {
+        cuposOcupados: increment(-1),
+      });
+
+      setJornada((prev) => ({
+        ...prev,
+        cuposOcupados: Math.max(0, prev.cuposOcupados - 1),
+      }));
+      setInscrito(false);
+      Alert.alert("Inscripción cancelada", `Cancelaste tu inscripción en "${jornada.titulo}".`);
+    } catch (err) {
+      console.error("Error al cancelar inscripción:", err);
+      Alert.alert(
+        "Error",
+        "No se pudo cancelar la inscripción. Verifica tu conexión e intenta de nuevo."
+      );
+    } finally {
+      setCancelando(false);
+    }
+  };
 
   const renderBotonInscripcion = () => {
     if (verificando) {
@@ -262,6 +330,30 @@ const confirmarInscripcion = async () => {
           <Text style={styles.confirmacionTexto}>
             Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado.
           </Text>
+          {puedeCancelar ? (
+            <TouchableOpacity
+              style={[styles.botonCancelar, cancelando && styles.botonDeshabilitado]}
+              onPress={manejarCancelacion}
+              disabled={cancelando}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Cancelar inscripción"
+              accessibilityHint="Libera tu cupo en esta jornada"
+            >
+              {cancelando ? (
+                <ActivityIndicator color={colors.error} />
+              ) : (
+                <>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.error} />
+                  <Text style={styles.botonCancelarTexto}>Cancelar inscripción</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.cancelacionNota}>
+              El plazo para cancelar terminó ({DIAS_LIMITE_CANCELACION} días antes de la jornada).
+            </Text>
+          )}
         </View>
       )}
     </ScrollView>
@@ -409,6 +501,28 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: "700",
+  },
+  botonCancelar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 48,
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.error,
+    backgroundColor: colors.white,
+  },
+  botonCancelarTexto: {
+    color: colors.error,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  cancelacionNota: {
+    fontSize: 12,
+    color: colors.textDisabled,
+    marginTop: 4,
   },
   confirmacionCard: {
     backgroundColor: colors.primaryPale,

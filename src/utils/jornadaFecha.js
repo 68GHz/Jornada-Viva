@@ -12,6 +12,16 @@ export function combinarFechaHora(fecha, hora) {
   return base.hour(horas).minute(minutos).second(0).millisecond(0);
 }
 
+export const DIAS_LIMITE_CANCELACION = 2;
+
+// Se puede cancelar hasta DIAS_LIMITE_CANCELACION días antes de la jornada
+export function puedeCancelarInscripcion(fecha) {
+  const base = dayjs(fecha);
+  if (!base.isValid()) return false;
+  const dias = base.startOf("day").diff(dayjs().startOf("day"), "day");
+  return dias >= DIAS_LIMITE_CANCELACION;
+}
+
 export function formatearDiasFaltan(fechaHora) {
   const dias = fechaHora.startOf("day").diff(dayjs().startOf("day"), "day");
   if (dias <= 0) return "Hoy";
