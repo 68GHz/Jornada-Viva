@@ -113,6 +113,20 @@ export default function HomeScreen({ navigation }) {
             Explora todas las jornadas disponibles en tu comunidad
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tarjetaSecundaria}
+          onPress={() => navigation.navigate("Notifications")}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Centro de notificaciones"
+        >
+          <View style={styles.tarjetaSecundariaFila}>
+            <Ionicons name="notifications-outline" size={22} color={colors.primary} />
+            <Text style={styles.tarjetaSecundariaTitulo}>Centro de notificaciones</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {/* Mis jornadas inscritas */}
@@ -254,6 +268,26 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     textAlign: "center",
     lineHeight: 18,
+  },
+  tarjetaSecundaria: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tarjetaSecundariaFila: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  tarjetaSecundariaTitulo: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.textPrimary,
   },
   misJornadasEncabezado: {
     flexDirection: "row",

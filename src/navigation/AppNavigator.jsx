@@ -12,6 +12,10 @@ import HomeScreen from "../screens/app/HomeScreen";
 import JornadasListScreen from "../screens/app/JornadasListScreen";
 import JornadaDetailScreen from "../screens/app/JornadaDetailScreen";
 import MisJornadasScreen from "../screens/app/MisJornadasScreen";
+import NotificationsScreen from "../screens/app/NotificationsScreen";
+import { Ionicons } from "@expo/vector-icons";
+import { TouchableOpacity } from "react-native";
+import { useNotifications } from "../context/NotificationContext";
 
 const Stack = createNativeStackNavigator();
 
@@ -26,6 +30,7 @@ function AuthStack() {
 
 function AppStack() {
   const { cerrarSesion } = useAuth();
+  const { noLeidasCount } = useNotifications();
 
   return (
     <Stack.Navigator
@@ -38,7 +43,7 @@ function AppStack() {
       <Stack.Screen
         name="Home"
         component={HomeScreen}
-        options={{
+        options={({ navigation }) => ({
           headerTitle: () => (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <View
@@ -60,7 +65,43 @@ function AppStack() {
               </Text>
             </View>
           ),
-        }}
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Notifications")}
+              style={{ padding: 4, position: "relative" }}
+              accessibilityRole="button"
+              accessibilityLabel="Notificaciones"
+            >
+              <Ionicons name="notifications-outline" size={24} color={colors.white} />
+              {noLeidasCount > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 2,
+                    right: 2,
+                    backgroundColor: colors.error,
+                    borderRadius: 9,
+                    minWidth: 18,
+                    height: 18,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    paddingHorizontal: 4,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.white,
+                      fontSize: 10,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {noLeidasCount > 9 ? "9+" : noLeidasCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ),
+        })}
       />
       <Stack.Screen
         name="JornadasList"
@@ -76,6 +117,11 @@ function AppStack() {
         name="JornadaDetail"
         component={JornadaDetailScreen}
         options={{ title: "Detalle de Jornada" }}
+      />
+      <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: "Notificaciones" }}
       />
     </Stack.Navigator>
   );

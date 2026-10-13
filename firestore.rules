@@ -1,0 +1,60 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == userId;
+    }
+
+    match /jornadas/{jornadaId} {
+      allow read: if request.auth != null;
+      allow update: if request.auth != null
+        && request.resource.data.keys() == resource.data.keys();
+    }
+
+    match /inscripciones/{inscripcionId} {
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+
+      allow update: if false;
+
+      allow delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // Reglas para notificaciones individuales por usuario
+    match /notificaciones/{notificacionId} {
+      // El usuario solo puede leer sus propias notificaciones
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      // El usuario solo puede actualizar el estado de lectura de sus propias notificaciones
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida', 'leidaEn']);
+
+      // Creación permitida solo para el propio usuario o mediante backend/admin SDK
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+
+      // El usuario puede eliminar sus propias notificaciones
+      allow delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // Historial / eventos de cambios en jornadas (auditoría / sincronización)
+    match /eventos_jornadas/{eventoId} {
+      allow read: if request.auth != null;
+      // Solo administradores / backend crean eventos directamente o usuarios autenticados registrando eventos del sistema
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+  }
+}
+
