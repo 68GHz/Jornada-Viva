@@ -62,6 +62,8 @@ export default function RegisterScreen({ navigation }) {
       } else if (error.code === "auth/weak-password") {
         mensaje =
           "La contraseña es demasiado débil. Usa al menos 6 caracteres.";
+      } else if (error.code === "auth/network-request-failed") {
+        mensaje = "Sin conexión a internet. Conéctate para crear tu cuenta.";
       }
       Alert.alert("Error al registrarse", mensaje);
     } finally {

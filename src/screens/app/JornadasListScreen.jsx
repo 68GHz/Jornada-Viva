@@ -7,6 +7,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -17,7 +18,14 @@ import { coincideFiltroFecha } from "../../utils/jornadaFecha";
 
 
 export default function JornadasListScreen({ navigation }) {
-  const { jornadasDisponibles: jornadas, cargando, error, recargar } = useJornadas();
+  const {
+    jornadasDisponibles: jornadas,
+    estadoInscripcion,
+    cargando,
+    error,
+    recargar,
+  } = useJornadas();
+  const { enLinea } = useConnectivity();
   const [actualizando, setActualizando] = useState(false);
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
 
@@ -74,14 +82,28 @@ export default function JornadasListScreen({ navigation }) {
       keyboardShouldPersistTaps="handled"
       data={jornadasFiltradas}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <JornadaCard
-          jornada={item}
-          onPress={() =>
-            navigation.navigate("JornadaDetail", { jornada: item })
-          }
-        />
-      )}
+      renderItem={({ item }) => {
+        const { pendiente } = estadoInscripcion(item.id);
+        return (
+          <JornadaCard
+            jornada={item}
+            estado={
+              pendiente
+                ? {
+                    texto:
+                      pendiente === "CANCELAR"
+                        ? "Cancelación pendiente"
+                        : "Pendiente por sincronizar",
+                    color: colors.warning,
+                  }
+                : undefined
+            }
+            onPress={() =>
+              navigation.navigate("JornadaDetail", { jornada: item })
+            }
+          />
+        );
+      }}
       contentContainerStyle={
         jornadasFiltradas.length === 0 ? styles.listaVacia : styles.lista
       }
@@ -110,6 +132,8 @@ export default function JornadasListScreen({ navigation }) {
           <Text style={styles.vacioTexto}>
             {hayFiltros
               ? "No encontramos jornadas con esos criterios.\nPrueba con otra búsqueda o limpia los filtros."
+              : !enLinea
+              ? "Sin conexión y sin jornadas guardadas en el dispositivo.\nConéctate a internet para descargarlas."
               : "No hay jornadas disponibles en este momento.\nVuelve a revisar pronto."}
           </Text>
         </View>

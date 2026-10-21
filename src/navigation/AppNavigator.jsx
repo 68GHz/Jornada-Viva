@@ -2,6 +2,7 @@ import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View, Text, Image, ActivityIndicator } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
@@ -13,6 +14,9 @@ import JornadasListScreen from "../screens/app/JornadasListScreen";
 import JornadaDetailScreen from "../screens/app/JornadaDetailScreen";
 import MisJornadasScreen from "../screens/app/MisJornadasScreen";
 import NotificationsScreen from "../screens/app/NotificationsScreen";
+import SincronizacionScreen from "../screens/app/SincronizacionScreen";
+import ConnectionBanner from "../components/ConnectionBanner";
+import { navigationRef } from "./navigationRef";
 import { Ionicons } from "@expo/vector-icons";
 import { TouchableOpacity } from "react-native";
 import { useNotifications } from "../context/NotificationContext";
@@ -123,6 +127,11 @@ function AppStack() {
         component={NotificationsScreen}
         options={{ title: "Notificaciones" }}
       />
+      <Stack.Screen
+        name="Sincronizacion"
+        component={SincronizacionScreen}
+        options={{ title: "Sincronización" }}
+      />
     </Stack.Navigator>
   );
 }
@@ -139,8 +148,13 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      {usuario ? <AppStack /> : <AuthStack />}
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer ref={navigationRef}>
+        <View style={{ flex: 1 }}>
+          <View style={{ flex: 1 }}>{usuario ? <AppStack /> : <AuthStack />}</View>
+          <ConnectionBanner />
+        </View>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

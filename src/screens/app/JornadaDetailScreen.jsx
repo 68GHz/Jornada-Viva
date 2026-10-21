@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,23 +8,10 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  Timestamp,
-  doc,
-  updateDoc,
-  deleteDoc,
-  increment,
-} from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import { db } from "../../../firebaseConfig";
-import { useAuth } from "../../context/AuthContext";
+import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
+import { useAccionesInscripcion } from "../../hooks/useAccionesInscripcion";
 import { colors } from "../../theme/colors";
 import {
   puedeCancelarInscripcion,
@@ -35,11 +22,24 @@ import {
 } from "../../utils/jornadaFecha";
 import { jornadaDisponible } from "../../utils/jornadaEstado";
 
+const TITULO_ERROR = {
+  YA_INSCRITO: "Ya inscrito",
+  SIN_CUPOS: "Sin cupos",
+  JORNADA_NO_DISPONIBLE: "Jornada no disponible",
+  PLAZO_VENCIDO: "Plazo vencido",
+};
+
 export default function JornadaDetailScreen({ route }) {
   const { jornada: jornadaInicial } = route.params;
-  const { usuario } = useAuth();
 
-  const { jornadasPorId, cargando: cargandoJornadas, ahora } = useJornadas();
+  const {
+    jornadasPorId,
+    estadoInscripcion,
+    cargando: cargandoJornadas,
+    ahora,
+  } = useJornadas();
+  const { enLinea } = useConnectivity();
+  const { inscribirse, cancelarInscripcion } = useAccionesInscripcion();
 
   // Datos en vivo de Firestore (cupos, estado, etc.) sobre los recibidos al navegar
   const jornadaEnVivo = jornadasPorId.get(jornadaInicial.id);
@@ -52,8 +52,10 @@ export default function JornadaDetailScreen({ route }) {
   const disponible =
     cargandoJornadas || (!!jornadaEnVivo && jornadaDisponible(jornadaEnVivo, ahora));
 
-  const [inscrito, setInscrito] = useState(false);
-  const [verificando, setVerificando] = useState(true);
+  // Incluye lo pendiente de sincronizar: `pendiente` es "INSCRIBIR", "CANCELAR" o null
+  const { inscrito, pendiente } = estadoInscripcion(jornada.id);
+  const verificando = cargandoJornadas;
+
   const [inscribiendo, setInscribiendo] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
@@ -61,26 +63,14 @@ export default function JornadaDetailScreen({ route }) {
   const sinCupos = cuposRestantes <= 0;
   const puedeCancelar = puedeCancelarInscripcion(jornada.fecha);
 
-  // Verificar si el usuario ya está inscrito
-  useEffect(() => {
-    const verificarInscripcion = async () => {
-      try {
-        const q = query(
-          collection(db, "inscripciones"),
-          where("userId", "==", usuario.uid),
-          where("jornadaId", "==", jornada.id)
-        );
-        const snap = await getDocs(q);
-        setInscrito(!snap.empty);
-      } catch (err) {
-        console.error("Error verificando inscripción:", err);
-      } finally {
-        setVerificando(false);
-      }
-    };
-
-    verificarInscripcion();
-  }, [jornada.id, usuario.uid]);
+  const mostrarError = (err, mensajeGeneral) => {
+    if (err?.name === "ErrorNegocio") {
+      Alert.alert(TITULO_ERROR[err.codigo] || "No se pudo completar", err.message);
+      return;
+    }
+    console.error(mensajeGeneral, err);
+    Alert.alert("Error", `${mensajeGeneral} Intenta de nuevo.`);
+  };
 
   const manejarInscripcion = async () => {
     if (!disponible) {
@@ -93,13 +83,17 @@ export default function JornadaDetailScreen({ route }) {
       return;
     }
 
+    const aviso = enLinea
+      ? ""
+      : "\n\nSin conexión: tu inscripción quedará guardada en el dispositivo como pendiente y se enviará automáticamente cuando recuperes internet. Solo se confirmará si aún hay cupos disponibles.";
+
     Alert.alert(
       "Confirmar inscripción",
-      `¿Deseas inscribirte en "${jornada.titulo}"?\n\nFecha: ${formatearFecha(jornada.fecha, "DD [de] MMMM [de] YYYY")}\nHora: ${formatearHora(jornada.fecha)}\nLugar: ${jornada.lugar}`,
+      `¿Deseas inscribirte en "${jornada.titulo}"?\n\nFecha: ${formatearFecha(jornada.fecha, "DD [de] MMMM [de] YYYY")}\nHora: ${formatearHora(jornada.fecha)}\nLugar: ${jornada.lugar}${aviso}`,
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Sí, inscribirme",
+          text: enLinea ? "Sí, inscribirme" : "Sí, continuar",
           style: "default",
           onPress: confirmarInscripcion,
         },
@@ -107,53 +101,35 @@ export default function JornadaDetailScreen({ route }) {
     );
   };
 
-const confirmarInscripcion = async () => {
-  setInscribiendo(true);
-  try {
-    // Doble verificación en el momento de inscribir (evita condición de carrera)
-    const q = query(
-      collection(db, "inscripciones"),
-      where("userId", "==", usuario.uid),
-      where("jornadaId", "==", jornada.id)
-    );
-    const verificacion = await getDocs(q);
-    if (!verificacion.empty) {
-      setInscrito(true);
-      Alert.alert("Ya inscrito", "Ya tienes una inscripción activa en esta jornada.");
-      return;
+  const confirmarInscripcion = async () => {
+    setInscribiendo(true);
+    try {
+      const { estado } = await inscribirse(jornada);
+
+      if (estado === "completada") {
+        Alert.alert(
+          "¡Inscripción exitosa! ✅",
+          `Quedaste registrado en "${jornada.titulo}".\n\nRecuerda presentarte el ${formatearFecha(jornada.fecha, "DD [de] MMMM")} a las ${formatearHora(jornada.fecha)} en ${jornada.lugar}.`
+        );
+      } else if (estado === "pendiente") {
+        Alert.alert(
+          "Pendiente por sincronizar",
+          `Tu inscripción en "${jornada.titulo}" quedó guardada en el dispositivo y se enviará cuando recuperes la conexión. Solo se confirmará si aún hay cupos disponibles.`
+        );
+      } else if (estado === "anulada") {
+        Alert.alert(
+          "Cancelación anulada",
+          "Tenías una cancelación pendiente de enviar. Se anuló y sigues inscrito."
+        );
+      } else {
+        Alert.alert("Ya en proceso", "Esta inscripción ya está pendiente de sincronizar.");
+      }
+    } catch (err) {
+      mostrarError(err, "No se pudo completar la inscripción.");
+    } finally {
+      setInscribiendo(false);
     }
-
-    await addDoc(collection(db, "inscripciones"), {
-      userId: usuario.uid,
-      jornadaId: jornada.id,
-      nombreUsuario: usuario.displayName || usuario.email,
-      emailUsuario: usuario.email,
-      tituloJornada: jornada.titulo,
-      fechaJornada:
-        jornada.fecha != null ? Timestamp.fromMillis(jornada.fecha) : null,
-      inscritoEn: serverTimestamp(),
-      asistio: false,
-    });
-
-    await updateDoc(doc(db, "jornadas", jornada.id), {
-      cuposOcupados: increment(1),
-    });
-
-    setInscrito(true);
-    Alert.alert(
-      "¡Inscripción exitosa! ✅",
-      `Quedaste registrado en "${jornada.titulo}".\n\nRecuerda presentarte el ${formatearFecha(jornada.fecha, "DD [de] MMMM")} a las ${formatearHora(jornada.fecha)} en ${jornada.lugar}.`
-    );
-  } catch (err) {
-    console.error("Error al inscribirse:", err);
-    Alert.alert(
-      "Error",
-      "No se pudo completar la inscripción. Verifica tu conexión e intenta de nuevo."
-    );
-  } finally {
-    setInscribiendo(false);
-  }
-};
+  };
 
   const manejarCancelacion = () => {
     if (!puedeCancelarInscripcion(jornada.fecha)) {
@@ -164,13 +140,17 @@ const confirmarInscripcion = async () => {
       return;
     }
 
+    const aviso = enLinea
+      ? ""
+      : "\n\nSin conexión: la cancelación quedará guardada en el dispositivo como pendiente y se enviará automáticamente cuando recuperes internet. El plazo se valida con la fecha de este dispositivo.";
+
     Alert.alert(
       "Cancelar inscripción",
-      `¿Seguro que deseas cancelar tu inscripción en "${jornada.titulo}"?\n\nTu cupo quedará disponible para otras personas.`,
+      `¿Seguro que deseas cancelar tu inscripción en "${jornada.titulo}"?\n\nTu cupo quedará disponible para otras personas.${aviso}`,
       [
         { text: "Mantener inscripción", style: "cancel" },
         {
-          text: "Sí, cancelar",
+          text: enLinea ? "Sí, cancelar" : "Sí, continuar",
           style: "destructive",
           onPress: confirmarCancelacion,
         },
@@ -181,32 +161,25 @@ const confirmarInscripcion = async () => {
   const confirmarCancelacion = async () => {
     setCancelando(true);
     try {
-      const q = query(
-        collection(db, "inscripciones"),
-        where("userId", "==", usuario.uid),
-        where("jornadaId", "==", jornada.id)
-      );
-      const snap = await getDocs(q);
+      const { estado } = await cancelarInscripcion(jornada);
 
-      if (snap.empty) {
-        setInscrito(false);
-        Alert.alert("Sin inscripción", "No tienes una inscripción activa en esta jornada.");
-        return;
+      if (estado === "completada") {
+        Alert.alert("Inscripción cancelada", `Cancelaste tu inscripción en "${jornada.titulo}".`);
+      } else if (estado === "pendiente") {
+        Alert.alert(
+          "Pendiente por sincronizar",
+          `La cancelación de tu inscripción en "${jornada.titulo}" quedó guardada en el dispositivo. Tu cupo se liberará cuando recuperes la conexión.`
+        );
+      } else if (estado === "anulada") {
+        Alert.alert(
+          "Inscripción anulada",
+          "Tu inscripción aún no se había enviado, así que se anuló y no se registrará en el servidor."
+        );
+      } else {
+        Alert.alert("Ya en proceso", "Esta cancelación ya está pendiente de sincronizar.");
       }
-
-      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
-      await updateDoc(doc(db, "jornadas", jornada.id), {
-        cuposOcupados: increment(-1),
-      });
-
-      setInscrito(false);
-      Alert.alert("Inscripción cancelada", `Cancelaste tu inscripción en "${jornada.titulo}".`);
     } catch (err) {
-      console.error("Error al cancelar inscripción:", err);
-      Alert.alert(
-        "Error",
-        "No se pudo cancelar la inscripción. Verifica tu conexión e intenta de nuevo."
-      );
+      mostrarError(err, "No se pudo cancelar la inscripción.");
     } finally {
       setCancelando(false);
     }
@@ -224,9 +197,11 @@ const confirmarInscripcion = async () => {
 
     if (inscrito) {
       return (
-        <View style={styles.botonInscrito}>
+        <View style={[styles.botonInscrito, pendiente === "INSCRIBIR" && styles.botonPendiente]}>
           <Ionicons name="checkmark-circle" size={20} color={colors.white} />
-          <Text style={styles.botonTexto}>Ya estás inscrito</Text>
+          <Text style={styles.botonTexto}>
+            {pendiente === "INSCRIBIR" ? "Inscripción pendiente por sincronizar" : "Ya estás inscrito"}
+          </Text>
         </View>
       );
     }
@@ -354,6 +329,15 @@ const confirmarInscripcion = async () => {
       {/* Botón de inscripción */}
       <View style={styles.accion}>{renderBotonInscripcion()}</View>
 
+      {pendiente === "CANCELAR" && (
+        <View style={styles.pendienteCard}>
+          <Ionicons name="sync-outline" size={18} color={colors.textPrimary} />
+          <Text style={styles.pendienteTexto}>
+            Cancelación pendiente por sincronizar. Tu cupo se liberará cuando recuperes la conexión.
+          </Text>
+        </View>
+      )}
+
       {inscrito && (
         <View style={styles.confirmacionCard}>
           <View style={styles.confirmacionFila}>
@@ -361,7 +345,9 @@ const confirmarInscripcion = async () => {
             <Text style={styles.confirmacionTitulo}>¡Estás inscrito!</Text>
           </View>
           <Text style={styles.confirmacionTexto}>
-            Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado.
+            {pendiente === "INSCRIBIR"
+              ? "Tu inscripción está guardada en el dispositivo y se confirmará al sincronizar."
+              : "Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado."}
           </Text>
           {puedeCancelar ? (
             <TouchableOpacity
@@ -551,6 +537,24 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 15,
     fontWeight: "700",
+  },
+  botonPendiente: {
+    backgroundColor: colors.warning,
+  },
+  pendienteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: `${colors.warning}30`,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  pendienteTexto: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: "600",
   },
   avisoNoDisponible: {
     flexDirection: "row",

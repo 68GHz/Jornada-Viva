@@ -6,10 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
+import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
+import { useSync } from "../../context/SyncContext";
 import { colors } from "../../theme/colors";
 import { formatearDiasFaltan, formatearHora } from "../../utils/jornadaFecha";
 
@@ -23,7 +26,36 @@ export default function HomeScreen({ navigation }) {
     cargando: cargandoJornadas,
     error: errorJornadas,
   } = useJornadas();
-  const misJornadas = useMemo(() => inscritas.filter((j) => !j.finalizada), [inscritas]);
+  const misJornadas = useMemo(
+    () => inscritas.filter((j) => !j.finalizada && j.pendiente !== "CANCELAR"),
+    [inscritas]
+  );
+  const { enLinea } = useConnectivity();
+  const { pendientes } = useSync();
+
+  // Cerrar sesión borra los datos locales: si hay algo en juego se informa y se pide confirmación
+  const confirmarCerrarSesion = () => {
+    const avisos = [];
+    if (pendientes.length > 0) {
+      const n = pendientes.length;
+      avisos.push(
+        `Tienes ${n} acción${n !== 1 ? "es" : ""} pendiente${n !== 1 ? "s" : ""} por sincronizar. Si cierras sesión ahora se perderán.`
+      );
+    }
+    if (!enLinea) {
+      avisos.push(
+        "No tienes conexión: al cerrar sesión se borrarán los datos guardados en el dispositivo y no podrás volver a iniciar sesión hasta recuperar internet."
+      );
+    }
+    if (avisos.length === 0) {
+      cerrarSesion();
+      return;
+    }
+    Alert.alert("Cerrar sesión", `${avisos.join("\n\n")}\n\n¿Deseas continuar?`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Cerrar sesión", style: "destructive", onPress: cerrarSesion },
+    ]);
+  };
 
   return (
     <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
@@ -113,6 +145,9 @@ export default function HomeScreen({ navigation }) {
                 <Text style={styles.jornadaTitulo} numberOfLines={2}>
                   {jornada.titulo}
                 </Text>
+                {jornada.pendiente === "INSCRIBIR" && (
+                  <Text style={styles.jornadaPendiente}>Pendiente por sincronizar</Text>
+                )}
                 <View style={styles.jornadaDetalles}>
                   <View style={styles.jornadaDetalleFila}>
                     <Ionicons name="hourglass-outline" size={13} color={colors.primary} />
@@ -143,7 +178,7 @@ export default function HomeScreen({ navigation }) {
       {/* Cerrar sesión */}
       <TouchableOpacity
         style={styles.botonSalir}
-        onPress={cerrarSesion}
+        onPress={confirmarCerrarSesion}
         activeOpacity={0.85}
       >
         <Text style={styles.botonSalirTexto}>Cerrar sesión</Text>
@@ -153,6 +188,11 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  jornadaPendiente: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.warning,
+  },
   contenedor: {
     flex: 1,
     backgroundColor: colors.background,

@@ -1,4 +1,5 @@
 import { normalizarJornada, jornadaYaPaso } from "./jornadaFecha";
+import { TIPOS, accionActiva } from "./sincronizacion";
 
 // Una jornada solo cuenta como activa si `activa` es exactamente true
 // (mismo criterio que usaba la consulta del listado).
@@ -38,7 +39,11 @@ export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.
     const finalizada = jornadaYaPaso(base.fecha, ahora);
 
     if (jornada && !estaActiva(jornada) && !finalizada) continue;
-    resultado.push({ ...base, finalizada });
+    resultado.push({
+      ...base,
+      finalizada,
+      ...(inscripcion.pendiente ? { pendiente: inscripcion.pendiente } : {}),
+    });
   }
 
   return resultado.sort((a, b) => {
@@ -46,4 +51,59 @@ export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.
     const diff = (a.fecha || 0) - (b.fecha || 0);
     return a.finalizada ? -diff : diff;
   });
+}
+
+// Acciones sin sincronizar por jornada: { tipo: la última, delta: efecto neto en cupos }
+export function mapaPendientes(cola) {
+  const mapa = new Map();
+  for (const accion of cola) {
+    if (!accionActiva(accion)) continue;
+    const previo = mapa.get(accion.jornadaId);
+    const delta = accion.tipo === TIPOS.INSCRIBIR ? 1 : -1;
+    mapa.set(accion.jornadaId, {
+      tipo: accion.tipo,
+      delta: (previo?.delta || 0) + delta,
+      accion,
+    });
+  }
+  return mapa;
+}
+
+// Cupos que ve el usuario: los del servidor más el efecto de sus acciones pendientes
+export function ajustarCupos(jornadas, pendientes) {
+  if (pendientes.size === 0) return jornadas;
+  return jornadas.map((jornada) => {
+    const pendiente = pendientes.get(jornada.id);
+    if (!pendiente || !pendiente.delta) return jornada;
+    return {
+      ...jornada,
+      cuposOcupados: Math.max(0, (jornada.cuposOcupados || 0) + pendiente.delta),
+    };
+  });
+}
+
+// Inscripciones que ve el usuario: las del servidor más/menos sus acciones pendientes.
+// Las canceladas sin sincronizar se conservan marcadas (`pendiente: "CANCELAR"`).
+export function aplicarPendientesAInscripciones(inscripciones, pendientes) {
+  if (pendientes.size === 0) return inscripciones;
+
+  const resultado = inscripciones.map((inscripcion) => {
+    const pendiente = pendientes.get(inscripcion.jornadaId);
+    return pendiente?.tipo === TIPOS.CANCELAR
+      ? { ...inscripcion, pendiente: TIPOS.CANCELAR }
+      : inscripcion;
+  });
+
+  const conServidor = new Set(inscripciones.map((i) => i.jornadaId));
+  for (const [jornadaId, pendiente] of pendientes) {
+    if (pendiente.tipo !== TIPOS.INSCRIBIR || conServidor.has(jornadaId)) continue;
+    resultado.push({
+      id: `pendiente-${pendiente.accion.id}`,
+      jornadaId,
+      tituloJornada: pendiente.accion.tituloJornada,
+      fechaJornada: pendiente.accion.fechaJornada,
+      pendiente: TIPOS.INSCRIBIR,
+    });
+  }
+  return resultado;
 }

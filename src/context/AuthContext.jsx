@@ -8,6 +8,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../../firebaseConfig";
+import { borrarDatosUsuario, habilitarUsuario } from "../services/localStore";
 
 const AuthContext = createContext(null);
 
@@ -17,6 +18,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
+      // Permite guardar datos locales del usuario que acaba de iniciar sesión
+      if (user) habilitarUsuario(user.uid);
       setUsuario(user);
       setCargando(false);
     });
@@ -43,7 +46,12 @@ export function AuthProvider({ children }) {
   const iniciarSesion = (email, password) =>
     signInWithEmailAndPassword(auth, email, password);
 
-  const cerrarSesion = () => signOut(auth);
+  // Al cerrar sesión se borran los datos guardados en el dispositivo (modo offline)
+  const cerrarSesion = async () => {
+    const uid = auth.currentUser?.uid;
+    await signOut(auth);
+    await borrarDatosUsuario(uid);
+  };
 
   return (
     <AuthContext.Provider value={{ usuario, cargando, registrar, iniciarSesion, cerrarSesion }}>

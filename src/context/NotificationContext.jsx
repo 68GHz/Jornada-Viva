@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
+import { useConnectivity } from "./ConnectivityContext";
 import {
   escucharNotificacionesUsuario,
   iniciarSincronizadorJornadas,
@@ -13,6 +14,7 @@ const NotificationContext = createContext(null);
 
 export function NotificationProvider({ children }) {
   const { usuario } = useAuth();
+  const { enLinea } = useConnectivity();
   const [notificaciones, setNotificaciones] = useState([]);
   const [noLeidasCount, setNoLeidasCount] = useState(0);
   const [cargando, setCargando] = useState(true);
@@ -61,6 +63,11 @@ export function NotificationProvider({ children }) {
       desuscribir();
     };
   }, [usuario?.uid]);
+
+  // Sin conexión no se queda cargando indefinidamente: se muestra lo disponible
+  useEffect(() => {
+    if (!enLinea) setCargando(false);
+  }, [enLinea]);
 
   const marcarComoLeida = async (id) => {
     try {

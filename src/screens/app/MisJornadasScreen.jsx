@@ -9,6 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -20,6 +21,7 @@ import { coincideFiltroFecha } from "../../utils/jornadaFecha";
 
 export default function MisJornadasScreen({ navigation }) {
   const { misJornadas: jornadas, cargando, error, recargar } = useJornadas();
+  const { enLinea } = useConnectivity();
 
   const [actualizando, setActualizando] = useState(false);
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
@@ -89,7 +91,15 @@ export default function MisJornadasScreen({ navigation }) {
         <JornadaCard
           jornada={item}
           estado={
-            item.noDisponible
+            item.pendiente
+              ? {
+                  texto:
+                    item.pendiente === "CANCELAR"
+                      ? "Cancelación pendiente"
+                      : "Pendiente por sincronizar",
+                  color: colors.warning,
+                }
+              : item.noDisponible
               ? { texto: "No disponible", color: colors.textDisabled }
               : item.finalizada
               ? { texto: "Finalizada", color: colors.textDisabled }
@@ -103,8 +113,8 @@ export default function MisJornadasScreen({ navigation }) {
               );
               return;
             }
-            // `finalizada` es solo de la lista; el detalle la calcula por su cuenta
-            const { finalizada, ...jornada } = item;
+            // `finalizada` y `pendiente` son solo de la lista; el detalle los calcula por su cuenta
+            const { finalizada, pendiente, ...jornada } = item;
             navigation.navigate("JornadaDetail", { jornada });
           }}
         />
@@ -139,8 +149,9 @@ export default function MisJornadasScreen({ navigation }) {
           <View style={styles.centrado}>
             <Ionicons name="calendar-outline" size={44} color={colors.textDisabled} />
             <Text style={styles.vacioTexto}>
-              Aún no te has inscrito a ninguna jornada.{"\n"}
-              ¡Explora las disponibles!
+              {enLinea
+                ? "Aún no te has inscrito a ninguna jornada.\n¡Explora las disponibles!"
+                : "Sin conexión y sin inscripciones guardadas en el dispositivo.\nConéctate a internet para consultarlas."}
             </Text>
             <TouchableOpacity
               style={styles.botonReintentar}
