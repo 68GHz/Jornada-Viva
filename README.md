@@ -9,6 +9,7 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
 - Vista de detalle con descripción completa, cupos disponibles y responsable.
 - Inscripción a la jornada con confirmación visual, persistida en Firestore.
 - Validación para evitar que un usuario se inscriba dos veces a la misma jornada.
+- **Roles** (estudiante y maestro): los maestros crean y administran sus propias jornadas y descargan la planilla de inscritos (ver [Roles y permisos](#roles-y-permisos)).
 
 ## Stack
 
@@ -61,14 +62,15 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
 ├── navigation/      # AppNavigator (stacks auth y app)
 ├── screens/
 │   ├── auth/        # LoginScreen, RegisterScreen
-│   └── app/         # HomeScreen, JornadasListScreen, JornadaDetailScreen
+│   ├── app/         # Pantallas del estudiante: HomeScreen, JornadasListScreen, JornadaDetailScreen...
+│   └── maestro/     # Pantallas del maestro: MaestroHomeScreen, JornadaFormScreen, JornadaAdminScreen
 └── theme/           # colors
 ```
 
 ## Modelo de datos (Firestore)
 
-- **`users/{uid}`**: `uid`, `nombre`, `email`, `creadoEn`.
-- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha`, `hora`, `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`.
+- **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante` o `maestro`; sin rol = estudiante), `creadoEn`.
+- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del maestro propietario; las jornadas anteriores a los roles no lo tienen) y `creadaEn`.
 - **`inscripciones/{id}`**: `userId`, `jornadaId`, `nombreUsuario`, `emailUsuario`, `tituloJornada`, `fechaJornada`, `inscritoEn`, `asistio`.
 
 ## Modo offline
@@ -121,6 +123,90 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 4. Cierra la app con acciones pendientes y vuelve a abrirla: siguen ahí.
 5. Desactiva el modo avión: aparece "Conectado" (10 s) o, si hay acciones pendientes, "Sincronizando datos" hasta que terminen; luego el aviso se oculta y la marca de pendiente desaparece. Si una jornada se llenó mientras tanto, la acción queda rechazada y se explica el motivo en *Sincronización*.
 6. Con acciones pendientes, intenta **Cerrar sesión**: se avisa y se pide confirmación; al confirmar se borran los datos locales.
+
+## Roles y permisos
+
+La app tiene dos roles. El rol se guarda en `users/{uid}.rol` y decide qué pantallas se muestran; **lo que de verdad se permite lo valida el servidor** con las reglas de Firestore (`firestore.rules`), así que manipular la app, las URL o las solicitudes no da más permisos.
+
+| | Estudiante | Maestro |
+|---|---|---|
+| Ver jornadas disponibles y su detalle | Sí | — (usa su panel) |
+| Inscribirse, cancelar, Mis jornadas, filtros, modo offline, notificaciones | Sí (todo lo anterior, sin cambios) | — |
+| Crear jornadas (espacios: bloques 1 al 13, auditorio, cancha y coliseo) | No | Sí |
+| Editar, cancelar, reactivar y eliminar jornadas | No | **Solo las que creó** |
+| Ver los inscritos y descargar la planilla (CSV para Excel) | No | **Solo de sus jornadas** |
+
+**Estados de una jornada** (se muestran con un chip de color en el panel del maestro): *Activa* (verde), *Cancelada* (rojo, desactivada y con fecha futura) y *Finalizada* (gris, la fecha ya pasó; al vencer la app también la desactiva en Firestore).
+
+### Cómo se protege (servidor)
+
+- **Rol:** al registrarse solo se puede ser estudiante y nadie puede cambiarse el rol desde la app. Un usuario sin rol se trata como estudiante.
+- **Propiedad:** solo un maestro crea jornadas y siempre con `creadoPor` igual a su uid. Editar, cancelar, reactivar o eliminar exige ser el maestro que la creó; el propietario no puede cambiarse. Las jornadas anteriores a los roles (sin `creadoPor`) no las administra nadie.
+- **Datos válidos:** el servidor valida el espacio (solo la lista permitida), textos, cupos (entero de 1 a 1000, nunca por debajo de los inscritos), fecha futura al crear o reactivar y los campos permitidos.
+- **Estudiantes:** solo pueden mover el contador de cupos al inscribirse o cancelar, dentro de sus límites; cualquier usuario puede desactivar una jornada vencida (limpieza automática).
+- **Inscritos:** un estudiante lee solo sus inscripciones; el maestro, las de sus propias jornadas (para la planilla).
+- **Planilla:** CSV con separador `;`, BOM UTF-8 y directiva `sep=;` (abre en columnas en cualquier Excel). Las celdas que empiezan por `=`, `+`, `-` o `@` se neutralizan para que un nombre no se ejecute como fórmula.
+
+### Asignar el rol de maestro
+
+El rol **no se puede pedir desde la app**; lo asigna quien administra el proyecto, de cualquiera de estas formas:
+
+- Consola de Firebase: Firestore → `users` → documento del usuario → campo `rol` = `maestro`.
+- Con el script (usa tu sesión de `gcloud`; sin `--aplicar` solo simula):
+
+  ```bash
+  # crear una cuenta nueva de maestro (correo + contraseña + nombre)
+  node scripts/admin.js crear-maestro maestro@tdea.edu.co ClaveSegura123 Nombre Apellido --aplicar
+  # o convertir en maestro a alguien que ya se registró en la app
+  node scripts/admin.js rol maestro@tdea.edu.co maestro --aplicar
+  node scripts/admin.js maestros
+  ```
+
+El cambio se aplica en la app sin reiniciarla.
+
+### Migración de datos (compatible hacia atrás)
+
+No es obligatoria: la app y las reglas tratan como estudiante a quien no tiene `rol`, y las jornadas existentes siguen viéndose igual. Para dejar los datos al día:
+
+```bash
+node scripts/admin.js migrar                 # simula: usuarios sin rol y jornadas sin propietario
+node scripts/admin.js migrar --aplicar       # agrega rol "estudiante" a quienes no lo tienen
+node scripts/admin.js propietario --huerfanas maestro@tdea.edu.co --aplicar   # asigna un maestro a las jornadas anteriores
+```
+
+### Despliegue de las reglas
+
+Las reglas del repositorio deben publicarse para que la validación del servidor esté activa:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project <id-del-proyecto>
+```
+
+### Pruebas
+
+```bash
+npm test             # lógica de roles, estados, validación del formulario y planilla
+npm run test:rules   # reglas de Firestore contra el emulador (requiere Java)
+npm run test:all     # ambas
+```
+
+Las pruebas de reglas cubren la autorización: un maestro no puede crear, editar, cancelar, reactivar, eliminar ni leer los inscritos de jornadas ajenas; un estudiante no puede administrar nada ni asignarse el rol; y los flujos de inscripción siguen funcionando.
+
+## Notificaciones
+
+El estudiante recibe un aviso (pantalla **Notificaciones** y aviso local del dispositivo) cuando cambia una jornada en la que está inscrito:
+
+| Aviso | Cuándo |
+|---|---|
+| Cancelación | La jornada pasa a inactiva antes de su fecha (no se avisa si se desactiva por haber vencido) |
+| Reactivación | La jornada vuelve a estar activa |
+| Reprogramación | Cambia la fecha o la hora |
+| Actualización | Cambia el lugar, la descripción, el responsable, el título o la entidad |
+| Eliminación | El maestro elimina la jornada |
+
+**Cómo funciona.** La app compara cada jornada inscrita con lo que el estudiante ya conocía de ella. Ese "estado visto" se guarda en Firestore (`users/{uid}.jornadasVistas`), no en el dispositivo: la propia inscripción lo anota en su transacción y cancelar la inscripción lo quita. Así **no se pierde ningún cambio** aunque el estudiante haya cerrado sesión (al cerrar sesión se borran los datos locales), cambie de dispositivo o tenga la app cerrada cuando el maestro lo haga: el aviso se genera al volver a abrir la app. Si no se puede registrar un aviso, el estado visto no avanza y se reintenta en la siguiente lectura. Sin conexión se usa la copia local del estado.
+
+**Limitación.** El aviso se genera cuando el estudiante abre la app: sin un servidor no hay notificaciones *push* con la app cerrada. `functions/index.js` tiene una Cloud Function pensada para eso, pero **no está desplegada** (requiere el plan Blaze de Firebase). Si se despliega, habría que desactivar la creación de avisos en la app o los estudiantes recibirían cada aviso dos veces.
 
 ## Investigación de campo
 

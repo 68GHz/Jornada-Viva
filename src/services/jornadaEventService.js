@@ -2,96 +2,26 @@ import {
   collection,
   query,
   where,
-  getDocs,
+  getDocFromServer,
   onSnapshot,
   doc,
   updateDoc,
   deleteDoc,
+  deleteField,
   setDoc,
-  orderBy,
   serverTimestamp,
 } from "firebase/firestore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../../firebaseConfig";
+import { guardarLocal, leerLocal } from "./localStore";
 import { mostrarNotificacionLocal } from "./notificationService";
-import { fechaAMillis } from "../utils/jornadaFecha";
+import { detectarCambioJornada, detectarEliminacion } from "../utils/cambiosJornada";
+import { instantaneaDeJornada, mismaInstantanea } from "../utils/instantaneaJornada";
+import { conTiempoLimite } from "../utils/sincronizacion";
 
-const STORAGE_KEY_SNAPSHOTS = "@jornadaviva_snapshots_v1";
-
-/**
- * Normaliza y compara los datos de una jornada para determinar si hubo cambios importantes:
- * - Cancelación: 'activa' cambia a false
- * - Reactivación: 'activa' vuelve a true
- * - Reprogramación: 'fecha' cambia
- * - Actualización: 'descripcion', 'lugar', 'titulo', 'responsable', 'entidad' cambian
- *
- * @param {Object} anterior - Datos guardados previamente
- * @param {Object} actual - Datos actuales recibidos de Firestore
- * @returns {Object|null} - Objeto con tipo, titulo y mensaje si hubo cambio relevante, null si no
- */
-export function detectarCambioJornada(anterior, actual) {
-  if (!anterior || !actual) return null;
-
-  // 1. Cancelación (una jornada desactivada por haber vencido no es una cancelación)
-  if (anterior.activa === true && actual.activa === false) {
-    const fechaMs = fechaAMillis(actual.fecha);
-    if (fechaMs != null && fechaMs <= Date.now()) return null;
-    return {
-      tipo: "cancelacion",
-      titulo: `Jornada cancelada: ${actual.titulo || "Jornada"}`,
-      mensaje: `La jornada "${actual.titulo}" ha sido cancelada por el organizador.`,
-    };
-  }
-
-  // 1b. Reactivación
-  if (anterior.activa === false && actual.activa === true) {
-    return {
-      tipo: "reactivacion",
-      titulo: `Jornada reactivada: ${actual.titulo || "Jornada"}`,
-      mensaje: `La jornada "${actual.titulo}" volvió a estar disponible. Revisa los detalles en la app.`,
-    };
-  }
-
-  // 2. Reprogramación (cambio de fecha)
-  const fechaAnt = anterior.fecha?.seconds || anterior.fecha || null;
-  const fechaAct = actual.fecha?.seconds || actual.fecha || null;
-  if (fechaAnt && fechaAct && fechaAnt !== fechaAct) {
-    return {
-      tipo: "reprogramacion",
-      titulo: `Jornada reprogramada: ${actual.titulo || "Jornada"}`,
-      mensaje: `La fecha y/o hora de "${actual.titulo}" han sido modificadas. Revisa los nuevos datos.`,
-    };
-  }
-
-  // 3. Actualización general relevante
-  const camposRevisar = [
-    { campo: "lugar", etiqueta: "el lugar" },
-    { campo: "descripcion", etiqueta: "la descripción" },
-    { campo: "responsable", etiqueta: "el responsable" },
-    { campo: "titulo", etiqueta: "el título" },
-    { campo: "entidad", etiqueta: "la entidad" },
-  ];
-
-  const cambios = [];
-  for (const { campo, etiqueta } of camposRevisar) {
-    if (anterior[campo] !== undefined && actual[campo] !== undefined) {
-      if (String(anterior[campo]).trim() !== String(actual[campo]).trim()) {
-        cambios.push(etiqueta);
-      }
-    }
-  }
-
-  if (cambios.length > 0) {
-    return {
-      tipo: "actualizacion",
-      titulo: `Jornada actualizada: ${actual.titulo || "Jornada"}`,
-      mensaje: `Se ha modificado ${cambios.join(", ")} en la jornada "${actual.titulo}".`,
-    };
-  }
-
-  // Si solo cambiaron cupos u otros datos internos, no notificar
-  return null;
-}
+// Espera máxima para leer el estado visto del servidor al iniciar (sin conexión se usa la copia local)
+const ESPERA_ESTADO_VISTO_MS = 8000;
+// Espera máxima al guardar una notificación; pasado ese tiempo la escritura sigue en cola del SDK
+const ESPERA_NOTIFICACION_MS = 10000;
 
 /**
  * Escucha en tiempo real las notificaciones directas guardadas en la colección `notificaciones`
@@ -128,128 +58,205 @@ export function escucharNotificacionesUsuario(userId, onActualizar, onError) {
 }
 
 /**
+ * Lee del servidor las jornadas que el usuario ya "vio" (users/{uid}.jornadasVistas). Vive en
+ * Firestore y no en el dispositivo: cerrar sesión borra los datos locales, pero los cambios que
+ * el maestro haga mientras el estudiante no está deben avisarse cuando vuelva.
+ * Devuelve null si no hay conexión con el servidor.
+ */
+async function leerEstadoVistoRemoto(userId) {
+  try {
+    const snapshot = await conTiempoLimite(
+      getDocFromServer(doc(db, "users", userId)),
+      ESPERA_ESTADO_VISTO_MS
+    );
+    return (snapshot.exists() && snapshot.data().jornadasVistas) || {};
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Sincronizador en tiempo real del lado del cliente:
- * Escucha las inscripciones del usuario y monitorea las jornadas asociadas directamente en Firestore.
- * Si un administrador edita la jornada en Firestore, este observador detecta la diferencia,
- * genera el registro persistente en `notificaciones` y muestra una notificación local de Expo.
+ * Escucha las inscripciones del usuario y monitorea las jornadas asociadas en Firestore.
+ * Cuando una jornada cambia (la edita, cancela, reactiva o elimina su maestro, o se cambia en
+ * Firestore), compara con el estado que el usuario ya conocía, registra la notificación en
+ * `notificaciones` y muestra una notificación local.
+ *
+ * El estado conocido de cada jornada se guarda en Firestore (ver cargarEstadoVisto) y la
+ * inscripción lo deja anotado en la misma transacción, así que no se pierde ningún cambio
+ * aunque el usuario cierre sesión, cambie de dispositivo o tenga la app cerrada.
  */
 export function iniciarSincronizadorJornadas(userId) {
   if (!userId) return () => {};
 
+  let activo = true;
+  let desuscribirInscripciones = () => {};
   let desuscribirJornadas = [];
-  let inscripcionesJornadaIds = new Set();
-  let instantaneasGuardadas = {};
+  let estadoVisto = {};
 
-  // Cargar snapshots previos de almacenamiento local para persistencia entre sesiones
-  AsyncStorage.getItem(`${STORAGE_KEY_SNAPSHOTS}_${userId}`)
-    .then((val) => {
-      if (val) {
-        instantaneasGuardadas = JSON.parse(val);
-      }
-    })
-    .catch(() => {});
+  // Los eventos se procesan de uno en uno para que no se pisen (p. ej. al guardar el estado)
+  let serie = Promise.resolve();
+  const enSerie = (tarea) => {
+    serie = serie.then(tarea).catch((error) => {
+      console.warn("Error procesando un cambio de jornada:", error);
+    });
+    return serie;
+  };
 
-  const guardarInstantaneas = (nuevas) => {
-    instantaneasGuardadas = nuevas;
-    AsyncStorage.setItem(
-      `${STORAGE_KEY_SNAPSHOTS}_${userId}`,
-      JSON.stringify(nuevas)
+  // Guarda cómo está una jornada para el usuario (null = ya no hace falta recordarla)
+  const recordar = (jornadaId, instantanea) => {
+    if (instantanea) {
+      estadoVisto = { ...estadoVisto, [jornadaId]: instantanea };
+    } else {
+      const { [jornadaId]: _olvidada, ...resto } = estadoVisto;
+      estadoVisto = resto;
+    }
+    guardarLocal(userId, "estadoVisto", estadoVisto);
+    // Si no hay conexión, la copia local sigue valiendo y el SDK reintenta la escritura
+    setDoc(
+      doc(db, "users", userId),
+      { jornadasVistas: { [jornadaId]: instantanea || deleteField() } },
+      { merge: true }
     ).catch(() => {});
   };
 
-  // 1. Escuchar inscripciones del usuario
-  const qInscripciones = query(
-    collection(db, "inscripciones"),
-    where("userId", "==", userId)
-  );
-
-  const unsubInscripciones = onSnapshot(
-    qInscripciones,
-    (snapInscripciones) => {
-      const jornadaIds = [
-        ...new Set(snapInscripciones.docs.map((d) => d.data().jornadaId).filter(Boolean)),
-      ];
-      inscripcionesJornadaIds = new Set(jornadaIds);
-
-      // Limpiar oyentes anteriores de jornadas
-      desuscribirJornadas.forEach((unsub) => unsub());
-      desuscribirJornadas = [];
-
-      // Si no tiene inscripciones, limpiar
-      if (jornadaIds.length === 0) return;
-
-      // 2. Escuchar cada jornada a la que el usuario está inscrito
-      jornadaIds.forEach((jornadaId) => {
-        const docRef = doc(db, "jornadas", jornadaId);
-        const unsub = onSnapshot(
-          docRef,
-          async (jornadaSnap) => {
-            if (!jornadaSnap.exists()) return;
-
-            const datosActuales = jornadaSnap.data();
-            const anterior = instantaneasGuardadas[jornadaId];
-
-            if (anterior) {
-              const cambio = detectarCambioJornada(anterior, datosActuales);
-              if (cambio) {
-                // Registrar notificación para el usuario en Firestore de forma idempotente
-                const notifId = `${userId}_${jornadaId}_${cambio.tipo}_${Date.now()}`;
-                try {
-                  await setDoc(doc(db, "notificaciones", notifId), {
-                    userId,
-                    jornadaId,
-                    tipo: cambio.tipo,
-                    titulo: cambio.titulo,
-                    mensaje: cambio.mensaje,
-                    leida: false,
-                    creadaEn: serverTimestamp(),
-                    datosJornada: {
-                      titulo: datosActuales.titulo || "",
-                      lugar: datosActuales.lugar || "",
-                      fecha: datosActuales.fecha || null,
-                    },
-                  });
-
-                  // Disparar notificación local en el dispositivo
-                  mostrarNotificacionLocal(cambio.titulo, cambio.mensaje, {
-                    jornadaId,
-                    tipo: cambio.tipo,
-                  });
-                } catch (e) {
-                  console.error("Error registrando notificación:", e);
-                }
-              }
-            }
-
-            // Actualizar instantánea
-            guardarInstantaneas({
-              ...instantaneasGuardadas,
-              [jornadaId]: {
-                activa: datosActuales.activa !== undefined ? datosActuales.activa : true,
-                fecha: datosActuales.fecha?.seconds || datosActuales.fecha || null,
-                titulo: datosActuales.titulo || "",
-                lugar: datosActuales.lugar || "",
-                descripcion: datosActuales.descripcion || "",
-                responsable: datosActuales.responsable || "",
-                entidad: datosActuales.entidad || "",
-              },
-            });
-          },
-          (err) => {
-            console.warn(`Error en snapshot de jornada ${jornadaId}:`, err);
-          }
-        );
-
-        desuscribirJornadas.push(unsub);
-      });
-    },
-    (err) => {
-      console.warn("Error en snapshot de inscripciones:", err);
+  // Crea la notificación del usuario y la muestra en el dispositivo. true si quedó registrada.
+  const registrarNotificacion = async (jornadaId, cambio, datosJornada) => {
+    const notifId = `${userId}_${jornadaId}_${cambio.tipo}_${Date.now()}`;
+    try {
+      await conTiempoLimite(
+        setDoc(doc(db, "notificaciones", notifId), {
+          userId,
+          jornadaId,
+          tipo: cambio.tipo,
+          titulo: cambio.titulo,
+          mensaje: cambio.mensaje,
+          leida: false,
+          creadaEn: serverTimestamp(),
+          datosJornada,
+        }),
+        ESPERA_NOTIFICACION_MS
+      );
+    } catch (e) {
+      // Sin conexión la escritura queda en cola del SDK; cualquier otro error se reintenta
+      if (e?.name !== "ErrorRed") {
+        console.error("Error registrando notificación:", e);
+        return false;
+      }
     }
-  );
+    mostrarNotificacionLocal(cambio.titulo, cambio.mensaje, { jornadaId, tipo: cambio.tipo });
+    return true;
+  };
+
+  // Jornadas cuyo estado se buscó con éxito en el servidor
+  const consultadasEnServidor = new Set();
+
+  const procesarJornada = async (jornadaId, jornadaSnap) => {
+    if (!activo) return;
+
+    // Una inscripción nueva deja anotado el estado en el servidor; si aún no se conoce aquí, se lee.
+    // Sin conexión no cuenta como consultada: se vuelve a intentar en la siguiente lectura.
+    if (!estadoVisto[jornadaId] && !consultadasEnServidor.has(jornadaId)) {
+      const remoto = await leerEstadoVistoRemoto(userId);
+      if (remoto) {
+        consultadasEnServidor.add(jornadaId);
+        if (remoto[jornadaId] && !estadoVisto[jornadaId]) {
+          estadoVisto = { ...estadoVisto, [jornadaId]: remoto[jornadaId] };
+        }
+      }
+    }
+    const anterior = estadoVisto[jornadaId];
+
+    if (!jornadaSnap.exists()) {
+      // Sin conexión y sin la jornada en caché el SDK informa "no existe": no es una eliminación
+      if (jornadaSnap.metadata?.fromCache) return;
+      const cambio = detectarEliminacion(anterior);
+      if (!cambio) return;
+      const registrada = await registrarNotificacion(jornadaId, cambio, {
+        titulo: anterior.titulo || "",
+        lugar: anterior.lugar || "",
+        fecha: null,
+      });
+      if (registrada) recordar(jornadaId, null);
+      return;
+    }
+
+    const datosActuales = jornadaSnap.data();
+    const instantanea = instantaneaDeJornada(datosActuales);
+
+    if (anterior) {
+      const cambio = detectarCambioJornada(anterior, datosActuales);
+      if (cambio) {
+        const registrada = await registrarNotificacion(jornadaId, cambio, {
+          titulo: datosActuales.titulo || "",
+          lugar: datosActuales.lugar || "",
+          fecha: datosActuales.fecha || null,
+        });
+        // Si no se pudo avisar se conserva el estado anterior: se reintenta en la próxima lectura
+        if (!registrada) return;
+      }
+    }
+
+    if (!mismaInstantanea(anterior, instantanea)) recordar(jornadaId, instantanea);
+  };
+
+  // El estado conocido debe cargarse ANTES de procesar la primera lectura del servidor
+  (async () => {
+    // Del servidor; sin conexión, la copia local de la última vez
+    const remoto = await leerEstadoVistoRemoto(userId);
+    if (remoto) {
+      estadoVisto = remoto;
+      guardarLocal(userId, "estadoVisto", remoto);
+    } else {
+      estadoVisto = (await leerLocal(userId, "estadoVisto", null)) || {};
+    }
+    if (!activo) return;
+
+    // 1. Escuchar inscripciones del usuario
+    desuscribirInscripciones = onSnapshot(
+      query(collection(db, "inscripciones"), where("userId", "==", userId)),
+      (snapInscripciones) => {
+        // Sin conexión y sin datos en caché el SDK entrega una lista vacía: no es "sin inscripciones"
+        if (!activo || (snapInscripciones.metadata?.fromCache && snapInscripciones.empty)) return;
+
+        const jornadaIds = [
+          ...new Set(snapInscripciones.docs.map((d) => d.data().jornadaId).filter(Boolean)),
+        ];
+
+        // Limpiar oyentes anteriores de jornadas
+        desuscribirJornadas.forEach((unsub) => unsub());
+        desuscribirJornadas = [];
+
+        // Se olvidan las jornadas en las que ya no está inscrito
+        if (!snapInscripciones.metadata?.fromCache) {
+          enSerie(async () => {
+            for (const id of Object.keys(estadoVisto)) {
+              if (!jornadaIds.includes(id)) recordar(id, null);
+            }
+          });
+        }
+
+        // 2. Escuchar cada jornada a la que el usuario está inscrito
+        jornadaIds.forEach((jornadaId) => {
+          const unsub = onSnapshot(
+            doc(db, "jornadas", jornadaId),
+            (jornadaSnap) => enSerie(() => procesarJornada(jornadaId, jornadaSnap)),
+            (err) => {
+              console.warn(`Error en snapshot de jornada ${jornadaId}:`, err);
+            }
+          );
+          desuscribirJornadas.push(unsub);
+        });
+      },
+      (err) => {
+        console.warn("Error en snapshot de inscripciones:", err);
+      }
+    );
+  })();
 
   return () => {
-    unsubInscripciones();
+    activo = false;
+    desuscribirInscripciones();
     desuscribirJornadas.forEach((unsub) => unsub());
   };
 }

@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteField,
   doc,
   getDocsFromServer,
   query,
@@ -10,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { fechaAMillis } from "../utils/jornadaFecha";
+import { instantaneaDeJornada } from "../utils/instantaneaJornada";
 import {
   ErrorNegocio,
   TIPOS,
@@ -74,6 +76,14 @@ async function inscribir(uid, accion) {
         asistio: false,
       });
       tx.update(jornadaRef, { cuposOcupados: ocupados + 1 });
+      // Anota cómo está la jornada en este momento (en la misma transacción): así el
+      // estudiante recibe el aviso de cualquier cambio posterior, aunque la app esté
+      // cerrada o haya cerrado sesión cuando el maestro lo haga.
+      tx.set(
+        doc(db, "users", uid),
+        { jornadasVistas: { [accion.jornadaId]: instantaneaDeJornada(datos) } },
+        { merge: true }
+      );
       return "completada";
     });
   } catch (error) {
@@ -110,6 +120,12 @@ async function cancelar(uid, accion) {
           cuposOcupados: Math.max(0, ocupados - vigentes.length),
         });
       }
+      // Ya no está inscrito: se olvida el estado anotado de esa jornada
+      tx.set(
+        doc(db, "users", uid),
+        { jornadasVistas: { [accion.jornadaId]: deleteField() } },
+        { merge: true }
+      );
       return "completada";
     });
   } catch (error) {

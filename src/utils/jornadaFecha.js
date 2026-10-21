@@ -1,13 +1,12 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import "dayjs/locale/es";
+// Zona horaria de negocio de las jornadas (UTC-5): definida en zonaNegocio.js
+import { OFFSET_NEGOCIO_MIN } from "./zonaNegocio";
 
 dayjs.extend(utc);
 
-// Zona horaria de negocio de las jornadas: UTC-5 (-300 min).
-// Los Timestamp de Firestore son instantes absolutos; esta constante define
-// cómo se interpretan y se muestran, sin depender de la zona del dispositivo.
-export const OFFSET_NEGOCIO_MIN = -300;
+export { OFFSET_NEGOCIO_MIN };
 
 // Convierte lo que venga de Firestore a milisegundos epoch (serializable en
 // los params de navegación). Acepta:

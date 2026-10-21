@@ -11,7 +11,16 @@ const DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"];
 
 // Selector de una fecha o de un rango. Trabaja con cadenas "YYYY-MM-DD"
 // (días de calendario, sin zona horaria) para `desde` y `hasta`.
-export default function CalendarioRango({ visible, desde, hasta, onAplicar, onCerrar }) {
+// `unDia`: solo permite elegir un día (para formularios); `titulo` cambia el encabezado.
+export default function CalendarioRango({
+  visible,
+  desde,
+  hasta,
+  onAplicar,
+  onCerrar,
+  unDia = false,
+  titulo = "Elegir fecha o rango",
+}) {
   const hoy = aDayjsNegocio(Date.now()).format(FORMATO);
 
   const [inicio, setInicio] = useState(desde);
@@ -29,7 +38,10 @@ export default function CalendarioRango({ visible, desde, hasta, onAplicar, onCe
   }, [visible]);
 
   const seleccionar = (dia) => {
-    if (!inicio || fin) {
+    if (unDia) {
+      setInicio(dia);
+      setFin(dia);
+    } else if (!inicio || fin) {
       setInicio(dia);
       setFin(null);
     } else if (dia < inicio) {
@@ -50,7 +62,9 @@ export default function CalendarioRango({ visible, desde, hasta, onAplicar, onCe
 
   const extremoFin = fin || inicio;
   const resumen = !inicio
-    ? "Toca un día, o dos para elegir un rango"
+    ? unDia
+      ? "Toca un día"
+      : "Toca un día, o dos para elegir un rango"
     : fin && fin !== inicio
     ? `${dayjs(inicio).locale("es").format("D MMM")} – ${dayjs(fin).locale("es").format("D MMM YYYY")}`
     : dayjs(inicio).locale("es").format("dddd D [de] MMMM [de] YYYY");
@@ -59,7 +73,7 @@ export default function CalendarioRango({ visible, desde, hasta, onAplicar, onCe
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCerrar}>
       <View style={styles.fondo}>
         <View style={styles.hoja}>
-          <Text style={styles.titulo}>Elegir fecha o rango</Text>
+          <Text style={styles.titulo}>{titulo}</Text>
 
           <View style={styles.cabeceraMes}>
             <TouchableOpacity

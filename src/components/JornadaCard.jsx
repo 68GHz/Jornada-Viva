@@ -6,7 +6,8 @@ import { formatearFecha, formatearHora } from "../utils/jornadaFecha";
 
 // `estado` (opcional): { texto, color } reemplaza el badge de cupos,
 // útil cuando se lista la inscripción del usuario (ej. "Inscrito").
-export default function JornadaCard({ jornada, onPress, estado }) {
+// `extra` (opcional): texto de una línea adicional (ej. los cupos para el maestro).
+export default function JornadaCard({ jornada, onPress, estado, extra }) {
   const cuposRestantes = jornada.cuposTotales - jornada.cuposOcupados;
   const sinCupos = !estado && cuposRestantes <= 0;
   const pocosCupos = cuposRestantes > 0 && cuposRestantes <= 10;
@@ -73,6 +74,14 @@ export default function JornadaCard({ jornada, onPress, estado }) {
               <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
               <Text style={styles.detalleTexto} numberOfLines={1}>
                 {jornada.lugar}
+              </Text>
+            </View>
+          )}
+          {!!extra && (
+            <View style={styles.detalleFila}>
+              <Ionicons name="people-outline" size={13} color={colors.textSecondary} />
+              <Text style={styles.detalleTexto} numberOfLines={1}>
+                {extra}
               </Text>
             </View>
           )}

@@ -8,6 +8,12 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 /**
+ * AVISO: esta función NO está desplegada (requiere el plan Blaze). Hoy la propia app genera
+ * los avisos de cambios de jornada (src/services/jornadaEventService.js) comparando con el
+ * estado visto guardado en users/{uid}.jornadasVistas. Si se despliega, hay que desactivar
+ * esa creación en la app (o deduplicar) para que el estudiante no reciba cada aviso dos veces.
+ * Esta función tampoco cubre la eliminación de jornadas.
+ *
  * Función que detecta cambios directos en la colección `jornadas` en Firestore.
  * Cuando una jornada es modificada directamente en Firestore:
  * - Detecta Cancelación (activa pasa de true a false).

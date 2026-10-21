@@ -15,6 +15,9 @@ import JornadaDetailScreen from "../screens/app/JornadaDetailScreen";
 import MisJornadasScreen from "../screens/app/MisJornadasScreen";
 import NotificationsScreen from "../screens/app/NotificationsScreen";
 import SincronizacionScreen from "../screens/app/SincronizacionScreen";
+import MaestroHomeScreen from "../screens/maestro/MaestroHomeScreen";
+import JornadaFormScreen from "../screens/maestro/JornadaFormScreen";
+import JornadaAdminScreen from "../screens/maestro/JornadaAdminScreen";
 import ConnectionBanner from "../components/ConnectionBanner";
 import { navigationRef } from "./navigationRef";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +25,36 @@ import { TouchableOpacity } from "react-native";
 import { useNotifications } from "../context/NotificationContext";
 
 const Stack = createNativeStackNavigator();
+
+const opcionesDeCabecera = {
+  headerStyle: { backgroundColor: colors.primary },
+  headerTintColor: colors.white,
+  headerTitleStyle: { fontWeight: "700", fontSize: 17 },
+};
+
+function TituloMarca() {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <View
+        style={{
+          backgroundColor: colors.white,
+          borderRadius: 6,
+          paddingHorizontal: 6,
+          paddingVertical: 4,
+        }}
+      >
+        <Image
+          source={require("../../assets/Horizontal-tdea.png")}
+          style={{ width: 62, height: 16 }}
+          resizeMode="contain"
+        />
+      </View>
+      <Text style={{ fontWeight: "700", fontSize: 17, color: colors.white }}>
+        Jornada Viva
+      </Text>
+    </View>
+  );
+}
 
 function AuthStack() {
   return (
@@ -37,38 +70,12 @@ function AppStack() {
   const { noLeidasCount } = useNotifications();
 
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.primary },
-        headerTintColor: colors.white,
-        headerTitleStyle: { fontWeight: "700", fontSize: 17 },
-      }}
-    >
+    <Stack.Navigator screenOptions={opcionesDeCabecera}>
       <Stack.Screen
         name="Home"
         component={HomeScreen}
         options={({ navigation }) => ({
-          headerTitle: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <View
-                style={{
-                  backgroundColor: colors.white,
-                  borderRadius: 6,
-                  paddingHorizontal: 6,
-                  paddingVertical: 4,
-                }}
-              >
-                <Image
-                  source={require("../../assets/Horizontal-tdea.png")}
-                  style={{ width: 62, height: 16 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <Text style={{ fontWeight: "700", fontSize: 17, color: colors.white }}>
-                Jornada Viva
-              </Text>
-            </View>
-          ),
+          headerTitle: () => <TituloMarca />,
           headerRight: () => (
             <TouchableOpacity
               onPress={() => navigation.navigate("Notifications")}
@@ -136,8 +143,32 @@ function AppStack() {
   );
 }
 
+function MaestroStack() {
+  return (
+    <Stack.Navigator screenOptions={opcionesDeCabecera}>
+      <Stack.Screen
+        name="MaestroHome"
+        component={MaestroHomeScreen}
+        options={{ headerTitle: () => <TituloMarca /> }}
+      />
+      <Stack.Screen
+        name="JornadaForm"
+        component={JornadaFormScreen}
+        options={({ route }) => ({
+          title: route.params?.jornadaId ? "Editar jornada" : "Crear jornada",
+        })}
+      />
+      <Stack.Screen
+        name="JornadaAdmin"
+        component={JornadaAdminScreen}
+        options={{ title: "Administrar jornada" }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
-  const { usuario, cargando } = useAuth();
+  const { usuario, cargando, esMaestro } = useAuth();
 
   if (cargando) {
     return (
@@ -151,7 +182,9 @@ export default function AppNavigator() {
     <SafeAreaProvider>
       <NavigationContainer ref={navigationRef}>
         <View style={{ flex: 1 }}>
-          <View style={{ flex: 1 }}>{usuario ? <AppStack /> : <AuthStack />}</View>
+          <View style={{ flex: 1 }}>
+            {!usuario ? <AuthStack /> : esMaestro ? <MaestroStack /> : <AppStack />}
+          </View>
           <ConnectionBanner />
         </View>
       </NavigationContainer>

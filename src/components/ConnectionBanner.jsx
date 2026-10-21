@@ -36,7 +36,7 @@ const ESTILOS = {
 // (ver elegirAviso) y no ocupa espacio cuando no hay nada que informar.
 export default function ConnectionBanner() {
   const insets = useSafeAreaInsets();
-  const { usuario } = useAuth();
+  const { usuario, esMaestro } = useAuth();
   const { enLinea } = useConnectivity();
   const { pendientes, rechazadas, sincronizando, avisoConexion, errorSync } = useSync();
 
@@ -51,8 +51,8 @@ export default function ConnectionBanner() {
   if (!aviso) return null;
 
   const estilo = ESTILOS[aviso.tipo];
-  // Solo con sesión iniciada existe la pantalla de sincronización
-  const abrible = !!usuario && !!estilo.abre;
+  // La pantalla de sincronización existe solo para estudiantes con sesión iniciada
+  const abrible = !!usuario && !esMaestro && !!estilo.abre;
   const abrir = () => {
     if (abrible && navigationRef.isReady()) navigationRef.navigate("Sincronizacion");
   };

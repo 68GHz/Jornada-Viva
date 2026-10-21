@@ -28,6 +28,11 @@ export default function NotificationItem({
     iconColor = colors.error;
     tipoLabel = "Cancelada";
     tipoColor = colors.error;
+  } else if (tipo === "eliminacion") {
+    iconName = "trash";
+    iconColor = colors.error;
+    tipoLabel = "Eliminada";
+    tipoColor = colors.error;
   } else if (tipo === "reprogramacion") {
     iconName = "calendar";
     iconColor = "#D97706"; // Ámbar / naranja

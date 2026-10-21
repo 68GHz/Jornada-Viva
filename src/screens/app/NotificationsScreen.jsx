@@ -27,7 +27,10 @@ export default function NotificationsScreen({ navigation }) {
       marcarComoLeida(notificacion.id);
     }
 
-    if (notificacion.jornadaId && notificacion.tipo !== "cancelacion") {
+    // Una jornada cancelada o eliminada no tiene detalle al que navegar
+    const sinDetalle = notificacion.tipo === "cancelacion" || notificacion.tipo === "eliminacion";
+
+    if (notificacion.jornadaId && !sinDetalle) {
       navigation.navigate("JornadaDetail", {
         jornada: {
           id: notificacion.jornadaId,
@@ -42,6 +45,11 @@ export default function NotificationsScreen({ navigation }) {
       Alert.alert(
         "Jornada Cancelada",
         `La jornada "${notificacion.datosJornada?.titulo || "esta jornada"}" ha sido cancelada y ya no está disponible.`
+      );
+    } else if (notificacion.tipo === "eliminacion") {
+      Alert.alert(
+        "Jornada eliminada",
+        `La jornada "${notificacion.datosJornada?.titulo || "esta jornada"}" fue eliminada por el organizador y ya no está disponible.`
       );
     }
   };
