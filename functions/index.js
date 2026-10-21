@@ -56,6 +56,16 @@ exports.onJornadaUpdated = functions.firestore
       return null;
     }
 
+    // Desactivar una jornada ya vencida (lo hace la app al pasar la fecha) no es una cancelación
+    if (
+      antes.activa === true &&
+      despues.activa === false &&
+      despues.fecha &&
+      despues.fecha.toMillis() <= Date.now()
+    ) {
+      return null;
+    }
+
     // 2. Determinar el tipo de evento y el mensaje
     let tipoEvento = "actualizacion";
     let tituloNotif = `Actualización: ${despues.titulo || "Jornada"}`;
@@ -68,6 +78,10 @@ exports.onJornadaUpdated = functions.firestore
       tipoEvento = "cancelacion";
       tituloNotif = `Jornada cancelada: ${despues.titulo}`;
       mensajeNotif = `La jornada "${despues.titulo}" ha sido cancelada por el organizador.`;
+    } else if (antes.activa === false && despues.activa === true) {
+      tipoEvento = "reactivacion";
+      tituloNotif = `Jornada reactivada: ${despues.titulo}`;
+      mensajeNotif = `La jornada "${despues.titulo}" volvió a estar disponible. Revisa los detalles en la app.`;
     } else if (fechaAntesMillis !== fechaDespuesMillis) {
       tipoEvento = "reprogramacion";
       tituloNotif = `Jornada reprogramada: ${despues.titulo}`;

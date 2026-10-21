@@ -14,12 +14,14 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { db } from "../../firebaseConfig";
 import { mostrarNotificacionLocal } from "./notificationService";
+import { fechaAMillis } from "../utils/jornadaFecha";
 
 const STORAGE_KEY_SNAPSHOTS = "@jornadaviva_snapshots_v1";
 
 /**
  * Normaliza y compara los datos de una jornada para determinar si hubo cambios importantes:
  * - Cancelación: 'activa' cambia a false
+ * - Reactivación: 'activa' vuelve a true
  * - Reprogramación: 'fecha' cambia
  * - Actualización: 'descripcion', 'lugar', 'titulo', 'responsable', 'entidad' cambian
  *
@@ -30,12 +32,23 @@ const STORAGE_KEY_SNAPSHOTS = "@jornadaviva_snapshots_v1";
 export function detectarCambioJornada(anterior, actual) {
   if (!anterior || !actual) return null;
 
-  // 1. Cancelación
+  // 1. Cancelación (una jornada desactivada por haber vencido no es una cancelación)
   if (anterior.activa === true && actual.activa === false) {
+    const fechaMs = fechaAMillis(actual.fecha);
+    if (fechaMs != null && fechaMs <= Date.now()) return null;
     return {
       tipo: "cancelacion",
       titulo: `Jornada cancelada: ${actual.titulo || "Jornada"}`,
       mensaje: `La jornada "${actual.titulo}" ha sido cancelada por el organizador.`,
+    };
+  }
+
+  // 1b. Reactivación
+  if (anterior.activa === false && actual.activa === true) {
+    return {
+      tipo: "reactivacion",
+      titulo: `Jornada reactivada: ${actual.titulo || "Jornada"}`,
+      mensaje: `La jornada "${actual.titulo}" volvió a estar disponible. Revisa los detalles en la app.`,
     };
   }
 

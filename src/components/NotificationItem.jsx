@@ -33,6 +33,11 @@ export default function NotificationItem({
     iconColor = "#D97706"; // Ámbar / naranja
     tipoLabel = "Reprogramada";
     tipoColor = "#D97706";
+  } else if (tipo === "reactivacion") {
+    iconName = "checkmark-circle";
+    iconColor = colors.success;
+    tipoLabel = "Reactivada";
+    tipoColor = colors.success;
   }
 
   const tiempoRelativo = creadaEn

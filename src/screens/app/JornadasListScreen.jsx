@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -6,65 +6,25 @@ import {
   StyleSheet,
   RefreshControl,
 } from "react-native";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-} from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import { db } from "../../../firebaseConfig";
+import { useJornadas } from "../../context/JornadasContext";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
 import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
-import {
-  normalizarJornada,
-  jornadaYaPaso,
-  coincideFiltroFecha,
-} from "../../utils/jornadaFecha";
+import { coincideFiltroFecha } from "../../utils/jornadaFecha";
 
 
 export default function JornadasListScreen({ navigation }) {
-  const [jornadas, setJornadas] = useState([]);
-  const [cargando, setCargando] = useState(true);
+  const { jornadasDisponibles: jornadas, cargando, error, recargar } = useJornadas();
   const [actualizando, setActualizando] = useState(false);
-  const [error, setError] = useState(null);
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
 
-  const cargarJornadas = async () => {
-    try {
-      setError(null);
-      const q = query(
-        collection(db, "jornadas"),
-        where("activa", "==", true)
-      );
-      const snapshot = await getDocs(q);
-      const datos = snapshot.docs
-        .map((doc) => normalizarJornada(doc.id, doc.data()))
-        .filter((jornada) => !jornadaYaPaso(jornada.fecha));
-
-      // Ordenar por fecha en el cliente
-      datos.sort((a, b) => a.fecha - b.fecha);
-      setJornadas(datos);
-    } catch (err) {
-      console.error("Error cargando jornadas:", err);
-      setError("No se pudieron cargar las jornadas. Verifica tu conexión.");
-    } finally {
-      setCargando(false);
-      setActualizando(false);
-    }
-  };
-
-  useEffect(() => {
-    cargarJornadas();
-  }, []);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setActualizando(true);
-    cargarJornadas();
+    await recargar();
+    setActualizando(false);
   };
 
   // Opciones de filtro derivadas de los datos cargados

@@ -65,8 +65,8 @@ export function formatearHora(millis) {
   return d ? d.locale("es").format("h:mm A") : "Hora por confirmar";
 }
 
-export function jornadaYaPaso(millis) {
-  return millis == null || millis <= Date.now();
+export function jornadaYaPaso(millis, ahora = Date.now()) {
+  return millis == null || millis <= ahora;
 }
 
 const hoyNegocio = () => aDayjsNegocio(Date.now()).startOf("day");

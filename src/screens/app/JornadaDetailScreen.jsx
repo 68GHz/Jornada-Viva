@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -24,19 +24,33 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
+import { useJornadas } from "../../context/JornadasContext";
 import { colors } from "../../theme/colors";
 import {
   puedeCancelarInscripcion,
   DIAS_LIMITE_CANCELACION,
   formatearFecha,
   formatearHora,
+  jornadaYaPaso,
 } from "../../utils/jornadaFecha";
+import { jornadaDisponible } from "../../utils/jornadaEstado";
 
 export default function JornadaDetailScreen({ route }) {
   const { jornada: jornadaInicial } = route.params;
   const { usuario } = useAuth();
 
-  const [jornada, setJornada] = useState(jornadaInicial);
+  const { jornadasPorId, cargando: cargandoJornadas, ahora } = useJornadas();
+
+  // Datos en vivo de Firestore (cupos, estado, etc.) sobre los recibidos al navegar
+  const jornadaEnVivo = jornadasPorId.get(jornadaInicial.id);
+  const jornada = useMemo(
+    () => (jornadaEnVivo ? { ...jornadaInicial, ...jornadaEnVivo } : jornadaInicial),
+    [jornadaInicial, jornadaEnVivo]
+  );
+  const vencida = jornadaYaPaso(jornada.fecha, ahora);
+  // Mientras cargan los datos no se bloquea; luego debe existir, estar activa y no vencida
+  const disponible =
+    cargandoJornadas || (!!jornadaEnVivo && jornadaDisponible(jornadaEnVivo, ahora));
 
   const [inscrito, setInscrito] = useState(false);
   const [verificando, setVerificando] = useState(true);
@@ -69,6 +83,11 @@ export default function JornadaDetailScreen({ route }) {
   }, [jornada.id, usuario.uid]);
 
   const manejarInscripcion = async () => {
+    if (!disponible) {
+      Alert.alert("Jornada no disponible", "Esta jornada ya no está disponible para inscripción.");
+      return;
+    }
+
     if (sinCupos) {
       Alert.alert("Sin cupos", "Esta jornada ya no tiene cupos disponibles.");
       return;
@@ -120,7 +139,6 @@ const confirmarInscripcion = async () => {
       cuposOcupados: increment(1),
     });
 
-    setJornada((prev) => ({ ...prev, cuposOcupados: prev.cuposOcupados + 1 }));
     setInscrito(true);
     Alert.alert(
       "¡Inscripción exitosa! ✅",
@@ -181,10 +199,6 @@ const confirmarInscripcion = async () => {
         cuposOcupados: increment(-1),
       });
 
-      setJornada((prev) => ({
-        ...prev,
-        cuposOcupados: Math.max(0, prev.cuposOcupados - 1),
-      }));
       setInscrito(false);
       Alert.alert("Inscripción cancelada", `Cancelaste tu inscripción en "${jornada.titulo}".`);
     } catch (err) {
@@ -213,6 +227,14 @@ const confirmarInscripcion = async () => {
         <View style={styles.botonInscrito}>
           <Ionicons name="checkmark-circle" size={20} color={colors.white} />
           <Text style={styles.botonTexto}>Ya estás inscrito</Text>
+        </View>
+      );
+    }
+
+    if (!disponible) {
+      return (
+        <View style={[styles.botonInscripcion, styles.botonAgotado]}>
+          <Text style={styles.botonTexto}>Jornada no disponible</Text>
         </View>
       );
     }
@@ -248,6 +270,17 @@ const confirmarInscripcion = async () => {
         <Text style={styles.titulo}>{jornada.titulo}</Text>
         <Text style={styles.entidad}>{jornada.entidad}</Text>
       </View>
+
+      {!disponible && (
+        <View style={styles.avisoNoDisponible}>
+          <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
+          <Text style={styles.avisoNoDisponibleTexto}>
+            {vencida
+              ? "Esta jornada ya finalizó."
+              : "Esta jornada fue desactivada y no está disponible por el momento."}
+          </Text>
+        </View>
+      )}
 
       {/* Cupos */}
       <View
@@ -518,6 +551,21 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 15,
     fontWeight: "700",
+  },
+  avisoNoDisponible: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: `${colors.error}15`,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  avisoNoDisponibleTexto: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.error,
+    fontWeight: "600",
   },
   cancelacionNota: {
     fontSize: 12,

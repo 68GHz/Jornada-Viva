@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -8,101 +8,26 @@ import {
   RefreshControl,
   Alert,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-} from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import { db } from "../../../firebaseConfig";
-import { useAuth } from "../../context/AuthContext";
+import { useJornadas } from "../../context/JornadasContext";
 import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
 import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
-import {
-  normalizarJornada,
-  jornadaYaPaso,
-  coincideFiltroFecha,
-} from "../../utils/jornadaFecha";
+import { coincideFiltroFecha } from "../../utils/jornadaFecha";
 
 
 export default function MisJornadasScreen({ navigation }) {
-  const { usuario } = useAuth();
+  const { misJornadas: jornadas, cargando, error, recargar } = useJornadas();
 
-  const [jornadas, setJornadas] = useState([]);
-  const [cargando, setCargando] = useState(true);
   const [actualizando, setActualizando] = useState(false);
-  const [error, setError] = useState(null);
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
 
-  const cargarMisJornadas = useCallback(async () => {
-    if (!usuario?.uid) return;
-
-    try {
-      setError(null);
-      const q = query(
-        collection(db, "inscripciones"),
-        where("userId", "==", usuario.uid)
-      );
-      const snapshot = await getDocs(q);
-      // Una inscripción por jornada (se ignoran duplicados)
-      const inscripciones = [
-        ...new Map(snapshot.docs.map((d) => [d.data().jornadaId, d.data()])).values(),
-      ];
-
-      const resultados = await Promise.all(
-        inscripciones.map(async (inscripcion) => {
-          const jornadaSnap = await getDoc(doc(db, "jornadas", inscripcion.jornadaId));
-          if (jornadaSnap.exists()) {
-            return normalizarJornada(jornadaSnap.id, jornadaSnap.data());
-          }
-          // Jornada eliminada: se conserva la inscripción con los datos guardados
-          // en ella (igual que en el Home), marcada como no disponible.
-          return {
-            ...normalizarJornada(inscripcion.jornadaId, {
-              titulo: inscripcion.tituloJornada,
-              fecha: inscripcion.fechaJornada,
-            }),
-            noDisponible: true,
-          };
-        })
-      );
-
-      const datos = resultados
-        .map((jornada) => ({ ...jornada, finalizada: jornadaYaPaso(jornada.fecha) }))
-        // Próximas primero (más cercanas arriba), luego las finalizadas
-        .sort((a, b) => {
-          if (a.finalizada !== b.finalizada) return a.finalizada ? 1 : -1;
-          const diff = (a.fecha || 0) - (b.fecha || 0);
-          return a.finalizada ? -diff : diff;
-        });
-
-      setJornadas(datos);
-    } catch (err) {
-      console.error("Error cargando mis jornadas:", err);
-      setError("No se pudieron cargar tus jornadas. Verifica tu conexión.");
-    } finally {
-      setCargando(false);
-      setActualizando(false);
-    }
-  }, [usuario?.uid]);
-
-  // Recarga al volver (ej. tras cancelar una inscripción en el detalle)
-  useFocusEffect(
-    useCallback(() => {
-      cargarMisJornadas();
-    }, [cargarMisJornadas])
-  );
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setActualizando(true);
-    cargarMisJornadas();
+    await recargar();
+    setActualizando(false);
   };
 
   const categorias = useMemo(() => opcionesUnicas(jornadas, "categoria"), [jornadas]);
@@ -135,10 +60,7 @@ export default function MisJornadasScreen({ navigation }) {
         <Text style={styles.errorTexto}>{error}</Text>
         <TouchableOpacity
           style={styles.botonReintentar}
-          onPress={() => {
-            setCargando(true);
-            cargarMisJornadas();
-          }}
+          onPress={recargar}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Reintentar"

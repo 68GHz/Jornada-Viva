@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -8,81 +8,22 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-} from "firebase/firestore";
-import { db } from "../../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
+import { useJornadas } from "../../context/JornadasContext";
 import { colors } from "../../theme/colors";
-import {
-  normalizarJornada,
-  jornadaYaPaso,
-  formatearDiasFaltan,
-  formatearHora,
-} from "../../utils/jornadaFecha";
+import { formatearDiasFaltan, formatearHora } from "../../utils/jornadaFecha";
 
 export default function HomeScreen({ navigation }) {
   const { usuario, cerrarSesion } = useAuth();
 
   const nombre = usuario?.displayName || usuario?.email || "Usuario";
 
-  const [misJornadas, setMisJornadas] = useState([]);
-  const [cargandoJornadas, setCargandoJornadas] = useState(true);
-  const [errorJornadas, setErrorJornadas] = useState(null);
-
-  const cargarMisJornadas = useCallback(async () => {
-    if (!usuario?.uid) return;
-
-    try {
-      setErrorJornadas(null);
-      const q = query(
-        collection(db, "inscripciones"),
-        where("userId", "==", usuario.uid)
-      );
-      const snapshot = await getDocs(q);
-      const inscripciones = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-      const jornadasInscritas = await Promise.all(
-        inscripciones.map(async (inscripcion) => {
-          try {
-            const jornadaSnap = await getDoc(doc(db, "jornadas", inscripcion.jornadaId));
-            if (jornadaSnap.exists()) {
-              return normalizarJornada(jornadaSnap.id, jornadaSnap.data());
-            }
-          } catch (err) {
-            console.error("Error cargando jornada de inscripción:", err);
-          }
-          return normalizarJornada(inscripcion.jornadaId, {
-            titulo: inscripcion.tituloJornada,
-            fecha: inscripcion.fechaJornada,
-          });
-        })
-      );
-
-      const proximas = jornadasInscritas
-        .filter((jornada) => !jornadaYaPaso(jornada.fecha))
-        .sort((a, b) => a.fecha - b.fecha);
-
-      setMisJornadas(proximas);
-    } catch (err) {
-      console.error("Error cargando mis jornadas:", err);
-      setErrorJornadas("No se pudieron cargar tus jornadas inscritas.");
-    } finally {
-      setCargandoJornadas(false);
-    }
-  }, [usuario?.uid]);
-
-  useFocusEffect(
-    useCallback(() => {
-      cargarMisJornadas();
-    }, [cargarMisJornadas])
-  );
+  const {
+    misJornadas: inscritas,
+    cargando: cargandoJornadas,
+    error: errorJornadas,
+  } = useJornadas();
+  const misJornadas = useMemo(() => inscritas.filter((j) => !j.finalizada), [inscritas]);
 
   return (
     <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
