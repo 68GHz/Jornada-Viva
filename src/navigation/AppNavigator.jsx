@@ -18,6 +18,14 @@ import SincronizacionScreen from "../screens/app/SincronizacionScreen";
 import MaestroHomeScreen from "../screens/maestro/MaestroHomeScreen";
 import JornadaFormScreen from "../screens/maestro/JornadaFormScreen";
 import JornadaAdminScreen from "../screens/maestro/JornadaAdminScreen";
+import AdminDashboardScreen from "../screens/admin/AdminDashboardScreen";
+import UsuariosListScreen from "../screens/admin/UsuariosListScreen";
+import UsuarioDetalleScreen from "../screens/admin/UsuarioDetalleScreen";
+import UsuarioFormScreen from "../screens/admin/UsuarioFormScreen";
+import AdminJornadasScreen from "../screens/admin/AdminJornadasScreen";
+import ReportesScreen from "../screens/admin/ReportesScreen";
+import AuditoriaScreen from "../screens/admin/AuditoriaScreen";
+import AdminPerfilScreen from "../screens/admin/AdminPerfilScreen";
 import ConnectionBanner from "../components/ConnectionBanner";
 import { navigationRef } from "./navigationRef";
 import { Ionicons } from "@expo/vector-icons";
@@ -143,7 +151,8 @@ function AppStack() {
   );
 }
 
-function MaestroStack() {
+// Gestor de jornadas: administra las jornadas que tiene asignadas
+function GestorStack() {
   return (
     <Stack.Navigator screenOptions={opcionesDeCabecera}>
       <Stack.Screen
@@ -167,8 +176,43 @@ function MaestroStack() {
   );
 }
 
+// Administrador: las rutas del módulo de administración solo existen para este rol
+// (además, firestore.rules valida cada operación en el servidor)
+function AdminStack() {
+  return (
+    <Stack.Navigator screenOptions={opcionesDeCabecera}>
+      <Stack.Screen
+        name="AdminDashboard"
+        component={AdminDashboardScreen}
+        options={{ headerTitle: () => <TituloMarca /> }}
+      />
+      <Stack.Screen
+        name="UsuariosList"
+        component={UsuariosListScreen}
+        options={({ route }) => ({
+          title: route.params?.rol === "gestor" ? "Gestores de jornadas" : "Usuarios",
+        })}
+      />
+      <Stack.Screen name="UsuarioDetalle" component={UsuarioDetalleScreen} options={{ title: "Detalle de usuario" }} />
+      <Stack.Screen name="UsuarioForm" component={UsuarioFormScreen} options={{ title: "Crear cuenta" }} />
+      <Stack.Screen name="AdminJornadas" component={AdminJornadasScreen} options={{ title: "Jornadas" }} />
+      <Stack.Screen
+        name="JornadaForm"
+        component={JornadaFormScreen}
+        options={({ route }) => ({
+          title: route.params?.jornadaId ? "Editar jornada" : "Crear jornada",
+        })}
+      />
+      <Stack.Screen name="JornadaAdmin" component={JornadaAdminScreen} options={{ title: "Administrar jornada" }} />
+      <Stack.Screen name="Reportes" component={ReportesScreen} options={{ title: "Estadísticas y reportes" }} />
+      <Stack.Screen name="Auditoria" component={AuditoriaScreen} options={{ title: "Auditoría" }} />
+      <Stack.Screen name="AdminPerfil" component={AdminPerfilScreen} options={{ title: "Mi perfil" }} />
+    </Stack.Navigator>
+  );
+}
+
 export default function AppNavigator() {
-  const { usuario, cargando, esMaestro } = useAuth();
+  const { usuario, cargando, esGestor, esAdministrador } = useAuth();
 
   if (cargando) {
     return (
@@ -183,7 +227,15 @@ export default function AppNavigator() {
       <NavigationContainer ref={navigationRef}>
         <View style={{ flex: 1 }}>
           <View style={{ flex: 1 }}>
-            {!usuario ? <AuthStack /> : esMaestro ? <MaestroStack /> : <AppStack />}
+            {!usuario ? (
+              <AuthStack />
+            ) : esAdministrador ? (
+              <AdminStack />
+            ) : esGestor ? (
+              <GestorStack />
+            ) : (
+              <AppStack />
+            )}
           </View>
           <ConnectionBanner />
         </View>

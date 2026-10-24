@@ -17,6 +17,10 @@ import "dayjs/locale/es";
 import { useAuth } from "../../context/AuthContext";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadaMaestro } from "../../hooks/useJornadasMaestro";
+import { useUsuarios } from "../../hooks/useAdmin";
+import { auditar } from "../../services/adminService";
+import { Chip } from "../../components/AdminUi";
+import { puedeSerResponsable } from "../../utils/roles";
 import { crearJornada, editarJornada, mensajeDeError } from "../../services/jornadaAdminService";
 import CalendarioRango from "../../components/CalendarioRango";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -45,7 +49,11 @@ export default function JornadaFormScreen({ navigation, route }) {
   const jornadaId = route.params?.jornadaId;
   const esEdicion = !!jornadaId;
 
-  const { usuario, rol } = useAuth();
+  const { usuario, rol, esAdministrador } = useAuth();
+  // El administrador elige el gestor responsable de la jornada (solo él puede listar usuarios)
+  const { usuarios } = useUsuarios(esAdministrador);
+  const responsables = usuarios.filter((u) => puedeSerResponsable(u.rol));
+  const [gestorId, setGestorId] = useState(null);
   const { enLinea } = useConnectivity();
   // Al crear no hay jornada que leer (el hook no escucha nada con `null`)
   const { jornada, cargando, noExiste, propia, ahora } = useJornadaMaestro(
@@ -72,6 +80,7 @@ export default function JornadaFormScreen({ navigation, route }) {
     if (!esEdicion || !jornada || !propia || inicializado.current) return;
     inicializado.current = true;
     const { dia, hora } = descomponerFecha(jornada.fecha);
+    setGestorId(jornada.creadoPor || null);
     setForm({
       titulo: jornada.titulo || "",
       descripcion: jornada.descripcion || "",
@@ -130,8 +139,24 @@ export default function JornadaFormScreen({ navigation, route }) {
 
     setGuardando(true);
     try {
-      if (esEdicion) await editarJornada(jornadaId, datos);
-      else await crearJornada(usuario.uid, datos);
+      // Un gestor siempre actúa a su nombre; el administrador, para el gestor elegido
+      const responsable = esAdministrador ? gestorId || usuario.uid : usuario.uid;
+      let idJornada = jornadaId;
+      if (esEdicion) await editarJornada(jornadaId, datos, esAdministrador ? responsable : undefined);
+      else idJornada = (await crearJornada(responsable, datos)).id;
+
+      if (esAdministrador) {
+        const reasignada = esEdicion && responsable !== jornada.creadoPor;
+        auditar(
+          { uid: usuario.uid, nombre: usuario.displayName || usuario.email },
+          {
+            accion: !esEdicion ? "jornada.crear" : reasignada ? "jornada.reasignar" : "jornada.editar",
+            entidad: "jornada",
+            entidadId: idJornada,
+            detalle: `${datos.titulo}${reasignada || !esEdicion ? ` · gestor: ${responsables.find((g) => g.id === responsable)?.nombre || responsable}` : ""}`,
+          }
+        );
+      }
       Alert.alert(
         esEdicion ? "Jornada actualizada" : "Jornada creada",
         esEdicion
@@ -205,6 +230,21 @@ export default function JornadaFormScreen({ navigation, route }) {
             accessibilityLabel="Responsable"
           />
         </Campo>
+
+        {esAdministrador && (
+          <Campo etiqueta="Gestor responsable">
+            <View style={styles.espacios}>
+              {responsables.map((g) => (
+                <Chip
+                  key={g.id}
+                  etiqueta={g.nombre || g.email}
+                  activo={(gestorId || usuario.uid) === g.id}
+                  onPress={() => setGestorId(g.id)}
+                />
+              ))}
+            </View>
+          </Campo>
+        )}
 
         <Campo etiqueta="Espacio" error={errores.lugar}>
           <View style={styles.espacios}>

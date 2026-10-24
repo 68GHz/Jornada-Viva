@@ -8,7 +8,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "node --test tests/unit/*.test.mjs",
-    "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-jornadaviva \"node --test tests/rules/*.test.mjs\"",
+    "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-jornadaviva \"node --test --test-concurrency=1 tests/rules/*.test.mjs\"",
     "test:all": "npm test && npm run test:rules"
   },
   "dependencies": {

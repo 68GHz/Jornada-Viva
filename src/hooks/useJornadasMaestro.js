@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { normalizarJornada } from "../utils/jornadaFecha";
 import { ordenarParaMaestro } from "../utils/estadoJornada";
-import { esPropietario } from "../utils/roles";
+import { puedeAdministrarJornada } from "../utils/roles";
 import { obtenerInscritos, mensajeDeError } from "../services/jornadaAdminService";
 
 // Reloj para que una jornada pase a "Finalizada" sin salir de la pantalla
@@ -63,7 +63,7 @@ export function useJornadasMaestro() {
 // navegación), `propia` es false y la pantalla no ofrece ninguna acción; además,
 // firestore.rules rechaza cualquier escritura o lectura de inscritos que no sea suya.
 export function useJornadaMaestro(jornadaId) {
-  const { usuario } = useAuth();
+  const { usuario, rol } = useAuth();
   const { enLinea } = useConnectivity();
   const uid = usuario?.uid;
   const ahora = useAhora();
@@ -100,7 +100,7 @@ export function useJornadaMaestro(jornadaId) {
     if (!enLinea) setCargando(false);
   }, [enLinea]);
 
-  return { jornada, cargando, noExiste, propia: esPropietario(jornada, uid), ahora };
+  return { jornada, cargando, noExiste, propia: puedeAdministrarJornada(rol, uid, jornada), ahora };
 }
 
 // Estudiantes inscritos en una jornada propia (se carga bajo demanda)

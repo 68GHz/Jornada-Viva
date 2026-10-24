@@ -63,3 +63,39 @@ export function nombreArchivoPlanilla(jornada) {
     .slice(0, 40);
   return `planilla-${base || "jornada"}.csv`;
 }
+
+export const COLUMNAS_REPORTE = [
+  "Jornada",
+  "Fecha",
+  "Espacio",
+  "Estado",
+  "Gestor",
+  "Cupos",
+  "Inscritos",
+  "Ocupación (%)",
+];
+
+// Reporte de jornadas para el administrador (mismas reglas de formato que la planilla).
+// `filas`: [{ titulo, fecha (ms), lugar, estado, gestor, cuposTotales, cuposOcupados }]
+export function generarReporteJornadasCsv(filas) {
+  const lineas = [
+    `sep=${SEPARADOR}`,
+    fila(["Reporte de jornadas"]),
+    fila(["Total de jornadas", filas.length]),
+    "",
+    fila(COLUMNAS_REPORTE),
+    ...filas.map((f) =>
+      fila([
+        f.titulo,
+        formatearFechaHoraNegocio(f.fecha),
+        f.lugar,
+        f.estado,
+        f.gestor,
+        f.cuposTotales,
+        f.cuposOcupados,
+        f.cuposTotales > 0 ? Math.round((f.cuposOcupados / f.cuposTotales) * 100) : 0,
+      ])
+    ),
+  ];
+  return BOM + lineas.join("\r\n") + "\r\n";
+}

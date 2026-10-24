@@ -31,7 +31,7 @@ export default function MaestroHomeScreen({ navigation }) {
   const { jornadas, cargando, error, ahora } = useJornadasMaestro();
   const [filtro, setFiltro] = useState("todas");
 
-  const nombre = usuario?.displayName || usuario?.email || "Maestro";
+  const nombre = usuario?.displayName || usuario?.email || "Gestor";
   const conteo = useMemo(() => contarPorEstado(jornadas, ahora), [jornadas, ahora]);
   const visibles = useMemo(
     () => (filtro === "todas" ? jornadas : jornadas.filter((j) => estadoJornada(j, ahora) === filtro)),
@@ -47,12 +47,12 @@ export default function MaestroHomeScreen({ navigation }) {
           <Ionicons name="school-outline" size={22} color={colors.primary} />
           <Text style={styles.bienvenida}>Hola, {nombre.split(" ")[0]}</Text>
           <View style={styles.rol}>
-            <Text style={styles.rolTexto}>Maestro</Text>
+            <Text style={styles.rolTexto}>Gestor</Text>
           </View>
         </View>
         <Text style={styles.descripcion}>
-          Crea jornadas y administra únicamente las que creaste: editar, cancelar, reactivar,
-          eliminar y descargar la planilla de inscritos.
+          Gestiona tus jornadas asignadas: crear, editar, cancelar, reactivar, eliminar y
+          descargar la planilla de inscritos.
         </Text>
       </View>
 
@@ -67,7 +67,7 @@ export default function MaestroHomeScreen({ navigation }) {
         <Text style={styles.botonCrearTexto}>Crear jornada</Text>
       </TouchableOpacity>
 
-      <Text style={styles.seccion}>Mis jornadas creadas</Text>
+      <Text style={styles.seccion}>Mis jornadas asignadas</Text>
       <View style={styles.filtros}>
         {FILTROS.map((f) => {
           const activo = filtro === f.valor;
@@ -108,7 +108,7 @@ export default function MaestroHomeScreen({ navigation }) {
           : !enLinea && jornadas.length === 0
           ? "Sin conexión. Conéctate a internet para consultar y administrar tus jornadas."
           : jornadas.length === 0
-          ? "Aún no has creado jornadas.\nToca «Crear jornada» para empezar."
+          ? "Aún no tienes jornadas asignadas.\nToca «Crear jornada» para empezar."
           : "No tienes jornadas en este estado."}
       </Text>
     </View>

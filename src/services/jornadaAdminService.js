@@ -14,10 +14,10 @@ import { db } from "../../firebaseConfig";
 import { fechaAMillis } from "../utils/jornadaFecha";
 import { conTiempoLimite } from "../utils/sincronizacion";
 
-// Administración de jornadas (rol maestro). Estas operaciones solo funcionan con
-// conexión y firestore.rules las valida en el servidor: solo un maestro crea
-// jornadas, y solo el maestro que la creó puede editarla, cancelarla, reactivarla,
-// eliminarla o leer sus inscritos.
+// Administración de jornadas (gestor y administrador). Estas operaciones solo funcionan
+// con conexión y firestore.rules las valida en el servidor: un gestor crea jornadas a su
+// nombre y solo administra las que tiene asignadas (editar, cancelar, reactivar,
+// eliminar, leer inscritos); el administrador, cualquiera.
 const ESPERA_MS = 15000;
 
 const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fecha, cuposTotales }) => ({
@@ -42,8 +42,15 @@ export const crearJornada = (uid, datos) =>
     ESPERA_MS
   );
 
-export const editarJornada = (jornadaId, datos) =>
-  conTiempoLimite(updateDoc(doc(db, "jornadas", jornadaId), camposEditables(datos)), ESPERA_MS);
+// `creadoPor` (solo el administrador): reasigna la jornada a otro gestor
+export const editarJornada = (jornadaId, datos, creadoPor) =>
+  conTiempoLimite(
+    updateDoc(doc(db, "jornadas", jornadaId), {
+      ...camposEditables(datos),
+      ...(creadoPor ? { creadoPor } : {}),
+    }),
+    ESPERA_MS
+  );
 
 export const cancelarJornada = (jornadaId) =>
   conTiempoLimite(updateDoc(doc(db, "jornadas", jornadaId), { activa: false }), ESPERA_MS);
@@ -81,7 +88,7 @@ export async function obtenerInscritos(jornadaId) {
 export function mensajeDeError(error) {
   const codigo = String(error?.code || "").replace(/^firestore\//, "");
   if (codigo === "permission-denied") {
-    return "No tienes permiso para realizar esta acción. Solo puedes administrar las jornadas que creaste.";
+    return "No tienes permiso para realizar esta acción. Solo puedes administrar las jornadas que tienes asignadas.";
   }
   if (error?.name === "ErrorRed" || ["unavailable", "deadline-exceeded"].includes(codigo)) {
     return "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.";

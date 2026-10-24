@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
-// Administración de roles y de la migración a roles, FUERA de la app.
+// Administración de cuentas, roles y migración de datos, FUERA de la app.
 //
-//   node scripts/admin.js crear-maestro <correo> <contraseña> [nombre...] [--aplicar]
-//   node scripts/admin.js rol <correo> <maestro|estudiante> [--aplicar]
-//   node scripts/admin.js maestros
+//   node scripts/admin.js crear-usuario <correo> <contraseña> <rol> [nombre...] [--aplicar]
+//   node scripts/admin.js rol <correo> <estudiante|gestor|administrador> [--aplicar]
+//   node scripts/admin.js usuarios [rol]
 //   node scripts/admin.js migrar [--aplicar]
 //   node scripts/admin.js propietario <jornadaId|--huerfanas> <correo> [--aplicar]
 //
@@ -14,23 +14,26 @@
 // o bien la variable GOOGLE_OAUTH_ACCESS_TOKEN con un token de acceso.
 // Proyecto: --proyecto <id>, FIREBASE_PROJECT_ID o EXPO_PUBLIC_FIREBASE_PROJECT_ID (.env).
 //
-// Qué hace cada comando:
-//  - crear-maestro: crea la cuenta de acceso (correo y contraseña) y su perfil con rol
-//                 maestro. Si el correo ya está registrado, solo le asigna el rol.
-//  - rol:         cambia users/{uid}.rol. Es la ÚNICA forma de crear maestros: las reglas
-//                 de Firestore impiden que un usuario se asigne el rol desde la app.
-//  - maestros:    lista los usuarios con rol maestro.
-//  - migrar:      migración compatible hacia atrás. Agrega rol "estudiante" a los usuarios
-//                 que no lo tienen (la app ya los trata como estudiantes, así que es
-//                 opcional) y lista las jornadas sin propietario (`creadoPor`).
-//  - propietario: asigna un maestro como propietario de jornadas anteriores a los roles.
-//                 Sin propietario, ningún maestro puede administrarlas.
+// Roles: estudiante (Usuario/Alumno), gestor (Gestor de jornadas, antes "maestro") y
+// administrador. El PRIMER administrador solo puede crearse con este script (o desde la
+// consola de Firebase): las reglas de Firestore impiden que alguien se asigne un rol; a
+// partir de ahí los administradores gestionan las cuentas desde la app.
+//
+//  - crear-usuario: crea la cuenta de acceso (correo y contraseña) y su perfil con el rol.
+//                   Si el correo ya está registrado, solo le asigna el rol.
+//  - rol:           cambia users/{uid}.rol.
+//  - usuarios:      lista las cuentas (opcionalmente de un rol).
+//  - migrar:        migración compatible hacia atrás: renombra el rol "maestro" a "gestor",
+//                   asigna "estudiante" a quien no tiene rol y lista las jornadas sin
+//                   propietario (`creadoPor`). Es idempotente.
+//  - propietario:   asigna un gestor como responsable de jornadas anteriores a los roles.
 
 const { execSync } = require("node:child_process");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-const ROLES = ["maestro", "estudiante"];
+const ROLES = ["estudiante", "gestor", "administrador"];
+const normalizar = (rol) => (rol === "maestro" ? "gestor" : rol);
 
 function leerArgs(argv) {
   const posicionales = [];
@@ -178,11 +181,14 @@ function cliente(proyecto) {
 const mensajeModo = (aplicar) => (aplicar ? "" : "  (simulación: agrega --aplicar para ejecutarlo)");
 
 const comandos = {
-  async "crear-maestro"(c, [correo, clave, ...partesNombre], { aplicar }) {
-    if (!correo || !clave) throw new Error("Uso: crear-maestro <correo> <contraseña> [nombre...] [--aplicar]");
+  async "crear-usuario"(c, [correo, clave, rol, ...partesNombre], { aplicar }) {
+    rol = normalizar(rol);
+    if (!correo || !clave || !ROLES.includes(rol)) {
+      throw new Error("Uso: crear-usuario <correo> <contraseña> <estudiante|gestor|administrador> [nombre...] [--aplicar]");
+    }
     if (clave.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres.");
     const nombre = partesNombre.join(" ").trim() || correo.split("@")[0];
-    console.log(`Cuenta de maestro: ${correo} (${nombre})${mensajeModo(aplicar)}`);
+    console.log(`Cuenta (${rol}): ${correo} (${nombre})${mensajeModo(aplicar)}`);
     if (!aplicar) return;
 
     let uid;
@@ -198,12 +204,18 @@ const comandos = {
       console.log(`El correo ya estaba registrado (uid ${uid}): se conserva su contraseña y solo se asigna el rol.`);
     }
 
-    await c.guardar(`users/${uid}`, { uid, nombre, email: correo, rol: "maestro", creadoEn: new Date() });
-    console.log("Perfil guardado con rol maestro. Ya puede iniciar sesión en la app.");
+    await c.guardar(`users/${uid}`, { uid, nombre, email: correo, rol, creadoEn: new Date() });
+    console.log(`Perfil guardado con rol ${rol}. Ya puede iniciar sesión en la app.`);
+  },
+
+  // Nombre anterior del comando
+  async "crear-maestro"(c, [correo, clave, ...resto], opciones) {
+    return comandos["crear-usuario"](c, [correo, clave, "gestor", ...resto], opciones);
   },
 
   async rol(c, [correo, rol], { aplicar }) {
-    if (!correo || !ROLES.includes(rol)) throw new Error("Uso: rol <correo> <maestro|estudiante> [--aplicar]");
+    rol = normalizar(rol);
+    if (!correo || !ROLES.includes(rol)) throw new Error("Uso: rol <correo> <estudiante|gestor|administrador> [--aplicar]");
     const usuario = await c.usuarioPorCorreo(correo);
     const uid = c.idDe(usuario);
     const actual = c.campo(usuario, "rol") || "(sin rol = estudiante)";
@@ -214,19 +226,33 @@ const comandos = {
     }
   },
 
+  async usuarios(c, [rol]) {
+    const filtro = rol ? normalizar(rol) : null;
+    const lista = (await c.listar("users")).filter((u) => !filtro || normalizar(c.campo(u, "rol") || "estudiante") === filtro);
+    console.log(`Usuarios${filtro ? ` (${filtro})` : ""}: ${lista.length}`);
+    lista.forEach((u) => {
+      const inactiva = u.fields?.activo?.booleanValue === false ? "  [INACTIVA]" : "";
+      console.log(`  - ${c.idDe(u)}  ${normalizar(c.campo(u, "rol") || "estudiante")}  ${c.campo(u, "nombre") || ""}  ${c.campo(u, "email") || ""}${inactiva}`);
+    });
+  },
+
   async maestros(c) {
-    const usuarios = (await c.listar("users")).filter((u) => c.campo(u, "rol") === "maestro");
-    console.log(`Maestros (${usuarios.length}):`);
-    usuarios.forEach((u) => console.log(`  - ${c.idDe(u)}  ${c.campo(u, "nombre") || ""}  ${c.campo(u, "email") || ""}`));
+    return comandos.usuarios(c, ["gestor"]);
   },
 
   async migrar(c, _args, { aplicar }) {
     const usuarios = await c.listar("users");
-    const sinRol = usuarios.filter((u) => !c.campo(u, "rol"));
-    console.log(`Usuarios: ${usuarios.length}. Sin rol: ${sinRol.length}${mensajeModo(aplicar)}`);
+    const aMigrar = [];
+    for (const u of usuarios) {
+      const actual = c.campo(u, "rol");
+      if (!actual) aMigrar.push([u, "estudiante", "sin rol"]);
+      else if (actual === "maestro") aMigrar.push([u, "gestor", "maestro -> gestor"]);
+    }
+    console.log(`Usuarios: ${usuarios.length}. A migrar: ${aMigrar.length}${mensajeModo(aplicar)}`);
+    aMigrar.forEach(([u, rol, motivo]) => console.log(`  - ${c.idDe(u)}  ${motivo}`));
     if (aplicar) {
-      for (const u of sinRol) await c.actualizar(`users/${c.idDe(u)}`, { rol: "estudiante" });
-      if (sinRol.length) console.log(`Se asignó el rol "estudiante" a ${sinRol.length} usuarios.`);
+      for (const [u, rol] of aMigrar) await c.actualizar(`users/${c.idDe(u)}`, { rol });
+      if (aMigrar.length) console.log(`Se actualizaron ${aMigrar.length} usuarios.`);
     }
 
     const jornadas = await c.listar("jornadas");
@@ -234,24 +260,24 @@ const comandos = {
     console.log(`\nJornadas: ${jornadas.length}. Sin propietario (anteriores a los roles): ${huerfanas.length}`);
     huerfanas.forEach((j) => console.log(`  - ${c.idDe(j)}  ${c.campo(j, "titulo") || ""}`));
     if (huerfanas.length) {
-      console.log("Ningún maestro puede administrarlas hasta asignarles propietario:");
-      console.log("  node scripts/admin.js propietario --huerfanas <correo-del-maestro> --aplicar");
+      console.log("Solo un administrador puede gestionarlas hasta asignarles un gestor (desde la app o con):");
+      console.log("  node scripts/admin.js propietario --huerfanas <correo-del-gestor> --aplicar");
     }
   },
 
   async propietario(c, [destino, correo], { aplicar, huerfanas }) {
     const todas = huerfanas || destino === "--huerfanas";
     const jornadaId = todas ? null : destino;
-    const correoMaestro = todas && huerfanas ? destino : correo;
-    if ((!todas && !jornadaId) || !correoMaestro) {
+    const correoGestor = todas && huerfanas ? destino : correo;
+    if ((!todas && !jornadaId) || !correoGestor) {
       throw new Error("Uso: propietario <jornadaId|--huerfanas> <correo> [--aplicar]");
     }
 
-    const maestro = await c.usuarioPorCorreo(correoMaestro);
-    if (c.campo(maestro, "rol") !== "maestro") {
-      throw new Error(`${correoMaestro} no tiene el rol maestro. Asígnalo primero con: rol ${correoMaestro} maestro --aplicar`);
+    const gestor = await c.usuarioPorCorreo(correoGestor);
+    if (!["gestor", "administrador"].includes(normalizar(c.campo(gestor, "rol")))) {
+      throw new Error(`${correoGestor} no es gestor ni administrador. Asígnale el rol primero: rol ${correoGestor} gestor --aplicar`);
     }
-    const uid = c.idDe(maestro);
+    const uid = c.idDe(gestor);
 
     const jornadas = await c.listar("jornadas");
     const objetivo = jornadas.filter(
@@ -260,7 +286,7 @@ const comandos = {
     if (!todas && objetivo.length === 0) {
       throw new Error("La jornada no existe o ya tiene propietario (no se sobrescribe).");
     }
-    console.log(`Se asignará como propietario a ${uid} en ${objetivo.length} jornada(s)${mensajeModo(aplicar)}`);
+    console.log(`Se asignará como responsable a ${uid} en ${objetivo.length} jornada(s)${mensajeModo(aplicar)}`);
     objetivo.forEach((j) => console.log(`  - ${c.idDe(j)}  ${c.campo(j, "titulo") || ""}`));
     if (aplicar) {
       for (const j of objetivo) await c.actualizar(`jornadas/${c.idDe(j)}`, { creadoPor: uid });
@@ -273,7 +299,7 @@ async function principal() {
   const { posicionales, opciones } = leerArgs(process.argv.slice(2));
   const [nombre, ...resto] = posicionales;
   if (!comandos[nombre]) {
-    console.log("Comandos: crear-maestro, rol, maestros, migrar, propietario. Consulta el encabezado de scripts/admin.js.");
+    console.log("Comandos: crear-usuario, rol, usuarios, migrar, propietario. Consulta el encabezado de scripts/admin.js.");
     process.exitCode = nombre ? 1 : 0;
     return;
   }

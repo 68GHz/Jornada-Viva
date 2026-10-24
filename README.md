@@ -9,7 +9,7 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
 - Vista de detalle con descripción completa, cupos disponibles y responsable.
 - Inscripción a la jornada con confirmación visual, persistida en Firestore.
 - Validación para evitar que un usuario se inscriba dos veces a la misma jornada.
-- **Roles** (estudiante y maestro): los maestros crean y administran sus propias jornadas y descargan la planilla de inscritos (ver [Roles y permisos](#roles-y-permisos)).
+- **Roles** (alumno, gestor de jornadas y administrador): los gestores gestionan sus jornadas asignadas y descargan la planilla; el administrador gestiona usuarios, gestores, jornadas, reportes y auditoría (ver [Roles y permisos](#roles-y-permisos)).
 
 ## Stack
 
@@ -63,14 +63,15 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
 ├── screens/
 │   ├── auth/        # LoginScreen, RegisterScreen
 │   ├── app/         # Pantallas del estudiante: HomeScreen, JornadasListScreen, JornadaDetailScreen...
-│   └── maestro/     # Pantallas del maestro: MaestroHomeScreen, JornadaFormScreen, JornadaAdminScreen
+│   ├── maestro/     # Pantallas del gestor (y del administrador): MaestroHomeScreen, JornadaFormScreen, JornadaAdminScreen
+│   └── admin/       # Módulo del administrador: dashboard, usuarios, jornadas, reportes, auditoría, perfil
 └── theme/           # colors
 ```
 
 ## Modelo de datos (Firestore)
 
-- **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante` o `maestro`; sin rol = estudiante), `creadoEn`.
-- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del maestro propietario; las jornadas anteriores a los roles no lo tienen) y `creadaEn`.
+- **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante`, `gestor` o `administrador`; sin rol = estudiante; `maestro` = alias antiguo de `gestor`), `activo` (`false` = cuenta desactivada), `creadoEn`, `jornadasVistas`.
+- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del gestor responsable; las jornadas anteriores a los roles no lo tienen) y `creadaEn`.
 - **`inscripciones/{id}`**: `userId`, `jornadaId`, `nombreUsuario`, `emailUsuario`, `tituloJornada`, `fechaJornada`, `inscritoEn`, `asistio`.
 
 ## Modo offline
@@ -126,57 +127,67 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 
 ## Roles y permisos
 
-La app tiene dos roles. El rol se guarda en `users/{uid}.rol` y decide qué pantallas se muestran; **lo que de verdad se permite lo valida el servidor** con las reglas de Firestore (`firestore.rules`), así que manipular la app, las URL o las solicitudes no da más permisos.
+La app tiene tres roles. El rol se guarda en `users/{uid}.rol` y decide qué pantallas se muestran; **lo que de verdad se permite lo valida el servidor** con las reglas de Firestore (`firestore.rules`), así que manipular la app, las URL o las solicitudes no da más permisos.
 
-| | Estudiante | Maestro |
-|---|---|---|
-| Ver jornadas disponibles y su detalle | Sí | — (usa su panel) |
-| Inscribirse, cancelar, Mis jornadas, filtros, modo offline, notificaciones | Sí (todo lo anterior, sin cambios) | — |
-| Crear jornadas (espacios: bloques 1 al 13, auditorio, cancha y coliseo) | No | Sí |
-| Editar, cancelar, reactivar y eliminar jornadas | No | **Solo las que creó** |
-| Ver los inscritos y descargar la planilla (CSV para Excel) | No | **Solo de sus jornadas** |
+| Rol | Valor | Antes | Qué hace |
+|---|---|---|---|
+| **Usuario/Alumno** | `estudiante` (o sin rol) | Alumno | Consulta jornadas, se inscribe, cancela, Mis jornadas, filtros, modo offline y notificaciones |
+| **Gestor de jornadas** | `gestor` | Maestro | Crea jornadas y gestiona las que tiene asignadas: editar, cancelar, reactivar, eliminar, ver inscritos y planilla |
+| **Administrador** | `administrador` | (nuevo) | Módulo de administración: usuarios, gestores, jornadas, estadísticas, auditoría |
 
-**Estados de una jornada** (se muestran con un chip de color en el panel del maestro): *Activa* (verde), *Cancelada* (rojo, desactivada y con fecha futura) y *Finalizada* (gris, la fecha ya pasó; al vencer la app también la desactiva en Firestore).
+### Matriz de permisos
+
+| Funcionalidad | Usuario/Alumno | Gestor de jornadas | Administrador |
+|---|---|---|---|
+| Consultar información propia | Sí | Sí | Sí |
+| Participar en jornadas (inscribirse, cancelar) | Sí (reglas actuales) | No (sin cambios respecto a "maestro") | No (supuesto: la participación es del alumno) |
+| Gestionar jornadas | No | Solo las **asignadas** a él (`creadoPor`) | **Todas**, y puede reasignarlas |
+| Crear jornadas | No | A su nombre | Para cualquier gestor |
+| Ver inscritos y descargar planilla | No | De sus jornadas | De cualquier jornada |
+| Gestionar usuarios (crear, editar, activar/desactivar) | No | No | Sí |
+| Asignar roles y permisos | No | No | Sí (nunca el suyo) |
+| Dashboard administrativo | No | No | Sí |
+| Reportes globales | No | No (supuesto: solo ve el resumen de sus jornadas) | Sí |
+| Auditoría | No | No | Sí (solo lectura) |
+
+### Pantallas del administrador
+
+`AdminDashboard` (indicadores y accesos) · `UsuariosList` (búsqueda, filtros por rol y estado; también como listado de **gestores**) · `UsuarioDetalle` (datos, cambio de rol, activar/desactivar, jornadas asignadas si es gestor) · `UsuarioForm` (crear cuenta con rol) · `AdminJornadas` (todas las jornadas con filtros por estado, fecha, gestor y texto) · `JornadaForm` y `JornadaAdmin` (las mismas del gestor, con selector de gestor responsable) · `Reportes` (estadísticas y descarga de reporte para Excel) · `Auditoria` · `AdminPerfil`. Los gestores usan `GestorHome` (`screens/maestro/`, nombre de carpeta conservado).
 
 ### Cómo se protege (servidor)
 
-- **Rol:** al registrarse solo se puede ser estudiante y nadie puede cambiarse el rol desde la app. Un usuario sin rol se trata como estudiante.
-- **Propiedad:** solo un maestro crea jornadas y siempre con `creadoPor` igual a su uid. Editar, cancelar, reactivar o eliminar exige ser el maestro que la creó; el propietario no puede cambiarse. Las jornadas anteriores a los roles (sin `creadoPor`) no las administra nadie.
-- **Datos válidos:** el servidor valida el espacio (solo la lista permitida), textos, cupos (entero de 1 a 1000, nunca por debajo de los inscritos), fecha futura al crear o reactivar y los campos permitidos.
-- **Estudiantes:** solo pueden mover el contador de cupos al inscribirse o cancelar, dentro de sus límites; cualquier usuario puede desactivar una jornada vencida (limpieza automática).
-- **Inscritos:** un estudiante lee solo sus inscripciones; el maestro, las de sus propias jornadas (para la planilla).
-- **Planilla:** CSV con separador `;`, BOM UTF-8 y directiva `sep=;` (abre en columnas en cualquier Excel). Las celdas que empiezan por `=`, `+`, `-` o `@` se neutralizan para que un nombre no se ejecute como fórmula.
+- **Rol:** al registrarse solo se puede ser estudiante activo. Nadie puede cambiarse el rol ni su estado de cuenta, tampoco un administrador sobre sí mismo (así nunca se queda el sistema sin administrador). Solo un administrador cambia el rol o el estado de **otras** cuentas.
+- **Cuentas desactivadas** (`activo: false`): la app cierra la sesión de inmediato y las reglas les impiden escribir (inscribirse, crear o editar jornadas, administrar). Nota: sin Admin SDK no se puede deshabilitar la cuenta de acceso de Firebase Auth en sí; el bloqueo lo aplican la app y las reglas.
+- **Jornadas:** un gestor solo administra las que figuran a su nombre; las anteriores a los roles (sin `creadoPor`) y las ajenas solo las gestiona un administrador. Un gestor no puede reasignarlas. El servidor valida espacio, textos, cupos, fecha futura y que el gestor asignado exista, esté activo y tenga rol de gestor o administrador.
+- **Inscritos:** el estudiante lee las suyas; el gestor, las de sus jornadas; el administrador, todas.
+- **Auditoría:** el administrador registra sus acciones importantes (crear cuenta, cambiar rol, activar/desactivar, crear/editar/reasignar/cancelar/reactivar/eliminar jornadas, exportar reportes) en `auditoria`, siempre a su nombre y con la hora del servidor. Los registros no se pueden modificar ni borrar; solo los lee un administrador. Los cambios de cuentas se guardan en la **misma operación atómica** que el registro (si falla uno, falla el otro).
+- **Compatibilidad:** el nombre anterior `maestro` se sigue aceptando como `gestor` (en la app y en las reglas) hasta migrar los datos.
 
-### Asignar el rol de maestro
+### Crear el primer administrador y administrar cuentas
 
-El rol **no se puede pedir desde la app**; lo asigna quien administra el proyecto, de cualquiera de estas formas:
+Las reglas impiden que alguien se asigne un rol, así que **el primer administrador se crea fuera de la app** (usa tu sesión de `gcloud`; sin `--aplicar` solo simula):
 
-- Consola de Firebase: Firestore → `users` → documento del usuario → campo `rol` = `maestro`.
-- Con el script (usa tu sesión de `gcloud`; sin `--aplicar` solo simula):
+```bash
+node scripts/admin.js crear-usuario admin@tdea.edu.co ClaveSegura123 administrador Nombre Apellido --aplicar
+node scripts/admin.js rol alguien@tdea.edu.co administrador --aplicar   # o convertir una cuenta existente
+node scripts/admin.js usuarios [rol]                                    # listar cuentas
+```
 
-  ```bash
-  # crear una cuenta nueva de maestro (correo + contraseña + nombre)
-  node scripts/admin.js crear-maestro maestro@tdea.edu.co ClaveSegura123 Nombre Apellido --aplicar
-  # o convertir en maestro a alguien que ya se registró en la app
-  node scripts/admin.js rol maestro@tdea.edu.co maestro --aplicar
-  node scripts/admin.js maestros
-  ```
-
-El cambio se aplica en la app sin reiniciarla.
+A partir de ahí el administrador crea gestores y otras cuentas, y cambia roles desde la app. También se puede editar el campo `rol` en la consola de Firebase.
 
 ### Migración de datos (compatible hacia atrás)
 
-No es obligatoria: la app y las reglas tratan como estudiante a quien no tiene `rol`, y las jornadas existentes siguen viéndose igual. Para dejar los datos al día:
+No pierde ni duplica cuentas. Renombra el rol `maestro` a `gestor`, asigna `estudiante` a quien no tenía rol y lista las jornadas sin propietario. Es idempotente:
 
 ```bash
-node scripts/admin.js migrar                 # simula: usuarios sin rol y jornadas sin propietario
-node scripts/admin.js migrar --aplicar       # agrega rol "estudiante" a quienes no lo tienen
-node scripts/admin.js propietario --huerfanas maestro@tdea.edu.co --aplicar   # asigna un maestro a las jornadas anteriores
+node scripts/admin.js migrar                 # simula
+node scripts/admin.js migrar --aplicar
+node scripts/admin.js propietario --huerfanas gestor@tdea.edu.co --aplicar   # opcional: asigna un gestor a las jornadas anteriores
 ```
 
-### Despliegue de las reglas
+Orden recomendado: 1) publicar las reglas, 2) actualizar la app, 3) migrar. Entre 1 y 3 todo sigue funcionando gracias al alias `maestro`.
 
-Las reglas del repositorio deben publicarse para que la validación del servidor esté activa:
+### Despliegue de las reglas
 
 ```bash
 npx firebase-tools deploy --only firestore:rules --project <id-del-proyecto>
@@ -185,12 +196,12 @@ npx firebase-tools deploy --only firestore:rules --project <id-del-proyecto>
 ### Pruebas
 
 ```bash
-npm test             # lógica de roles, estados, validación del formulario y planilla
+npm test             # lógica de roles, estados, usuarios, filtros, estadísticas, planilla y avisos
 npm run test:rules   # reglas de Firestore contra el emulador (requiere Java)
 npm run test:all     # ambas
 ```
 
-Las pruebas de reglas cubren la autorización: un maestro no puede crear, editar, cancelar, reactivar, eliminar ni leer los inscritos de jornadas ajenas; un estudiante no puede administrar nada ni asignarse el rol; y los flujos de inscripción siguen funcionando.
+Las pruebas de reglas cubren la autorización de los tres roles: un gestor no gestiona jornadas ajenas ni se las reasigna; un estudiante no administra nada ni se asigna roles; el administrador no puede cambiar su propio rol; las cuentas desactivadas no escriben; la auditoría es inmutable y solo la lee un administrador; y los flujos de inscripción siguen funcionando.
 
 ## Notificaciones
 

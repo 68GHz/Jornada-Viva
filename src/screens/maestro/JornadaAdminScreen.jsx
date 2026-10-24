@@ -12,6 +12,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useInscritos, useJornadaMaestro } from "../../hooks/useJornadasMaestro";
+import { useUsuarios } from "../../hooks/useAdmin";
+import { auditar } from "../../services/adminService";
 import {
   cancelarJornada,
   eliminarJornada,
@@ -64,7 +66,8 @@ function Boton({ texto, icono, onPress, variante = "primario", deshabilitado }) 
 // Administración de una jornada propia: estado, acciones, inscritos y planilla
 export default function JornadaAdminScreen({ navigation, route }) {
   const { jornadaId } = route.params || {};
-  const { usuario, rol } = useAuth();
+  const { usuario, rol, esAdministrador } = useAuth();
+  const { usuarios } = useUsuarios(esAdministrador);
   const { enLinea } = useConnectivity();
   const { jornada, cargando, noExiste, propia, ahora } = useJornadaMaestro(jornadaId);
 
@@ -89,7 +92,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
             ? "La jornada no existe o ya fue eliminada."
             : propia
             ? "No tienes permiso para administrar esta jornada."
-            : "No tienes permiso para administrar esta jornada: solo puedes administrar las que creaste."}
+            : "No tienes permiso para administrar esta jornada: solo puedes administrar las que tienes asignadas."}
         </Text>
         <TouchableOpacity style={styles.volver} onPress={() => navigation.goBack()}>
           <Text style={styles.volverTexto}>Volver</Text>
@@ -102,7 +105,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
   const totalInscritos = jornada.cuposOcupados || 0;
 
   // Las operaciones de administración necesitan conexión
-  const ejecutar = async (operacion, exito) => {
+  const ejecutar = async (operacion, exito, accionAuditoria) => {
     if (!enLinea) {
       Alert.alert("Sin conexión", "Necesitas conexión a internet para administrar la jornada.");
       return;
@@ -110,6 +113,13 @@ export default function JornadaAdminScreen({ navigation, route }) {
     setOcupado(true);
     try {
       await operacion();
+      // El administrador deja constancia de lo que hace (auditoría)
+      if (esAdministrador && accionAuditoria) {
+        auditar(
+          { uid: usuario.uid, nombre: usuario.displayName || usuario.email },
+          { accion: accionAuditoria, entidad: "jornada", entidadId: jornada.id, detalle: jornada.titulo }
+        );
+      }
       if (exito) exito();
     } catch (err) {
       console.warn("Error de administración:", err);
@@ -130,7 +140,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
         {
           text: "Sí, cancelar jornada",
           style: "destructive",
-          onPress: () => ejecutar(() => cancelarJornada(jornada.id)),
+          onPress: () => ejecutar(() => cancelarJornada(jornada.id), undefined, "jornada.cancelar"),
         },
       ]
     );
@@ -143,7 +153,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
       }.\n\n¿Deseas reactivarla?`,
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "Sí, reactivar", onPress: () => ejecutar(() => reactivarJornada(jornada.id)) },
+        { text: "Sí, reactivar", onPress: () => ejecutar(() => reactivarJornada(jornada.id), undefined, "jornada.reactivar") },
       ]
     );
 
@@ -160,7 +170,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
         {
           text: "Sí, eliminar",
           style: "destructive",
-          onPress: () => ejecutar(() => eliminarJornada(jornada.id), () => navigation.goBack()),
+          onPress: () => ejecutar(() => eliminarJornada(jornada.id), () => navigation.goBack(), "jornada.eliminar"),
         },
       ]
     );
@@ -195,6 +205,17 @@ export default function JornadaAdminScreen({ navigation, route }) {
         <Fila icono="time-outline" etiqueta="Hora" valor={formatearHora(jornada.fecha)} />
         <Fila icono="location-outline" etiqueta="Espacio" valor={jornada.lugar} />
         <Fila icono="person-outline" etiqueta="Responsable" valor={jornada.responsable} />
+        {esAdministrador && (
+          <Fila
+            icono="briefcase-outline"
+            etiqueta="Gestor asignado"
+            valor={
+              jornada.creadoPor
+                ? usuarios.find((u) => u.id === jornada.creadoPor)?.nombre || "Gestor desconocido"
+                : "Sin gestor asignado"
+            }
+          />
+        )}
         <Fila
           icono="people-outline"
           etiqueta="Cupos"

@@ -1,4 +1,4 @@
-import { esMaestro, esPropietario } from "./roles.js";
+import { esAdministrador, puedeAdministrarJornada } from "./roles.js";
 
 // Estado de una jornada tal como se muestra al maestro.
 // No se guarda aparte: se deduce de `activa` y de la fecha (en milisegundos).
@@ -25,7 +25,8 @@ export function estadoJornada(jornada, ahora = Date.now()) {
 // Qué puede hacer un usuario con una jornada. Es solo para la interfaz: lo que de
 // verdad se permite lo decide firestore.rules.
 export function permisosJornada({ rol, uid, jornada, ahora = Date.now() }) {
-  const propia = esMaestro(rol) && esPropietario(jornada, uid);
+  // El administrador gestiona cualquier jornada; el gestor, solo las asignadas a él
+  const propia = puedeAdministrarJornada(rol, uid, jornada);
   const estado = estadoJornada(jornada, ahora);
   return {
     verAdministracion: propia,
@@ -35,6 +36,7 @@ export function permisosJornada({ rol, uid, jornada, ahora = Date.now() }) {
     cancelar: propia && estado === ESTADOS_JORNADA.ACTIVA,
     reactivar: propia && estado === ESTADOS_JORNADA.CANCELADA,
     eliminar: propia,
+    reasignar: esAdministrador(rol),
   };
 }
 

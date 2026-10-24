@@ -4,40 +4,93 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ================= Roles =================
-    // El rol está en users/{uid}.rol ("maestro" | "estudiante"). Sin rol = estudiante.
-    // Solo se asigna fuera de la app (consola de Firebase o scripts/admin.js).
-    function esMaestro() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('rol', 'estudiante') == 'maestro';
+    // El rol está en users/{uid}.rol: "estudiante" (o sin rol), "gestor" (antes "maestro",
+    // que se sigue aceptando hasta migrar los datos) o "administrador". Solo un
+    // administrador lo asigna (o scripts/admin.js con credenciales del proyecto).
+    // `activo: false` desactiva la cuenta: deja de poder escribir.
+    function perfilDe(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
     }
 
-    // Una jornada es de quien la creó. Las anteriores a los roles no tienen `creadoPor`
-    // y por eso ningún maestro puede administrarlas.
+    function cuentaActiva(perfil) {
+      return perfil.get('activo', true) != false;
+    }
+
+    function rolDe(uid) {
+      return perfilDe(uid).get('rol', 'estudiante');
+    }
+
+    function tienePerfil(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    // Cualquier usuario con sesión cuya cuenta no esté desactivada
+    function usuarioActivo() {
+      return request.auth != null
+        && (!tienePerfil(request.auth.uid) || cuentaActiva(perfilDe(request.auth.uid)));
+    }
+
+    function esAdmin() {
+      return request.auth != null
+        && tienePerfil(request.auth.uid)
+        && cuentaActiva(perfilDe(request.auth.uid))
+        && rolDe(request.auth.uid) == 'administrador';
+    }
+
+    function esGestor() {
+      return request.auth != null
+        && tienePerfil(request.auth.uid)
+        && cuentaActiva(perfilDe(request.auth.uid))
+        && rolDe(request.auth.uid) in ['gestor', 'maestro'];
+    }
+
+    // Quién puede tener jornadas asignadas
+    function puedeSerResponsable(uid) {
+      return tienePerfil(uid)
+        && cuentaActiva(perfilDe(uid))
+        && rolDe(uid) in ['gestor', 'maestro', 'administrador'];
+    }
+
+    // Una jornada está asignada al gestor que figura en `creadoPor`. Las anteriores a los
+    // roles no lo tienen: solo un administrador las gestiona.
     function esPropietario(jornada) {
       return jornada.get('creadoPor', null) == request.auth.uid;
     }
 
     function esPropietarioDeJornada(jornadaId) {
-      return esMaestro()
+      return esGestor()
         && esPropietario(get(/databases/$(database)/documents/jornadas/$(jornadaId)).data);
     }
 
     // ================= Usuarios =================
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // Cada quien lee su perfil; el administrador, todos
+      allow read: if request.auth != null && (request.auth.uid == userId || esAdmin());
 
-      // Al registrarse solo se puede ser estudiante
+      // Al registrarse solo se puede ser estudiante activo; el administrador crea cuentas con cualquier rol
       allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.get('rol', 'estudiante') == 'estudiante';
+        && ((request.auth.uid == userId
+             && request.resource.data.get('rol', 'estudiante') == 'estudiante'
+             && request.resource.data.get('activo', true) == true)
+            || (esAdmin()
+                && request.resource.data.get('rol', 'estudiante') in ['estudiante', 'gestor', 'administrador']
+                && request.resource.data.get('activo', true) is bool));
 
-      // El rol no se puede cambiar desde la app (solo pasar de "sin rol" a estudiante)
       allow update: if request.auth != null
-        && request.auth.uid == userId
-        && (request.resource.data.get('rol', null) == resource.data.get('rol', null)
-            || (resource.data.get('rol', null) == null
-                && request.resource.data.get('rol', null) == 'estudiante'));
+        && (
+          // Perfil propio: el rol y el estado de la cuenta no se pueden cambiar a sí mismo
+          // (solo pasar de "sin rol" a estudiante). Vale también para un administrador.
+          (request.auth.uid == userId
+            && (request.resource.data.get('rol', null) == resource.data.get('rol', null)
+                || (resource.data.get('rol', null) == null
+                    && request.resource.data.get('rol', null) == 'estudiante'))
+            && request.resource.data.get('activo', true) == resource.data.get('activo', true))
+          // Cuentas de otros: solo el administrador (rol, estado y datos)
+          || (esAdmin()
+              && request.auth.uid != userId
+              && request.resource.data.get('rol', 'estudiante') in ['estudiante', 'gestor', 'administrador']
+              && request.resource.data.get('activo', true) is bool)
+        );
 
       allow delete: if false;
     }
@@ -71,11 +124,11 @@ service cloud.firestore {
         && d.activa is bool;
     }
 
-    // Administración de una jornada propia: editar, cancelar y reactivar
+    // Administración de una jornada asignada: editar, cancelar y reactivar
     function edicionDelPropietario() {
       let antes = resource.data;
       let d = request.resource.data;
-      return esMaestro()
+      return esGestor()
         && esPropietario(antes)
         && jornadaValida(d)
         && d.creadoPor == antes.creadoPor
@@ -83,6 +136,19 @@ service cloud.firestore {
         && d.cuposTotales >= antes.cuposOcupados
         && (!('creadaEn' in antes) || d.creadaEn == antes.creadaEn)
         && (d.activa == false || d.fecha > request.time);
+    }
+
+    // El administrador edita cualquier jornada y puede reasignarla a otro gestor
+    function edicionDelAdmin() {
+      let antes = resource.data;
+      let d = request.resource.data;
+      return esAdmin()
+        && jornadaValida(d)
+        && d.cuposOcupados == antes.cuposOcupados
+        && d.cuposTotales >= antes.cuposOcupados
+        && (!('creadaEn' in antes) || d.creadaEn == antes.creadaEn)
+        && (d.activa == false || d.fecha > request.time)
+        && (d.creadoPor == antes.get('creadoPor', null) || puedeSerResponsable(d.creadoPor));
     }
 
     // Inscribirse / cancelar una inscripción solo mueve el contador de cupos
@@ -106,29 +172,30 @@ service cloud.firestore {
     match /jornadas/{jornadaId} {
       allow read: if request.auth != null;
 
-      // Solo un maestro crea jornadas y siempre a su nombre
-      allow create: if esMaestro()
+      // Un gestor crea jornadas a su nombre; el administrador, para cualquier gestor
+      allow create: if ((esGestor() && request.resource.data.creadoPor == request.auth.uid)
+            || (esAdmin() && puedeSerResponsable(request.resource.data.creadoPor)))
         && jornadaValida(request.resource.data)
-        && request.resource.data.creadoPor == request.auth.uid
         && request.resource.data.cuposOcupados == 0
         && request.resource.data.activa == true
         && request.resource.data.fecha > request.time
         && (!('creadaEn' in request.resource.data) || request.resource.data.creadaEn == request.time);
 
-      allow update: if request.auth != null
-        && (edicionDelPropietario() || soloCupos() || soloVencimiento());
+      allow update: if usuarioActivo()
+        && (edicionDelPropietario() || edicionDelAdmin() || soloCupos() || soloVencimiento());
 
-      allow delete: if esMaestro() && esPropietario(resource.data);
+      allow delete: if esAdmin() || (esGestor() && esPropietario(resource.data));
     }
 
     // ================= Inscripciones =================
     match /inscripciones/{inscripcionId} {
-      // El estudiante lee las suyas; el maestro, las de sus propias jornadas (planilla)
+      // El estudiante lee las suyas; el gestor, las de sus jornadas (planilla); el administrador, todas
       allow read: if request.auth != null
         && (resource.data.userId == request.auth.uid
+            || esAdmin()
             || esPropietarioDeJornada(resource.data.jornadaId));
 
-      allow create: if request.auth != null
+      allow create: if usuarioActivo()
         && request.resource.data.userId == request.auth.uid;
 
       allow update: if false;
@@ -156,6 +223,24 @@ service cloud.firestore {
       // El usuario puede eliminar sus propias notificaciones
       allow delete: if request.auth != null
         && resource.data.userId == request.auth.uid;
+    }
+
+    // Auditoría de acciones administrativas: solo el administrador escribe (a su nombre) y lee;
+    // los registros no se pueden modificar ni borrar.
+    match /auditoria/{registroId} {
+      allow read: if esAdmin();
+      allow create: if esAdmin()
+        && request.resource.data.keys().hasOnly(
+             ['accion', 'entidad', 'entidadId', 'detalle', 'actorId', 'actorNombre', 'creadaEn'])
+        && request.resource.data.keys().hasAll(['accion', 'entidad', 'entidadId', 'actorId', 'creadaEn'])
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.creadaEn == request.time
+        && textoValido(request.resource.data.accion, 60)
+        && textoValido(request.resource.data.entidad, 40)
+        && request.resource.data.entidadId is string
+        && (!('detalle' in request.resource.data)
+            || (request.resource.data.detalle is string && request.resource.data.detalle.size() <= 500));
+      allow update, delete: if false;
     }
 
     // Historial / eventos de cambios en jornadas (auditoría / sincronización)

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Alert } from "react-native";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -14,7 +15,7 @@ import {
   habilitarUsuario,
   leerLocal,
 } from "../services/localStore";
-import { ROLES, esMaestro, normalizarRol } from "../utils/roles";
+import { ROLES, esAdministrador, esGestor, normalizarRol } from "../utils/roles";
 
 const AuthContext = createContext(null);
 
@@ -69,6 +70,17 @@ export function AuthProvider({ children }) {
       (snapshot) => {
         // Sin conexión y sin el perfil en la caché de Firestore: se usa el rol guardado
         if (snapshot.metadata.fromCache && !snapshot.exists()) return;
+
+        // Cuenta desactivada por un administrador: se cierra la sesión de inmediato
+        if (snapshot.data()?.activo === false) {
+          Alert.alert(
+            "Cuenta desactivada",
+            "Tu cuenta fue desactivada por un administrador. Comunícate con la institución si crees que es un error."
+          );
+          const uidActual = auth.currentUser?.uid;
+          signOut(auth).then(() => borrarDatosUsuario(uidActual));
+          return;
+        }
         const nuevo = normalizarRol(snapshot.data()?.rol);
         setRol(nuevo);
         setPerfilListoPara(uid);
@@ -128,7 +140,8 @@ export function AuthProvider({ children }) {
         usuario,
         cargando,
         rol,
-        esMaestro: esMaestro(rol),
+        esGestor: esGestor(rol),
+        esAdministrador: esAdministrador(rol),
         registrar,
         iniciarSesion,
         cerrarSesion,

@@ -2,42 +2,73 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import {
+  ETIQUETA_ROL,
   ROLES,
-  esMaestro,
+  esAdministrador,
+  esEstudiante,
+  esGestor,
   esPropietario,
   normalizarRol,
   puedeAdministrarJornada,
+  puedeSerResponsable,
 } from "../../src/utils/roles.js";
 import { ESPACIOS, esEspacioValido } from "../../src/utils/espacios.js";
 
 describe("roles", () => {
-  it("solo 'maestro' es maestro; cualquier otro valor o la ausencia de rol es estudiante", () => {
-    assert.equal(normalizarRol("maestro"), ROLES.MAESTRO);
-    for (const valor of [undefined, null, "", "estudiante", "MAESTRO", "admin", "Maestro ", 1, {}]) {
+  it("hay tres roles con su nombre visible", () => {
+    assert.deepEqual(Object.values(ROLES), ["estudiante", "gestor", "administrador"]);
+    assert.equal(ETIQUETA_ROL.estudiante, "Usuario/Alumno");
+    assert.equal(ETIQUETA_ROL.gestor, "Gestor de jornadas");
+    assert.equal(ETIQUETA_ROL.administrador, "Administrador");
+  });
+
+  it("solo 'gestor' y 'administrador' dan permisos; cualquier otro valor es estudiante", () => {
+    assert.equal(normalizarRol("gestor"), ROLES.GESTOR);
+    assert.equal(normalizarRol("administrador"), ROLES.ADMINISTRADOR);
+    for (const valor of [undefined, null, "", "estudiante", "GESTOR", "Administrador", "admin", "root", "gestor ", 1, {}, true]) {
       assert.equal(normalizarRol(valor), ROLES.ESTUDIANTE, String(valor));
     }
-    assert.equal(esMaestro("maestro"), true);
-    assert.equal(esMaestro(undefined), false);
-    assert.equal(esMaestro("admin"), false);
   });
 
-  it("una jornada es de quien la creó; sin propietario no es de nadie", () => {
-    assert.equal(esPropietario({ creadoPor: "m1" }, "m1"), true);
-    assert.equal(esPropietario({ creadoPor: "m1" }, "m2"), false);
-    assert.equal(esPropietario({}, "m1"), false);
+  it("el nombre anterior 'maestro' se acepta como gestor (compatibilidad con cuentas existentes)", () => {
+    assert.equal(normalizarRol("maestro"), ROLES.GESTOR);
+    assert.equal(esGestor("maestro"), true);
+    assert.equal(esAdministrador("maestro"), false);
+  });
+
+  it("las preguntas por rol son excluyentes", () => {
+    for (const rol of [...Object.values(ROLES), undefined, "maestro"]) {
+      const verdaderos = [esEstudiante(rol), esGestor(rol), esAdministrador(rol)].filter(Boolean);
+      assert.equal(verdaderos.length, 1, String(rol));
+    }
+  });
+
+  it("una jornada es del gestor que figura en `creadoPor`; sin propietario no es de nadie", () => {
+    assert.equal(esPropietario({ creadoPor: "g1" }, "g1"), true);
+    assert.equal(esPropietario({ creadoPor: "g1" }, "g2"), false);
+    assert.equal(esPropietario({}, "g1"), false);
     assert.equal(esPropietario({}, undefined), false, "undefined no puede 'coincidir' con undefined");
     assert.equal(esPropietario({ creadoPor: undefined }, undefined), false);
-    assert.equal(esPropietario(null, "m1"), false);
-    assert.equal(esPropietario({ creadoPor: "m1" }, ""), false);
+    assert.equal(esPropietario(null, "g1"), false);
   });
 
-  it("solo el maestro propietario puede administrar una jornada", () => {
-    const jornada = { creadoPor: "m1" };
-    assert.equal(puedeAdministrarJornada("maestro", "m1", jornada), true);
-    assert.equal(puedeAdministrarJornada("maestro", "m2", jornada), false, "maestro ajeno");
-    assert.equal(puedeAdministrarJornada("estudiante", "m1", jornada), false, "estudiante, aunque coincida el uid");
-    assert.equal(puedeAdministrarJornada(undefined, "m1", jornada), false);
-    assert.equal(puedeAdministrarJornada("maestro", "m1", {}), false, "jornada anterior a los roles");
+  it("el gestor administra solo sus jornadas; el administrador, cualquiera; el estudiante, ninguna", () => {
+    const propia = { creadoPor: "g1" };
+    assert.equal(puedeAdministrarJornada("gestor", "g1", propia), true);
+    assert.equal(puedeAdministrarJornada("gestor", "g2", propia), false, "gestor ajeno");
+    assert.equal(puedeAdministrarJornada("gestor", "g1", {}), false, "jornada sin propietario");
+    assert.equal(puedeAdministrarJornada("estudiante", "g1", propia), false, "estudiante aunque coincida el uid");
+    assert.equal(puedeAdministrarJornada(undefined, "g1", propia), false);
+    assert.equal(puedeAdministrarJornada("administrador", "a1", propia), true);
+    assert.equal(puedeAdministrarJornada("administrador", "a1", {}), true, "el admin gestiona las jornadas sin propietario");
+    assert.equal(puedeAdministrarJornada("administrador", "a1", null), false, "sin jornada no hay nada que gestionar");
+  });
+
+  it("solo gestores y administradores pueden tener jornadas asignadas", () => {
+    assert.equal(puedeSerResponsable("gestor"), true);
+    assert.equal(puedeSerResponsable("administrador"), true);
+    assert.equal(puedeSerResponsable("estudiante"), false);
+    assert.equal(puedeSerResponsable(undefined), false);
   });
 });
 
@@ -62,5 +93,12 @@ describe("espacios", () => {
     assert.ok(bloque, "no se encontró la lista de espacios en firestore.rules");
     const enReglas = [...bloque[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
     assert.deepEqual(enReglas, ESPACIOS);
+  });
+
+  it("los roles de firestore.rules coinciden con los de la app", () => {
+    const reglas = readFileSync(new URL("../../firestore.rules", import.meta.url), "utf8");
+    const listas = [...reglas.matchAll(/in \[('estudiante'[^\]]*)\]/g)].map((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
+    assert.ok(listas.length >= 2);
+    for (const lista of listas) assert.deepEqual(lista, Object.values(ROLES));
   });
 });

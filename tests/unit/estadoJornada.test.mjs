@@ -58,6 +58,7 @@ describe("permisos sobre una jornada (interfaz)", () => {
       cancelar: true,
       reactivar: false,
       eliminar: true,
+      reasignar: false, // solo el administrador reasigna jornadas
     });
   });
 
