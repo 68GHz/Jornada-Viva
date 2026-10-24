@@ -10,6 +10,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import { usaApi } from "../config/api";
+import { llamarApi } from "./apiClient";
 import { fechaAMillis } from "../utils/jornadaFecha";
 import { instantaneaDeJornada } from "../utils/instantaneaJornada";
 import {
@@ -137,9 +139,27 @@ async function cancelar(uid, accion) {
   }
 }
 
+// Misma operación, ejecutada por la API (devuelve "completada" | "ya-inscrito" | "ya-cancelada")
+async function ejecutarEnApi(accion) {
+  const ruta = `/v1/jornadas/${encodeURIComponent(accion.jornadaId)}/inscripcion`;
+  const respuesta =
+    accion.tipo === TIPOS.INSCRIBIR
+      ? await llamarApi("PUT", ruta, {
+          cuerpo: {
+            nombreUsuario: accion.nombreUsuario,
+            emailUsuario: accion.emailUsuario,
+            ...(accion.tituloJornada !== undefined ? { tituloJornada: accion.tituloJornada } : {}),
+          },
+        })
+      : await llamarApi("DELETE", ruta);
+  return respuesta.resultado;
+}
+
 // Envía una acción de la cola. Es idempotente: repetirla no duplica ni descuadra cupos.
 // Lanza ErrorNegocio si el servidor no puede aceptarla (sin cupos, jornada desactivada...).
 export function ejecutarAccion(uid, accion) {
+  // Con la API, el servidor aplica las mismas reglas dentro de una transacción
+  if (usaApi("inscripciones")) return ejecutarEnApi(accion);
   const tarea =
     accion.tipo === TIPOS.INSCRIBIR ? inscribir(uid, accion) : cancelar(uid, accion);
   return conTiempoLimite(tarea, 20000);

@@ -16,6 +16,8 @@ import {
   leerLocal,
 } from "../services/localStore";
 import { ROLES, esAdministrador, esGestor, normalizarRol } from "../utils/roles";
+import { usaApi } from "../config/api";
+import { llamarApi } from "../services/apiClient";
 
 const AuthContext = createContext(null);
 
@@ -108,13 +110,18 @@ export function AuthProvider({ children }) {
 
     // Guardar perfil extendido en Firestore. Quien se registra siempre es estudiante:
     // el rol de maestro se asigna fuera de la app (ver README).
-    await setDoc(doc(db, "users", credencial.user.uid), {
-      uid: credencial.user.uid,
-      nombre,
-      email,
-      rol: ROLES.ESTUDIANTE,
-      creadoEn: serverTimestamp(),
-    });
+    if (usaApi("sesion")) {
+      // La API crea el perfil: siempre como estudiante, sin que la solicitud pueda elegir el rol
+      await llamarApi("POST", "/v1/me/perfil", { cuerpo: { nombre } });
+    } else {
+      await setDoc(doc(db, "users", credencial.user.uid), {
+        uid: credencial.user.uid,
+        nombre,
+        email,
+        rol: ROLES.ESTUDIANTE,
+        creadoEn: serverTimestamp(),
+      });
+    }
 
     setUsuario({ ...auth.currentUser });
 

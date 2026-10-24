@@ -15,6 +15,8 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db, firebaseConfig } from "../../firebaseConfig";
+import { usaApi } from "../config/api";
+import { llamarApi } from "./apiClient";
 import { conTiempoLimite } from "../utils/sincronizacion";
 import { ETIQUETA_ROL } from "../utils/roles";
 
@@ -37,8 +39,12 @@ export const registrarAuditoria = (actor, { accion, entidad, entidadId, detalle 
   });
 
 // La auditoría no debe impedir una acción ya realizada: si falla solo se avisa en consola
-export const auditar = (actor, datos) =>
-  registrarAuditoria(actor, datos).catch((e) => console.warn("No se pudo registrar la auditoría:", e));
+export const auditar = (actor, datos) => {
+  // Con la API, el servidor audita estas acciones en la misma operación que las ejecuta
+  const modulo = datos.entidad === "jornada" ? "jornadas" : datos.entidad === "reporte" ? "reportes" : null;
+  if (modulo && usaApi(modulo)) return Promise.resolve();
+  return registrarAuditoria(actor, datos).catch((e) => console.warn("No se pudo registrar la auditoría:", e));
+};
 
 // Segunda instancia de autenticación: crear una cuenta no debe cerrar la sesión del administrador
 function autenticacionSecundaria() {
@@ -54,6 +60,9 @@ function autenticacionSecundaria() {
 
 // Crea la cuenta de acceso y su perfil con el rol indicado
 export async function crearUsuario(actor, { nombre, correo, clave, rol }) {
+  if (usaApi("usuarios")) {
+    return (await llamarApi("POST", "/v1/usuarios", { cuerpo: { nombre, correo, clave, rol }, espera: ESPERA_MS })).id;
+  }
   const secundaria = autenticacionSecundaria();
   const credencial = await conTiempoLimite(
     createUserWithEmailAndPassword(secundaria, correo, clave),
@@ -90,6 +99,12 @@ export async function crearUsuario(actor, { nombre, correo, clave, rol }) {
 
 // Cambia nombre, rol y/o estado de otra cuenta (y lo audita en la misma operación)
 export async function actualizarUsuario(actor, usuario, cambios) {
+  if (usaApi("usuarios")) {
+    // El servidor compara con los datos guardados, aplica el cambio y lo audita
+    return (
+      await llamarApi("PATCH", `/v1/usuarios/${encodeURIComponent(usuario.id)}`, { cuerpo: cambios, espera: ESPERA_MS })
+    ).cambiado;
+  }
   const campos = {};
   const detalle = [];
   if (cambios.nombre !== undefined && cambios.nombre !== usuario.nombre) {
@@ -122,6 +137,10 @@ export async function actualizarUsuario(actor, usuario, cambios) {
 }
 
 export function mensajeErrorAdmin(error) {
+  // Validación del servidor (el formulario ya valida): se muestra el mensaje del campo
+  if (error?.code === "invalid-argument" && error.campos) {
+    return Object.values(error.campos)[0] || "Revisa los datos e intenta de nuevo.";
+  }
   const codigo = String(error?.code || "").replace(/^(firestore|auth)\//, "");
   if (codigo === "email-already-in-use") return "Ya existe una cuenta con ese correo.";
   if (codigo === "invalid-email") return "El correo no es válido.";

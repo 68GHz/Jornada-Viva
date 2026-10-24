@@ -1,0 +1,20 @@
+{
+  "name": "jornadaviva-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API con la lógica de negocio de Jornada Viva",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "cd .. && npm run test:api"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.23",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.0.0"
+  }
+}

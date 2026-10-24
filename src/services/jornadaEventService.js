@@ -12,6 +12,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import { usaApi } from "../config/api";
+import { llamarApi } from "./apiClient";
 import { guardarLocal, leerLocal } from "./localStore";
 import { mostrarNotificacionLocal } from "./notificationService";
 import { detectarCambioJornada, detectarEliminacion } from "../utils/cambiosJornada";
@@ -88,6 +90,9 @@ async function leerEstadoVistoRemoto(userId) {
  */
 export function iniciarSincronizadorJornadas(userId) {
   if (!userId) return () => {};
+  // Con la API (módulo "jornadas") los avisos los crea el servidor en el momento del cambio:
+  // el dispositivo ya no los detecta (evita duplicados). Ver NotificationContext.
+  if (usaApi("jornadas")) return () => {};
 
   let activo = true;
   let desuscribirInscripciones = () => {};
@@ -266,6 +271,10 @@ export function iniciarSincronizadorJornadas(userId) {
  */
 export async function marcarNotificacionLeida(notificacionId) {
   try {
+    if (usaApi("notificaciones")) {
+      await llamarApi("PATCH", `/v1/me/notificaciones/${encodeURIComponent(notificacionId)}`, { cuerpo: { leida: true } });
+      return;
+    }
     await updateDoc(doc(db, "notificaciones", notificacionId), {
       leida: true,
       leidaEn: serverTimestamp(),
@@ -282,6 +291,12 @@ export async function marcarNotificacionLeida(notificacionId) {
 export async function marcarTodasNotificacionesLeidas(notificaciones) {
   try {
     const noLeidas = notificaciones.filter((n) => !n.leida);
+    if (usaApi("notificaciones")) {
+      if (noLeidas.length > 0) {
+        await llamarApi("POST", "/v1/me/notificaciones/leer-todas", { cuerpo: { ids: noLeidas.map((n) => n.id) } });
+      }
+      return;
+    }
     await Promise.all(
       noLeidas.map((n) =>
         updateDoc(doc(db, "notificaciones", n.id), {
@@ -301,6 +316,10 @@ export async function marcarTodasNotificacionesLeidas(notificaciones) {
  */
 export async function eliminarNotificacion(notificacionId) {
   try {
+    if (usaApi("notificaciones")) {
+      await llamarApi("DELETE", `/v1/me/notificaciones/${encodeURIComponent(notificacionId)}`);
+      return;
+    }
     await deleteDoc(doc(db, "notificaciones", notificacionId));
   } catch (error) {
     console.error("Error al eliminar notificación:", error);

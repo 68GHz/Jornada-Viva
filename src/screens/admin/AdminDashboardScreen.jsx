@@ -2,7 +2,8 @@ import React, { useMemo } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import { useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
+import { useEstadisticasApi, useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
+import { usaApi } from "../../config/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { Boton, Indicador, estilos } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
@@ -20,13 +21,25 @@ const ACCESOS = [
 // Panel de control del administrador: indicadores globales y accesos a cada módulo
 export default function AdminDashboardScreen({ navigation }) {
   const { usuario } = useAuth();
-  const u = useUsuarios();
-  const j = useTodasJornadas();
-  const stats = useMemo(() => calcularEstadisticas(u.usuarios, j.jornadas), [u.usuarios, j.jornadas]);
+  // Con la API (módulo "reportes") el servidor calcula los indicadores
+  const conApi = usaApi("reportes");
+  const u = useUsuarios(!conApi);
+  const j = useTodasJornadas(null, !conApi);
+  const remoto = useEstadisticasApi(conApi);
+  const local = useMemo(
+    () => (conApi ? null : calcularEstadisticas(u.usuarios, j.jornadas)),
+    [conApi, u.usuarios, j.jornadas]
+  );
+  // Sin datos (p. ej. sin conexión) se muestran los indicadores en cero, igual que antes
+  const stats = (conApi ? remoto.estadisticas : local) ?? calcularEstadisticas([], []);
 
-  if (u.cargando || j.cargando) return <LoadingSpinner mensaje="Cargando el panel..." />;
+  if (conApi ? remoto.cargando && !remoto.estadisticas : u.cargando || j.cargando) {
+    return <LoadingSpinner mensaje="Cargando el panel..." />;
+  }
 
-  const error = u.error || j.error;
+  const error = conApi ? remoto.error : u.error || j.error;
+  const sinDatos = conApi ? !remoto.estadisticas : u.usuarios.length === 0;
+  const enLinea = conApi ? remoto.enLinea : u.enLinea;
   return (
     <ScrollView style={estilos.pantalla} contentContainerStyle={estilos.contenido}>
       <View style={estilos.tarjeta}>
@@ -38,7 +51,7 @@ export default function AdminDashboardScreen({ navigation }) {
       </View>
 
       {!!error && <Text style={{ color: colors.error }}>{error}</Text>}
-      {!u.enLinea && u.usuarios.length === 0 && (
+      {!enLinea && sinDatos && (
         <Text style={estilos.texto}>Sin conexión: conéctate a internet para ver los datos de la plataforma.</Text>
       )}
 

@@ -219,6 +219,22 @@ El estudiante recibe un aviso (pantalla **Notificaciones** y aviso local del dis
 
 **Limitación.** El aviso se genera cuando el estudiante abre la app: sin un servidor no hay notificaciones *push* con la app cerrada. `functions/index.js` tiene una Cloud Function pensada para eso, pero **no está desplegada** (requiere el plan Blaze de Firebase). Si se despliega, habría que desactivar la creación de avisos en la app o los estudiantes recibirían cada aviso dos veces.
 
+## API de negocio (migración en curso)
+
+La lógica de negocio (inscripciones, gestión de jornadas, avisos, cuentas, estadísticas, auditoría)
+se está moviendo de la app a una API Node + Express (`api/`) que escribe en Firestore con el Admin
+SDK; la app solo lee. **Mientras `EXPO_PUBLIC_API_URL` esté vacía, la app funciona exactamente como
+antes** (lógica local + reglas de Firestore).
+
+```bash
+EXPO_PUBLIC_API_URL=https://tu-api.example.com   # en .env; vacío = lógica local
+EXPO_PUBLIC_API_MODULOS=todos                    # o: sesion,inscripciones,jornadas,notificaciones,usuarios,reportes
+```
+
+Estado, arquitectura, endpoints, despliegue y recuperación: [`docs/migracion-api/`](docs/migracion-api/).
+Pruebas: `npm run test:api` (API contra emuladores) y `npm run test:equivalencia` (los servicios de la
+app con la lógica local y con la API deben dar el mismo resultado); `npm run test:all` ejecuta todo.
+
 ## Investigación de campo
 
 El material del trabajo de campo en el campus TdeA está en [`docs/investigacion`](docs/investigacion).

@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Reglas de Firestore para DESPUÉS de la migración a la API (módulo M7 · cierre).
+//
+// La API (Admin SDK) es la única que escribe: ya no se aplican las reglas de negocio aquí, porque
+// el Admin SDK las ignora y las valida la propia API. La app móvil solo LEE (listeners en tiempo
+// real y caché sin conexión) y únicamente lo suyo; toda escritura directa del cliente se deniega.
+//
+// NO publicar hasta que la API esté desplegada y todas las instalaciones usen la versión de la
+// app que llama a la API. Ver docs/migracion-api/05-despliegue-y-recuperacion.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function esAdmin() {
+      let perfil = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && perfil.data.get('activo', true) != false
+        && perfil.data.get('rol', 'estudiante') == 'administrador';
+    }
+
+    // Perfil: cada quien lee el suyo (rol y estado en vivo); el administrador lista todos
+    match /users/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || esAdmin());
+      allow write: if false;
+    }
+
+    // Jornadas: lectura para cualquier usuario con sesión (listados, detalle, "Mis jornadas")
+    match /jornadas/{jornadaId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Inscripciones: cada alumno lee solo las suyas; la planilla de inscritos la entrega la API
+    match /inscripciones/{inscripcionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Notificaciones: las crea la API; cada usuario lee solo las suyas
+    match /notificaciones/{notificacionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Auditoría: la escribe la API; solo la lee un administrador
+    match /auditoria/{registroId} {
+      allow read: if esAdmin();
+      allow write: if false;
+    }
+
+    match /eventos_jornadas/{eventoId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

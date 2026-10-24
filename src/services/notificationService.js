@@ -2,6 +2,8 @@ import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import { usaApi } from "../config/api";
+import { llamarApi } from "./apiClient";
 
 // Detectar si la app está corriendo dentro de Expo Go
 export const isExpoGo =
@@ -84,10 +86,14 @@ export async function registrarPushNotifications(userId) {
 
     if (token) {
       // Guardar el token en el perfil de Firestore del usuario
-      await updateDoc(doc(db, "users", userId), {
-        pushToken: token,
-        pushTokenActualizadoEn: new Date(),
-      });
+      if (usaApi("notificaciones")) {
+        await llamarApi("PUT", "/v1/me/push-token", { cuerpo: { token } });
+      } else {
+        await updateDoc(doc(db, "users", userId), {
+          pushToken: token,
+          pushTokenActualizadoEn: new Date(),
+        });
+      }
     }
 
     return token;

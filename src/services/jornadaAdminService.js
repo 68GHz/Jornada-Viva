@@ -11,6 +11,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import { usaApi } from "../config/api";
+import { llamarApi } from "./apiClient";
 import { fechaAMillis } from "../utils/jornadaFecha";
 import { conTiempoLimite } from "../utils/sincronizacion";
 
@@ -30,8 +32,14 @@ const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fec
   cuposTotales,
 });
 
+const rutaJornada = (id) => `/v1/jornadas/${encodeURIComponent(id)}`;
+
+// Con la API (módulo "jornadas") el servidor aplica los permisos y validaciones, crea los avisos
+// a los inscritos y audita las acciones del administrador.
 export const crearJornada = (uid, datos) =>
-  conTiempoLimite(
+  usaApi("jornadas")
+    ? llamarApi("POST", "/v1/jornadas", { cuerpo: { ...datos, creadoPor: uid } })
+    : conTiempoLimite(
     addDoc(collection(db, "jornadas"), {
       ...camposEditables(datos),
       cuposOcupados: 0,
@@ -44,7 +52,9 @@ export const crearJornada = (uid, datos) =>
 
 // `creadoPor` (solo el administrador): reasigna la jornada a otro gestor
 export const editarJornada = (jornadaId, datos, creadoPor) =>
-  conTiempoLimite(
+  usaApi("jornadas")
+    ? llamarApi("PUT", rutaJornada(jornadaId), { cuerpo: { ...datos, ...(creadoPor ? { creadoPor } : {}) } })
+    : conTiempoLimite(
     updateDoc(doc(db, "jornadas", jornadaId), {
       ...camposEditables(datos),
       ...(creadoPor ? { creadoPor } : {}),
@@ -53,18 +63,27 @@ export const editarJornada = (jornadaId, datos, creadoPor) =>
   );
 
 export const cancelarJornada = (jornadaId) =>
-  conTiempoLimite(updateDoc(doc(db, "jornadas", jornadaId), { activa: false }), ESPERA_MS);
+  usaApi("jornadas")
+    ? llamarApi("POST", `${rutaJornada(jornadaId)}/cancelar`)
+    : conTiempoLimite(updateDoc(doc(db, "jornadas", jornadaId), { activa: false }), ESPERA_MS);
 
 export const reactivarJornada = (jornadaId) =>
-  conTiempoLimite(updateDoc(doc(db, "jornadas", jornadaId), { activa: true }), ESPERA_MS);
+  usaApi("jornadas")
+    ? llamarApi("POST", `${rutaJornada(jornadaId)}/reactivar`)
+    : conTiempoLimite(updateDoc(doc(db, "jornadas", jornadaId), { activa: true }), ESPERA_MS);
 
 // Las inscripciones de una jornada eliminada se conservan: a los estudiantes les
 // aparece como "No disponible" en Mis jornadas.
 export const eliminarJornada = (jornadaId) =>
-  conTiempoLimite(deleteDoc(doc(db, "jornadas", jornadaId)), ESPERA_MS);
+  usaApi("jornadas")
+    ? llamarApi("DELETE", rutaJornada(jornadaId))
+    : conTiempoLimite(deleteDoc(doc(db, "jornadas", jornadaId)), ESPERA_MS);
 
 // Estudiantes inscritos en una jornada (siempre desde el servidor)
 export async function obtenerInscritos(jornadaId) {
+  if (usaApi("jornadas")) {
+    return (await llamarApi("GET", `${rutaJornada(jornadaId)}/inscritos`, { espera: ESPERA_MS })).inscritos;
+  }
   const snapshot = await conTiempoLimite(
     getDocsFromServer(
       query(collection(db, "inscripciones"), where("jornadaId", "==", jornadaId))
@@ -86,6 +105,11 @@ export async function obtenerInscritos(jornadaId) {
 
 // Mensaje para el usuario según el error de Firebase
 export function mensajeDeError(error) {
+  // Validación del servidor (no debería ocurrir: el formulario ya valida): se muestra su mensaje
+  if (error?.code === "invalid-argument" && error.campos) {
+    return Object.values(error.campos)[0] || "Revisa los datos e intenta de nuevo.";
+  }
+  if (error?.code === "failed-precondition" && error.message) return error.message;
   const codigo = String(error?.code || "").replace(/^firestore\//, "");
   if (codigo === "permission-denied") {
     return "No tienes permiso para realizar esta acción. Solo puedes administrar las jornadas que tienes asignadas.";

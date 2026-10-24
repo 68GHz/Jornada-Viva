@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { Alert, ScrollView, Text, View } from "react-native";
 import { useAuth } from "../../context/AuthContext";
-import { useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
+import { useEstadisticasApi, useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
+import { usaApi } from "../../config/api";
+import { llamarApi } from "../../services/apiClient";
 import { auditar } from "../../services/adminService";
 import { compartirCsv } from "../../services/planillaService";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -32,22 +34,39 @@ function Tabla({ titulo, filas }) {
 // Estadísticas globales de la plataforma y reporte de jornadas descargable
 export default function ReportesScreen() {
   const { usuario } = useAuth();
-  const u = useUsuarios();
-  const j = useTodasJornadas();
+  // Con la API (módulo "reportes") el servidor calcula las estadísticas y genera el reporte
+  const conApi = usaApi("reportes");
+  const u = useUsuarios(!conApi);
+  const j = useTodasJornadas(null, !conApi);
+  const remoto = useEstadisticasApi(conApi);
   const [exportando, setExportando] = useState(false);
   const ahora = Date.now();
 
-  const stats = useMemo(() => calcularEstadisticas(u.usuarios, j.jornadas, ahora), [u.usuarios, j.jornadas]); // eslint-disable-line react-hooks/exhaustive-deps
+  const local = useMemo(
+    () => (conApi ? null : calcularEstadisticas(u.usuarios, j.jornadas, ahora)),
+    [conApi, u.usuarios, j.jornadas] // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const nombres = useMemo(() => new Map(u.usuarios.map((x) => [x.id, x.nombre || x.email])), [u.usuarios]);
 
-  if (u.cargando || j.cargando) return <LoadingSpinner mensaje="Calculando estadísticas..." />;
+  if (conApi ? remoto.cargando && !remoto.estadisticas : u.cargando || j.cargando) {
+    return <LoadingSpinner mensaje="Calculando estadísticas..." />;
+  }
 
+  const stats = (conApi ? remoto.estadisticas : local) ?? calcularEstadisticas([], []);
   const ordenar = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
-  const porGestor = ordenar(stats.porGestor).map(([id, n]) => [id === "sin-gestor" ? "Sin gestor asignado" : nombres.get(id) || "Gestor desconocido", n]);
+  const porGestor = conApi
+    ? (remoto.estadisticas?.porGestorNombre ?? []).map((g) => [g.nombre, g.jornadas]).sort((a, b) => b[1] - a[1])
+    : ordenar(stats.porGestor).map(([id, n]) => [id === "sin-gestor" ? "Sin gestor asignado" : nombres.get(id) || "Gestor desconocido", n]);
 
   const exportar = async () => {
     setExportando(true);
     try {
+      if (conApi) {
+        // El servidor genera el reporte (y deja constancia en la auditoría)
+        const csv = await llamarApi("GET", "/v1/admin/reporte-jornadas.csv", { texto: true });
+        await compartirCsv("reporte-jornadas.csv", csv, "Reporte de jornadas");
+        return;
+      }
       const filas = j.jornadas.map((x) => ({
         titulo: x.titulo,
         fecha: x.fecha,
@@ -80,7 +99,7 @@ export default function ReportesScreen() {
         titulo="Usuarios por rol"
         filas={[["Alumnos", stats.estudiantes], ["Gestores", stats.gestores], ["Administradores", stats.administradores], ["Cuentas inactivas", stats.cuentasInactivas]]}
       />
-      <Boton texto="Descargar reporte de jornadas (Excel)" onPress={exportar} cargando={exportando} deshabilitado={j.jornadas.length === 0} />
+      <Boton texto="Descargar reporte de jornadas (Excel)" onPress={exportar} cargando={exportando} deshabilitado={stats.totalJornadas === 0} />
     </ScrollView>
   );
 }

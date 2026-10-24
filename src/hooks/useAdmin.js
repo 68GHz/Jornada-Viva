@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { useConnectivity } from "../context/ConnectivityContext";
 import { fechaAMillis, normalizarJornada } from "../utils/jornadaFecha";
 import { normalizarRol } from "../utils/roles";
 import { mensajeErrorAdmin } from "../services/adminService";
+import { llamarApi } from "../services/apiClient";
 
 // Escucha en tiempo real una consulta del administrador. Sin conexión no se queda cargando.
 function useColeccion(construirConsulta, convertir, clave, habilitado = true) {
@@ -57,14 +58,15 @@ export function useUsuarios(habilitado = true) {
 }
 
 // Todas las jornadas de la plataforma; `gestorId` limita a las asignadas a un gestor
-export function useTodasJornadas(gestorId = null) {
+export function useTodasJornadas(gestorId = null, habilitado = true) {
   const r = useColeccion(
     () =>
       gestorId
         ? query(collection(db, "jornadas"), where("creadoPor", "==", gestorId))
         : collection(db, "jornadas"),
     (d) => normalizarJornada(d.id, d.data()),
-    `jornadas:${gestorId || "todas"}`
+    `jornadas:${gestorId || "todas"}`,
+    habilitado
   );
   return { jornadas: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea };
 }
@@ -77,4 +79,34 @@ export function useAuditoria(maximo = 100) {
     `auditoria:${maximo}`
   );
   return { registros: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea };
+}
+
+// Estadísticas globales calculadas por la API (módulo "reportes"): se piden al abrir la pantalla
+// y cada vez que vuelve la conexión. `habilitado` false = no hace nada (se usa la lógica local).
+export function useEstadisticasApi(habilitado) {
+  const { enLinea } = useConnectivity();
+  const [estadisticas, setEstadisticas] = useState(null);
+  const [cargando, setCargando] = useState(!!habilitado);
+  const [error, setError] = useState(null);
+
+  const recargar = useCallback(async () => {
+    if (!habilitado) return;
+    setCargando(true);
+    try {
+      setEstadisticas(await llamarApi("GET", "/v1/admin/estadisticas"));
+      setError(null);
+    } catch (err) {
+      console.warn("No se pudieron leer las estadísticas:", err);
+      setError(mensajeErrorAdmin(err));
+    } finally {
+      setCargando(false);
+    }
+  }, [habilitado]);
+
+  useEffect(() => {
+    if (enLinea) recargar();
+    else setCargando(false);
+  }, [recargar, enLinea]);
+
+  return { estadisticas, cargando, error, enLinea, recargar };
 }

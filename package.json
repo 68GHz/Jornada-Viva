@@ -9,7 +9,9 @@
     "web": "expo start --web",
     "test": "node --test tests/unit/*.test.mjs",
     "test:rules": "npx --yes firebase-tools emulators:exec --only firestore --project demo-jornadaviva \"node --test --test-concurrency=1 tests/rules/*.test.mjs\"",
-    "test:all": "npm test && npm run test:rules"
+    "test:all": "npm test && npm run test:rules && npm run test:api && npm run test:equivalencia",
+    "test:api": "npx --yes firebase-tools emulators:exec --only firestore,auth --project demo-jornadaviva \"node --test --test-concurrency=1 api/tests/unit/*.test.mjs api/tests/integracion/*.test.mjs\"",
+    "test:equivalencia": "npx --yes firebase-tools emulators:exec --only firestore,auth --project demo-jornadaviva \"node tests/equivalencia/ejecutar.cjs\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

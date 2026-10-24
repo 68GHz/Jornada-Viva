@@ -9,6 +9,8 @@ import {
   eliminarNotificacion,
 } from "../services/jornadaEventService";
 import { registrarPushNotifications } from "../services/notificationService";
+import { avisarNuevasNotificaciones } from "../services/avisosLocales";
+import { usaApi } from "../config/api";
 
 const NotificationContext = createContext(null);
 
@@ -49,6 +51,8 @@ export function NotificationProvider({ children }) {
       usuario.uid,
       (lista) => {
         setNotificaciones(lista);
+        // Con la API las crea el servidor: el dispositivo solo muestra el aviso local
+        if (usaApi("jornadas")) avisarNuevasNotificaciones(usuario.uid, lista);
         const sinLeer = lista.filter((n) => !n.leida).length;
         setNoLeidasCount(sinLeer);
         setCargando(false);
