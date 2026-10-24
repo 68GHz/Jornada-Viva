@@ -1,31 +1,47 @@
 # Jornada Viva
 
-Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornadas, brigadas y actividades de proyección social y bienestar del **Tecnológico de Antioquia**. Los usuarios pueden crear una cuenta, explorar las jornadas disponibles, ver su detalle e inscribirse, con todo persistido en Firebase.
+Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornadas, brigadas y actividades de proyección social y bienestar del **Tecnológico de Antioquia**. Los alumnos exploran e inscriben jornadas (también sin internet); los gestores administran las suyas y descargan la planilla de inscritos; los administradores gestionan usuarios, jornadas, reportes y auditoría. La lógica de negocio vive en una **API propia** (`api/`) y los datos en Firebase.
 
 ## Funcionalidades
 
 - Registro, inicio y cierre de sesión con **Firebase Authentication**.
-- Listado de jornadas cargado en tiempo real desde **Firestore** (título, fecha, hora, lugar y entidad organizadora).
-- Vista de detalle con descripción completa, cupos disponibles y responsable.
-- Inscripción a la jornada con confirmación visual, persistida en Firestore.
-- Validación para evitar que un usuario se inscriba dos veces a la misma jornada.
-- **Roles** (alumno, gestor de jornadas y administrador): los gestores gestionan sus jornadas asignadas y descargan la planilla; el administrador gestiona usuarios, gestores, jornadas, reportes y auditoría (ver [Roles y permisos](#roles-y-permisos)).
+- Listado de jornadas en tiempo real desde **Firestore** (con filtros por texto, estado y fecha), detalle con cupos y responsable.
+- **Inscripción y cancelación** con control de cupos, sin duplicados y con **modo offline** (las acciones quedan en cola y se sincronizan al reconectar).
+- **Notificaciones** cuando cambia una jornada en la que el alumno está inscrito (cancelación, reactivación, reprogramación, actualización, eliminación).
+- **Tres roles** — alumno, gestor de jornadas y administrador (ver [Roles y permisos](#roles-y-permisos)): los gestores crean y gestionan sus jornadas y descargan la planilla (CSV para Excel); el administrador gestiona usuarios, gestores, jornadas, estadísticas, reportes y auditoría.
+- **API de negocio** en Node + Express que aplica las reglas, crea los avisos y audita (ver [API de negocio](#api-de-negocio)).
 
 ## Stack
 
-- Expo `~57` / React Native `0.86`
-- React Navigation (native stack)
-- Firebase (Auth + Firestore)
-- dayjs para formato de fechas
-- `@react-native-async-storage/async-storage` (persistencia local) y `@react-native-community/netinfo` (estado de la conexión) para el modo offline
+- **App:** Expo SDK `58` · React Native `0.88` · React `19.3` · React Navigation (native stack)
+- **Firebase:** Authentication + Firestore (proyecto `jornadaviva-476ff`)
+- **Persistencia local y red:** `@react-native-async-storage/async-storage` y `@react-native-community/netinfo` (modo offline)
+- **Archivos y avisos:** `expo-file-system`, `expo-sharing` (planilla y reportes), `expo-notifications` (avisos locales)
+- **Fechas:** dayjs
+- **API:** Node.js ≥ 20 + Express 5 + `firebase-admin`, desplegable en Render (plan gratuito) o en cualquier hosting Node/Docker
 
-> Este proyecto usa Expo SDK 54+. Consulta la documentación versionada en <https://docs.expo.dev/versions/v54.0.0/> antes de modificar la configuración nativa.
+> Este proyecto usa **Expo SDK 58**, que solo funciona con **Expo Go 58** (o un *development build* de SDK 58). Consulta la documentación versionada en <https://docs.expo.dev/versions/v58.0.0/> antes de modificar la configuración nativa o usar APIs de Expo.
+
+## Arquitectura
+
+```
+App móvil (Expo)                        API (Node + Express)                 Firebase
+────────────────                        ────────────────────                 ────────
+Firebase Auth (inicio de sesión) ──ID token──► verifica token, rol y cuenta ──► Auth
+apiClient: escrituras y reportes ───/v1/...──► reglas de negocio ──Admin SDK──► Firestore
+listeners onSnapshot (solo lectura) ◄───────────── tiempo real ───────────────── Firestore
+```
+
+- La **API es la fuente de verdad**: es la única que escribe en Firestore (inscripciones, jornadas, avisos, cuentas, auditoría).
+- La **app solo lee** con listeners de Firestore (tiempo real y modo sin conexión). Sin `EXPO_PUBLIC_API_URL`, la app usa su lógica local anterior (Firestore + `firestore.rules`), útil como respaldo.
+- Detalles, endpoints, despliegue y recuperación: [`docs/migracion-api/`](docs/migracion-api/).
 
 ## Requisitos previos
 
-- Node.js LTS
-- Expo CLI (`npx expo`)
-- Un proyecto de Firebase con Authentication (Email/Password) y Firestore habilitados
+- **Node.js 22.13+** (o 24.3+). Las versiones impares no están soportadas por Expo SDK 58.
+- **Expo Go 58** en el celular (Play Store / App Store) o un emulador.
+- Un proyecto de Firebase con Authentication (Email/Password) y Firestore habilitados.
+- Para las pruebas con emuladores: **Java** (para el emulador de Firestore).
 
 ## Configuración
 
@@ -44,6 +60,10 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
    EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
    EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
    EXPO_PUBLIC_FIREBASE_APP_ID=
+
+   # Opcional: usar la API de negocio (vacío = lógica local)
+   EXPO_PUBLIC_API_URL=https://jornada-viva.onrender.com
+   EXPO_PUBLIC_API_MODULOS=todos
    ```
 
 3. Inicia la app:
@@ -52,35 +72,51 @@ Aplicación móvil (React Native + Expo) para gestionar la inscripción a jornad
    npm start
    ```
 
-   Luego abre en Expo Go (escaneando el QR) o en un emulador con `npm run android` / `npm run ios`.
+   Luego abre en Expo Go (escaneando el QR) o en un emulador con `npm run android` / `npm run ios`. Las variables `EXPO_PUBLIC_*` se incorporan al empaquetar: tras cambiar el `.env`, reinicia con `npx expo start -c`.
 
 ## Estructura del proyecto
 
-```src/
-├── components/      # JornadaCard, LoadingSpinner
-├── context/         # AuthContext (estado de autenticación)
-├── navigation/      # AppNavigator (stacks auth y app)
-├── screens/
-│   ├── auth/        # LoginScreen, RegisterScreen
-│   ├── app/         # Pantallas del estudiante: HomeScreen, JornadasListScreen, JornadaDetailScreen...
-│   ├── maestro/     # Pantallas del gestor (y del administrador): MaestroHomeScreen, JornadaFormScreen, JornadaAdminScreen
-│   └── admin/       # Módulo del administrador: dashboard, usuarios, jornadas, reportes, auditoría, perfil
-└── theme/           # colors
+```
+├── App.js · index.js          # Punto de entrada y proveedores
+├── firebaseConfig.js          # Inicialización de Firebase (Auth con AsyncStorage + Firestore)
+├── firestore.rules            # Reglas actuales (mientras la app pueda escribir directo)
+├── firestore.api.rules        # Reglas de solo lectura para cuando la API sea la única escritora
+├── src/
+│   ├── components/            # JornadaCard, FiltrosJornadas, CalendarioRango, ConnectionBanner, AdminUi...
+│   ├── config/api.js          # URL de la API e interruptor por módulo
+│   ├── context/               # Auth, Jornadas, Conectividad, Sincronización, Notificaciones
+│   ├── hooks/                 # useAdmin, useJornadasMaestro, useAccionesInscripcion
+│   ├── navigation/            # AppNavigator (stacks de auth, alumno, gestor y administrador)
+│   ├── screens/
+│   │   ├── auth/              # Login, Registro
+│   │   ├── app/               # Alumno: inicio, jornadas, detalle, Mis jornadas, notificaciones, sincronización
+│   │   ├── maestro/           # Gestor (y administrador): GestorHome, formulario y administración de jornada
+│   │   └── admin/             # Administrador: dashboard, usuarios, jornadas, reportes, auditoría, perfil
+│   ├── services/              # apiClient, inscripciones, jornadas, cuentas, cola offline, almacenamiento local...
+│   ├── utils/                 # Reglas puras: roles, estados, fechas, planilla, avisos, sincronización
+│   └── theme/                 # Colores
+├── api/                       # API de negocio (Node + Express + Admin SDK) — ver su README
+├── functions/                 # Cloud Function de avisos (NO desplegada; se retira al cerrar la migración)
+├── scripts/admin.js           # Administración de cuentas fuera de la app (gcloud)
+├── tests/                     # unit/ · rules/ · equivalencia/
+└── docs/                      # migracion-api/ (diseño y operación de la API) · investigacion/ (trabajo de campo)
 ```
 
 ## Modelo de datos (Firestore)
 
-- **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante`, `gestor` o `administrador`; sin rol = estudiante; `maestro` = alias antiguo de `gestor`), `activo` (`false` = cuenta desactivada), `creadoEn`, `jornadasVistas`.
+- **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante`, `gestor` o `administrador`; sin rol = estudiante; `maestro` = alias antiguo de `gestor`), `activo` (`false` = cuenta desactivada), `creadoEn`, `jornadasVistas` (estado de cada jornada inscrita, base de los avisos), `pushToken`.
 - **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del gestor responsable; las jornadas anteriores a los roles no lo tienen) y `creadaEn`.
-- **`inscripciones/{id}`**: `userId`, `jornadaId`, `nombreUsuario`, `emailUsuario`, `tituloJornada`, `fechaJornada`, `inscritoEn`, `asistio`.
+- **`inscripciones/{uid}_{jornadaId}`**: `userId`, `jornadaId`, `nombreUsuario`, `emailUsuario`, `tituloJornada`, `fechaJornada`, `inscritoEn`, `asistio` (las antiguas tienen ID aleatorio y se siguen reconociendo).
+- **`notificaciones/{id}`**: `userId`, `jornadaId`, `tipo`, `titulo`, `mensaje`, `leida`, `creadaEn`, `datosJornada`.
+- **`auditoria/{id}`**: `accion`, `entidad`, `entidadId`, `detalle`, `actorId`, `actorNombre`, `creadaEn` (inmutable).
 
 ## Modo offline
 
-La app sigue siendo útil sin internet (se puede abrir en modo avión): muestra las jornadas y las inscripciones ya descargadas y permite inscribirse o cancelar; esas acciones quedan guardadas en el dispositivo y se envían a Firestore al recuperar la conexión.
+La app sigue siendo útil sin internet (se puede abrir en modo avión): muestra las jornadas y las inscripciones ya descargadas y permite inscribirse o cancelar; esas acciones quedan guardadas en el dispositivo y se envían al servidor al recuperar la conexión.
 
 ### Qué se guarda localmente y con qué librería
 
-Todo se guarda con **AsyncStorage**, en claves propias de cada usuario (`jv:v1:<uid>:<nombre>`). Al **cerrar sesión se borran todas** (incluidas las instantáneas de notificaciones) y no se vuelve a escribir nada hasta iniciar sesión de nuevo.
+Todo se guarda con **AsyncStorage**, en claves propias de cada usuario (`jv:v1:<uid>:<nombre>`). Al **cerrar sesión se borran todas** y no se vuelve a escribir nada hasta iniciar sesión de nuevo.
 
 | Clave | Contenido |
 |---|---|
@@ -88,6 +124,8 @@ Todo se guarda con **AsyncStorage**, en claves propias de cada usuario (`jv:v1:<
 | `inscripciones` | Inscripciones del usuario (`jornadaId`, título, fecha, `asistio`) |
 | `cola` | Cola de acciones pendientes de sincronizar |
 | `meta` | Fecha de la última sincronización |
+| `perfil` | Rol del usuario, para abrir sin conexión |
+| `notificacionesAvisadas` | Notificaciones que ya se mostraron como aviso del dispositivo |
 
 El estado de la red se detecta con **NetInfo**. La persistencia propia de Firestore solo se usa como apoyo: en React Native guarda en memoria, así que la lógica offline es la de la app (`src/services/localStore.js`).
 
@@ -96,7 +134,7 @@ El estado de la red se detecta con **NetInfo**. La persistencia propia de Firest
 1. **Lectura.** `JornadasContext` es la fuente única de datos. Al iniciar carga lo guardado en AsyncStorage y, cuando el servidor responde, se actualiza y se vuelve a guardar. Un snapshot vacío que llega de la caché (sin red) nunca borra lo que ya se muestra, y nunca queda cargando indefinidamente.
 2. **Avisos de estado.** `ConnectionBanner` (parte inferior de las pantallas) muestra un solo aviso a la vez: *Conectado* o *Sin conexión* durante exactamente 10 s tras cada cambio de conexión; *Sincronizando datos* mientras se envían los cambios pendientes (se oculta al terminar bien, sin límite de tiempo si la sincronización es larga); y, si algo falla, un aviso de error que conserva los datos pendientes y se reintenta solo. Al tocar un aviso de error se abre la pantalla **Sincronización** (reintentar o descartar cada acción).
 3. **Escritura.** Inscribirse y cancelar pasan siempre por la cola (`src/services/syncQueueService.js`). Con conexión se envían al instante; sin conexión quedan como **"Pendiente por sincronizar"** (en la lista, el detalle, Mis jornadas y el inicio) y los cupos mostrados incluyen su efecto. Antes de continuar sin conexión la app informa y pide confirmación.
-4. **Sincronización.** `src/services/syncEngine.js` envía las acciones una a una y en orden cuando vuelve internet, al volver a abrir la app o desde "Sincronizar ahora". Cada envío (`src/services/inscripcionService.js`) es una transacción de Firestore que valida jornada activa y vigente, cupos y duplicados.
+4. **Sincronización.** `src/services/syncEngine.js` envía las acciones una a una y en orden cuando vuelve internet, al volver a abrir la app o desde "Sincronizar ahora". Cada envío (`src/services/inscripcionService.js`) llama a la **API** (`PUT/DELETE /v1/jornadas/{id}/inscripcion`) o, sin API configurada, ejecuta la transacción de Firestore equivalente; en ambos casos valida jornada activa y vigente, cupos y duplicados.
 5. **Cierre de sesión.** Si hay acciones pendientes (o no hay conexión) se avisa de que se perderán y se pide confirmación.
 
 ### Reglas de negocio y conflictos
@@ -110,8 +148,8 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 | Cancelación de algo ya cancelado | Se da por hecha, el cupo nunca baja de 0 |
 | Inscribirse y cancelar sin haber enviado nada | Se anulan entre sí; no se envía nada |
 
-- **Fechas:** el plazo de cancelación (2 días) y el vencimiento de las jornadas se validan con la **fecha del dispositivo** en el momento de la acción.
-- **Duplicados:** la inscripción nueva usa el ID `<uid>_<jornadaId>` y las reglas de Firestore no permiten `update` sobre inscripciones, así que un doble toque o un reenvío no la duplican. También se detectan las inscripciones antiguas (ID aleatorio).
+- **Fechas:** el plazo de cancelación (2 días) se valida en la app con la fecha del dispositivo; el vencimiento de la inscripción ("la jornada ya finalizó") lo valida el servidor con su reloj.
+- **Duplicados:** la inscripción nueva usa el ID `<uid>_<jornadaId>` y nunca se actualiza, así que un doble toque o un reenvío no la duplican. También se detectan las inscripciones antiguas (ID aleatorio).
 - **Errores de red:** la acción sigue pendiente y se reintenta sola con espera creciente (5 s, 10 s, 20 s... hasta 2 min) o al recuperar la conexión; no se pierde nada aunque se cierre la app (se vuelve a enviar sin duplicar).
 - **Errores permanentes** (sin cupos, sin permiso...): la acción queda **rechazada** con el motivo, sin perder datos, y se avisa al usuario.
 - Sin conexión la limpieza de jornadas vencidas no se ejecuta (siguen ocultas) y se hace al reconectar.
@@ -127,7 +165,7 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 
 ## Roles y permisos
 
-La app tiene tres roles. El rol se guarda en `users/{uid}.rol` y decide qué pantallas se muestran; **lo que de verdad se permite lo valida el servidor** con las reglas de Firestore (`firestore.rules`), así que manipular la app, las URL o las solicitudes no da más permisos.
+La app tiene tres roles. El rol se guarda en `users/{uid}.rol` y decide qué pantallas se muestran; **lo que de verdad se permite lo valida el servidor** (la API, y las reglas de Firestore como segunda barrera), así que manipular la app, las URL o las solicitudes no da más permisos.
 
 | Rol | Valor | Antes | Qué hace |
 |---|---|---|---|
@@ -140,14 +178,14 @@ La app tiene tres roles. El rol se guarda en `users/{uid}.rol` y decide qué pan
 | Funcionalidad | Usuario/Alumno | Gestor de jornadas | Administrador |
 |---|---|---|---|
 | Consultar información propia | Sí | Sí | Sí |
-| Participar en jornadas (inscribirse, cancelar) | Sí (reglas actuales) | No (sin cambios respecto a "maestro") | No (supuesto: la participación es del alumno) |
+| Participar en jornadas (inscribirse, cancelar) | Sí | No (lo limita la pantalla) | No (lo limita la pantalla) |
 | Gestionar jornadas | No | Solo las **asignadas** a él (`creadoPor`) | **Todas**, y puede reasignarlas |
 | Crear jornadas | No | A su nombre | Para cualquier gestor |
 | Ver inscritos y descargar planilla | No | De sus jornadas | De cualquier jornada |
 | Gestionar usuarios (crear, editar, activar/desactivar) | No | No | Sí |
 | Asignar roles y permisos | No | No | Sí (nunca el suyo) |
 | Dashboard administrativo | No | No | Sí |
-| Reportes globales | No | No (supuesto: solo ve el resumen de sus jornadas) | Sí |
+| Reportes globales | No | No | Sí |
 | Auditoría | No | No | Sí (solo lectura) |
 
 ### Pantallas del administrador
@@ -156,16 +194,16 @@ La app tiene tres roles. El rol se guarda en `users/{uid}.rol` y decide qué pan
 
 ### Cómo se protege (servidor)
 
-- **Rol:** al registrarse solo se puede ser estudiante activo. Nadie puede cambiarse el rol ni su estado de cuenta, tampoco un administrador sobre sí mismo (así nunca se queda el sistema sin administrador). Solo un administrador cambia el rol o el estado de **otras** cuentas.
-- **Cuentas desactivadas** (`activo: false`): la app cierra la sesión de inmediato y las reglas les impiden escribir (inscribirse, crear o editar jornadas, administrar). Nota: sin Admin SDK no se puede deshabilitar la cuenta de acceso de Firebase Auth en sí; el bloqueo lo aplican la app y las reglas.
+- **Rol:** al registrarse solo se puede ser estudiante activo. Nadie puede cambiarse el rol ni su estado de cuenta, tampoco un administrador sobre sí mismo (así nunca se queda el sistema sin administrador). Solo un administrador cambia el rol o el estado de **otras** cuentas. La API lee el rol y el estado de la cuenta en **cada solicitud**.
+- **Cuentas desactivadas** (`activo: false`): la app cierra la sesión de inmediato y la API rechaza todo con 403. No se deshabilita la cuenta de acceso de Firebase Auth en sí.
 - **Jornadas:** un gestor solo administra las que figuran a su nombre; las anteriores a los roles (sin `creadoPor`) y las ajenas solo las gestiona un administrador. Un gestor no puede reasignarlas. El servidor valida espacio, textos, cupos, fecha futura y que el gestor asignado exista, esté activo y tenga rol de gestor o administrador.
-- **Inscritos:** el estudiante lee las suyas; el gestor, las de sus jornadas; el administrador, todas.
-- **Auditoría:** el administrador registra sus acciones importantes (crear cuenta, cambiar rol, activar/desactivar, crear/editar/reasignar/cancelar/reactivar/eliminar jornadas, exportar reportes) en `auditoria`, siempre a su nombre y con la hora del servidor. Los registros no se pueden modificar ni borrar; solo los lee un administrador. Los cambios de cuentas se guardan en la **misma operación atómica** que el registro (si falla uno, falla el otro).
-- **Compatibilidad:** el nombre anterior `maestro` se sigue aceptando como `gestor` (en la app y en las reglas) hasta migrar los datos.
+- **Inscritos:** el alumno lee las suyas; el gestor, las de sus jornadas (por la API); el administrador, todas (por la API).
+- **Auditoría:** las acciones del administrador (crear cuenta, cambiar rol, activar/desactivar, crear/editar/reasignar/cancelar/reactivar/eliminar jornadas, exportar reportes) se registran en `auditoria` en la **misma operación atómica** que la acción, a su nombre y con la hora del servidor. Los registros no se pueden modificar ni borrar; solo los lee un administrador.
+- **Compatibilidad:** el nombre anterior `maestro` se sigue aceptando como `gestor` (en la app, la API y las reglas).
 
 ### Crear el primer administrador y administrar cuentas
 
-Las reglas impiden que alguien se asigne un rol, así que **el primer administrador se crea fuera de la app** (usa tu sesión de `gcloud`; sin `--aplicar` solo simula):
+El primer administrador se crea fuera de la app (usa tu sesión de `gcloud`; sin `--aplicar` solo simula):
 
 ```bash
 node scripts/admin.js crear-usuario admin@tdea.edu.co ClaveSegura123 administrador Nombre Apellido --aplicar
@@ -173,7 +211,7 @@ node scripts/admin.js rol alguien@tdea.edu.co administrador --aplicar   # o conv
 node scripts/admin.js usuarios [rol]                                    # listar cuentas
 ```
 
-A partir de ahí el administrador crea gestores y otras cuentas, y cambia roles desde la app. También se puede editar el campo `rol` en la consola de Firebase.
+A partir de ahí el administrador crea gestores y otras cuentas, y cambia roles desde la app.
 
 ### Migración de datos (compatible hacia atrás)
 
@@ -185,27 +223,17 @@ node scripts/admin.js migrar --aplicar
 node scripts/admin.js propietario --huerfanas gestor@tdea.edu.co --aplicar   # opcional: asigna un gestor a las jornadas anteriores
 ```
 
-Orden recomendado: 1) publicar las reglas, 2) actualizar la app, 3) migrar. Entre 1 y 3 todo sigue funcionando gracias al alias `maestro`.
-
-### Despliegue de las reglas
+### Despliegue de las reglas de Firestore
 
 ```bash
 npx firebase-tools deploy --only firestore:rules --project <id-del-proyecto>
 ```
 
-### Pruebas
-
-```bash
-npm test             # lógica de roles, estados, usuarios, filtros, estadísticas, planilla y avisos
-npm run test:rules   # reglas de Firestore contra el emulador (requiere Java)
-npm run test:all     # ambas
-```
-
-Las pruebas de reglas cubren la autorización de los tres roles: un gestor no gestiona jornadas ajenas ni se las reasigna; un estudiante no administra nada ni se asigna roles; el administrador no puede cambiar su propio rol; las cuentas desactivadas no escriben; la auditoría es inmutable y solo la lee un administrador; y los flujos de inscripción siguen funcionando.
+Hoy está publicado `firestore.rules`. `firestore.api.rules` (solo lectura) **no se publica** hasta cerrar la migración: ver [`docs/migracion-api/05-despliegue-y-recuperacion.md`](docs/migracion-api/05-despliegue-y-recuperacion.md).
 
 ## Notificaciones
 
-El estudiante recibe un aviso (pantalla **Notificaciones** y aviso local del dispositivo) cuando cambia una jornada en la que está inscrito:
+El alumno recibe un aviso (pantalla **Notificaciones** y aviso local del dispositivo) cuando cambia una jornada en la que está inscrito:
 
 | Aviso | Cuándo |
 |---|---|
@@ -213,27 +241,55 @@ El estudiante recibe un aviso (pantalla **Notificaciones** y aviso local del dis
 | Reactivación | La jornada vuelve a estar activa |
 | Reprogramación | Cambia la fecha o la hora |
 | Actualización | Cambia el lugar, la descripción, el responsable, el título o la entidad |
-| Eliminación | El maestro elimina la jornada |
+| Eliminación | El gestor o el administrador elimina la jornada |
 
-**Cómo funciona.** La app compara cada jornada inscrita con lo que el estudiante ya conocía de ella. Ese "estado visto" se guarda en Firestore (`users/{uid}.jornadasVistas`), no en el dispositivo: la propia inscripción lo anota en su transacción y cancelar la inscripción lo quita. Así **no se pierde ningún cambio** aunque el estudiante haya cerrado sesión (al cerrar sesión se borran los datos locales), cambie de dispositivo o tenga la app cerrada cuando el maestro lo haga: el aviso se genera al volver a abrir la app. Si no se puede registrar un aviso, el estado visto no avanza y se reintenta en la siguiente lectura. Sin conexión se usa la copia local del estado.
+**Cómo funciona (con la API).** Al ejecutar el cambio, el servidor compara la jornada con lo que cada inscrito ya conocía de ella (`users/{uid}.jornadasVistas`, que anota la propia inscripción) y crea la notificación en `notificaciones`. Llega a **todos los inscritos aunque no abran la app o hayan cerrado sesión**. La app solo escucha sus notificaciones y muestra el aviso local de las nuevas (al abrir con la sesión recién iniciada, las no leídas de las últimas 24 h). Marcar como leída y eliminar pasan por la API.
 
-**Limitación.** El aviso se genera cuando el estudiante abre la app: sin un servidor no hay notificaciones *push* con la app cerrada. `functions/index.js` tiene una Cloud Function pensada para eso, pero **no está desplegada** (requiere el plan Blaze de Firebase). Si se despliega, habría que desactivar la creación de avisos en la app o los estudiantes recibirían cada aviso dos veces.
+**Sin API** (`EXPO_PUBLIC_API_URL` vacío), la app detecta los cambios ella misma al abrirse, como antes.
 
-## API de negocio (migración en curso)
+**Limitación.** Aún no hay notificaciones *push* con la app cerrada (el `pushToken` se guarda, pero ningún servidor lo usa todavía). `functions/index.js` tiene una Cloud Function antigua, **no desplegada**, que no debe desplegarse junto a la API porque duplicaría los avisos.
 
-La lógica de negocio (inscripciones, gestión de jornadas, avisos, cuentas, estadísticas, auditoría)
-se está moviendo de la app a una API Node + Express (`api/`) que escribe en Firestore con el Admin
-SDK; la app solo lee. **Mientras `EXPO_PUBLIC_API_URL` esté vacía, la app funciona exactamente como
-antes** (lógica local + reglas de Firestore).
+## API de negocio
+
+Servidor Node.js + Express (`api/`) que concentra las reglas de negocio y escribe en Firestore con el Admin SDK. Desplegada en Render (plan gratuito): `https://jornada-viva.onrender.com` (`GET /v1/salud`).
+
+| Área | Endpoints (`/v1`) |
+|---|---|
+| Sesión | `GET /me` · `POST /me/perfil` |
+| Inscripciones | `PUT` / `DELETE /jornadas/{id}/inscripcion` |
+| Jornadas | `POST /jornadas` · `PUT` / `DELETE /jornadas/{id}` · `POST /jornadas/{id}/cancelar` · `/reactivar` · `GET /jornadas/{id}/inscritos` · `/planilla.csv` · `POST /mantenimiento/vencidas` |
+| Notificaciones | `PATCH` / `DELETE /me/notificaciones/{id}` · `POST /me/notificaciones/leer-todas` · `PUT /me/push-token` |
+| Cuentas (administrador) | `POST /usuarios` · `PATCH /usuarios/{id}` |
+| Reportes (administrador) | `GET /admin/estadisticas` · `/admin/reporte-jornadas.csv` |
+
+Todas piden `Authorization: Bearer <ID token de Firebase Auth>` salvo `/salud`. Documentación completa: [`docs/migracion-api/`](docs/migracion-api/).
+
+**Activar en la app.** Define `EXPO_PUBLIC_API_URL` en `.env` (y opcionalmente `EXPO_PUBLIC_API_MODULOS`, por ejemplo `inscripciones,jornadas`, para activar solo algunos módulos: `sesion`, `inscripciones`, `jornadas`, `notificaciones`, `usuarios`, `reportes`). Vaciándola, la app vuelve a su lógica local.
+
+**Ejecutar la API en local.**
 
 ```bash
-EXPO_PUBLIC_API_URL=https://tu-api.example.com   # en .env; vacío = lógica local
-EXPO_PUBLIC_API_MODULOS=todos                    # o: sesion,inscripciones,jornadas,notificaciones,usuarios,reportes
+cd api
+npm install
+cp .env.example .env     # FIREBASE_PROJECT_ID y FIREBASE_SERVICE_ACCOUNT (clave de la cuenta de servicio, secreto)
+npm start                # http://localhost:8080/v1/salud
 ```
 
-Estado, arquitectura, endpoints, despliegue y recuperación: [`docs/migracion-api/`](docs/migracion-api/).
-Pruebas: `npm run test:api` (API contra emuladores) y `npm run test:equivalencia` (los servicios de la
-app con la lógica local y con la API deben dar el mismo resultado); `npm run test:all` ejecuta todo.
+**Despliegue en Render (gratis).** Web Service con *Root Directory* `api`, *Build Command* `npm ci --omit=dev`, *Start Command* `npm start`, *Health Check Path* `/v1/salud` y las variables `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT` (JSON de la clave en una línea) y `MANTENIMIENTO_MINUTOS=5`. El plan gratuito **se duerme tras 15 min sin tráfico** y tarda cerca de 1 min en despertar: la primera acción después de una pausa puede tardar o reintentarse (las inscripciones no se pierden: la cola offline las reenvía). Para comprobar un despliegue: `node api/scripts/verificar-despliegue.mjs` (solo lectura; ver su cabecera).
+
+> La clave de la cuenta de servicio es un **secreto**: solo en las variables del hosting, nunca en el repositorio ni en la app.
+
+## Pruebas
+
+```bash
+npm test                  # lógica pura de la app: roles, estados, formularios, planilla, avisos, cliente HTTP (93)
+npm run test:rules        # reglas de Firestore contra el emulador, actuales y de solo lectura (81)
+npm run test:api          # API real contra los emuladores: auth, inscripciones, jornadas, avisos, cuentas, reportes... (155)
+npm run test:equivalencia # los servicios de la app con la lógica local y con la API deben dar el mismo resultado (23 + 23)
+npm run test:all          # todo lo anterior
+```
+
+Las pruebas con emuladores requieren **Java** y descargan el emulador de Firebase la primera vez. Las de reglas cubren la autorización de los tres roles; las de la API, además, concurrencia en inscripciones, verificación de ID tokens reales y el arranque del servidor real.
 
 ## Investigación de campo
 
