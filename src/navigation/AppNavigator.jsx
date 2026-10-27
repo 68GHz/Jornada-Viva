@@ -15,6 +15,7 @@ import JornadaDetailScreen from "../screens/app/JornadaDetailScreen";
 import MisJornadasScreen from "../screens/app/MisJornadasScreen";
 import NotificationsScreen from "../screens/app/NotificationsScreen";
 import SincronizacionScreen from "../screens/app/SincronizacionScreen";
+import EscanearAsistenciaScreen from "../screens/app/EscanearAsistenciaScreen";
 import MaestroHomeScreen from "../screens/maestro/MaestroHomeScreen";
 import JornadaFormScreen from "../screens/maestro/JornadaFormScreen";
 import JornadaAdminScreen from "../screens/maestro/JornadaAdminScreen";
@@ -146,6 +147,11 @@ function AppStack() {
         name="Sincronizacion"
         component={SincronizacionScreen}
         options={{ title: "Sincronización" }}
+      />
+      <Stack.Screen
+        name="EscanearAsistencia"
+        component={EscanearAsistenciaScreen}
+        options={{ title: "Escanear Asistencia" }}
       />
     </Stack.Navigator>
   );

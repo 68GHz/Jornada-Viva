@@ -21,6 +21,7 @@ import {
   jornadaYaPaso,
 } from "../../utils/jornadaFecha";
 import { jornadaDisponible } from "../../utils/jornadaEstado";
+import { estadoVentanaAsistencia } from "../../utils/asistencia";
 
 const TITULO_ERROR = {
   YA_INSCRITO: "Ya inscrito",
@@ -29,11 +30,12 @@ const TITULO_ERROR = {
   PLAZO_VENCIDO: "Plazo vencido",
 };
 
-export default function JornadaDetailScreen({ route }) {
+export default function JornadaDetailScreen({ route, navigation }) {
   const { jornada: jornadaInicial } = route.params;
 
   const {
     jornadasPorId,
+    inscripciones,
     estadoInscripcion,
     cargando: cargandoJornadas,
     ahora,
@@ -55,6 +57,13 @@ export default function JornadaDetailScreen({ route }) {
   // Incluye lo pendiente de sincronizar: `pendiente` es "INSCRIBIR", "CANCELAR" o null
   const { inscrito, pendiente } = estadoInscripcion(jornada.id);
   const verificando = cargandoJornadas;
+
+  const inscripcionActual = useMemo(
+    () => inscripciones?.find((i) => i.jornadaId === jornada.id),
+    [inscripciones, jornada.id]
+  );
+  const yaAsistio = Boolean(inscripcionActual?.asistio);
+  const ventanaAsistencia = estadoVentanaAsistencia(jornada.fecha, ahora);
 
   const [inscribiendo, setInscribiendo] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -349,6 +358,49 @@ export default function JornadaDetailScreen({ route }) {
               ? "Tu inscripción está guardada en el dispositivo y se confirmará al sincronizar."
               : "Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado."}
           </Text>
+
+          {/* Asistencia (Autónoma por QR) */}
+          {yaAsistio ? (
+            <View style={styles.asistenciaExitosaCard}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={styles.asistenciaExitosaTexto}>
+                ¡Asistencia confirmada para esta jornada!
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.bloqueAsistencia}>
+              <TouchableOpacity
+                style={[
+                  styles.botonEscanearAsistencia,
+                  !ventanaAsistencia.disponible && styles.botonDeshabilitado,
+                ]}
+                disabled={!ventanaAsistencia.disponible}
+                onPress={() =>
+                  navigation?.navigate("EscanearAsistencia", {
+                    jornadaId: jornada.id,
+                    jornadaFecha: jornada.fecha,
+                    inscripcionId: inscripcionActual?.id,
+                    tituloJornada: jornada.titulo,
+                  })
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="qr-code-outline" size={20} color={colors.white} />
+                <Text style={styles.botonEscanearTexto}>
+                  {ventanaAsistencia.disponible
+                    ? "Registrar asistencia (Escanear QR)"
+                    : ventanaAsistencia.estado === "ANTES"
+                    ? `Asistencia disponible en ${ventanaAsistencia.minutosRestantes} min`
+                    : "Ventana de asistencia finalizada"}
+                </Text>
+              </TouchableOpacity>
+              {ventanaAsistencia.disponible && (
+                <Text style={styles.asistenciaNota}>
+                  Solo puedes registrar asistencia durante los primeros 20 minutos de la jornada.
+                </Text>
+              )}
+            </View>
+          )}
           {puedeCancelar ? (
             <TouchableOpacity
               style={[styles.botonCancelar, cancelando && styles.botonDeshabilitado]}
@@ -599,5 +651,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 19,
+  },
+  bloqueAsistencia: {
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 6,
+  },
+  botonEscanearAsistencia: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  botonEscanearTexto: {
+    color: colors.white,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  asistenciaNota: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  asistenciaExitosaCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(46, 125, 50, 0.12)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(46, 125, 50, 0.3)",
+  },
+  asistenciaExitosaTexto: {
+    color: colors.success,
+    fontWeight: "700",
+    fontSize: 13,
+    flex: 1,
   },
 });

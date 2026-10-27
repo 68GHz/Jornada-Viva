@@ -288,6 +288,7 @@ export function JornadasProvider({ children }) {
         jornadasDisponibles,
         misJornadas,
         jornadasPorId,
+        inscripciones,
         estadoInscripcion,
         cargando,
         error,
