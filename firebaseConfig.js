@@ -4,12 +4,12 @@ import { getFirestore } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyBo9lXsJmeTs1ZcdPpLpggp6x94orqXvJw",
+  authDomain: "jornadaviva-476ff.firebaseapp.com",
+  projectId: "jornadaviva-476ff",
+  storageBucket: "jornadaviva-476ff.firebasestorage.app",
+  messagingSenderId: "257986670996",
+  appId: "1:257986670996:web:6a1d7751bac0246dac1f81"
 };
 
 // evitar inicialización duplicada en hot reload
