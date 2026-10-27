@@ -21,6 +21,9 @@ import {
   reactivarJornada,
 } from "../../services/jornadaAdminService";
 import { compartirPlanilla } from "../../services/planillaService";
+import { registrarAsistenciaManual } from "../../services/asistenciaService";
+import { estadoVentanaAsistencia } from "../../utils/asistencia";
+import ModalQrAsistencia from "../../components/ModalQrAsistencia";
 import EstadoJornadaChip from "../../components/EstadoJornadaChip";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colors } from "../../theme/colors";
@@ -78,6 +81,34 @@ export default function JornadaAdminScreen({ navigation, route }) {
     useInscritos(jornadaId, !!permisos?.verInscritos);
 
   const [ocupado, setOcupado] = useState(false);
+  const [modalQrVisible, setModalQrVisible] = useState(false);
+  const [actualizandoAsistenciaId, setActualizandoAsistenciaId] = useState(null);
+
+  const ventanaAsistencia = jornada ? estadoVentanaAsistencia(jornada.fecha, ahora) : null;
+
+  const alternarAsistenciaManual = async (inscrito) => {
+    if (!jornada) return;
+    const nuevoValor = !inscrito.asistio;
+    const ventana = estadoVentanaAsistencia(jornada.fecha, ahora);
+    if (!ventana.disponible) {
+      Alert.alert(
+        "Ventana de asistencia no disponible",
+        ventana.mensaje
+      );
+      return;
+    }
+
+    setActualizandoAsistenciaId(inscrito.id);
+    try {
+      await registrarAsistenciaManual(inscrito.id, jornada.fecha, nuevoValor);
+      await recargar();
+    } catch (err) {
+      console.warn("Error al registrar asistencia manual:", err);
+      Alert.alert("No se pudo actualizar", err?.message || "Ocurrió un error. Intenta de nuevo.");
+    } finally {
+      setActualizandoAsistenciaId(null);
+    }
+  };
 
   if (cargando) return <LoadingSpinner mensaje="Cargando jornada..." />;
 
@@ -230,6 +261,15 @@ export default function JornadaAdminScreen({ navigation, route }) {
       <View style={styles.acciones}>
         {permisos.editar && (
           <Boton
+            texto="Generar QR de asistencia"
+            icono="qr-code-outline"
+            variante="primario"
+            deshabilitado={ocupado}
+            onPress={() => setModalQrVisible(true)}
+          />
+        )}
+        {permisos.editar && (
+          <Boton
             texto="Editar jornada"
             icono="create-outline"
             variante="secundario"
@@ -286,11 +326,25 @@ export default function JornadaAdminScreen({ navigation, route }) {
                       Inscrito el {formatearFechaHoraNegocio(inscrito.inscritoEn)}
                     </Text>
                   </View>
-                  <View style={[styles.asistio, inscrito.asistio && styles.asistioSi]}>
-                    <Text style={[styles.asistioTexto, inscrito.asistio && styles.asistioTextoSi]}>
-                      {inscrito.asistio ? "Asistió" : "Inscrito"}
-                    </Text>
-                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.asistio,
+                      inscrito.asistio && styles.asistioSi,
+                      actualizandoAsistenciaId === inscrito.id && styles.deshabilitado,
+                    ]}
+                    onPress={() => alternarAsistenciaManual(inscrito)}
+                    disabled={actualizandoAsistenciaId === inscrito.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={inscrito.asistio ? "Marcar como no asistió" : "Marcar como asistió"}
+                  >
+                    {actualizandoAsistenciaId === inscrito.id ? (
+                      <ActivityIndicator size="small" color={colors.white} />
+                    ) : (
+                      <Text style={[styles.asistioTexto, inscrito.asistio && styles.asistioTextoSi]}>
+                        {inscrito.asistio ? "✓ Asistió" : "Marcar"}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
               ))
           )}
@@ -305,6 +359,14 @@ export default function JornadaAdminScreen({ navigation, route }) {
           )}
         </View>
       )}
+
+      {/* Modal interactivo para visualizar y compartir QR de asistencia */}
+      <ModalQrAsistencia
+        visible={modalQrVisible}
+        jornada={jornada}
+        ahora={ahora}
+        alCerrar={() => setModalQrVisible(false)}
+      />
     </ScrollView>
   );
 }
