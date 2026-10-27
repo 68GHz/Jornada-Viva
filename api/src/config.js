@@ -7,6 +7,8 @@
 //   CORS_ORIGINS               Orígenes web permitidos, separados por coma (vacío = ninguno;
 //                              la app móvil no usa CORS)
 //   MANTENIMIENTO_MINUTOS      Cada cuántos minutos se desactivan las jornadas vencidas (0 = no)
+//   ASISTENCIA_SECRETO         (opcional) Secreto para firmar los códigos QR de asistencia. Si falta,
+//                              se deriva de la clave de la cuenta de servicio (ver secreto.js)
 //   FIRESTORE_EMULATOR_HOST    Solo desarrollo/pruebas: usa el emulador en vez de producción
 export function leerConfig(env = process.env) {
   const minutos = Number(env.MANTENIMIENTO_MINUTOS ?? 5);
@@ -19,5 +21,6 @@ export function leerConfig(env = process.env) {
       .map((o) => o.trim())
       .filter(Boolean),
     mantenimientoMs: Number.isFinite(minutos) && minutos > 0 ? minutos * 60000 : 0,
+    secretoAsistencia: env.ASISTENCIA_SECRETO || "",
   };
 }

@@ -188,7 +188,7 @@ prueba("limpieza automática: se desactivan las jornadas vencidas y las futuras 
 // ---------------- administración de jornadas (gestor) ----------------
 const datosForm = (extra = {}) => ({
   titulo: "Nueva", descripcion: "Desc", entidad: "TdeA", responsable: "Maestro A",
-  lugar: "Cancha", fecha: Date.now() + 5 * DIA, cuposTotales: 20, ...extra,
+  lugar: "Cancha", fecha: Date.now() + 5 * DIA, duracionMin: 60, cuposTotales: 20, ...extra,
 });
 
 prueba("gestor: crea, edita, cancela, reactiva y elimina SU jornada", async () => {
@@ -207,6 +207,35 @@ prueba("gestor: crea, edita, cancela, reactiva y elimina SU jornada", async () =
   assert.strictEqual((await leer(ruta)).activa, true);
   await admin.eliminarJornada(ref.id);
   assert.ok(!(await existe(ruta)));
+});
+
+prueba("gestor: tras un error de conexión se reconoce la jornada ya guardada (no se duplica al reintentar)", async () => {
+  comoUsuario("maestroA");
+  const datos = datosForm({ titulo: "Se guardó" });
+  const ref = await admin.crearJornada("maestroA", datos); // el primer intento sí llegó al servidor
+  assert.strictEqual(await admin.buscarJornadaIgual("maestroA", datos), ref.id);
+  assert.strictEqual(await admin.buscarJornadaIgual("maestroA", datosForm({ titulo: "Otra" })), null);
+  assert.strictEqual(await admin.buscarJornadaIgual("maestroA", { ...datos, cuposTotales: 21 }), null);
+  assert.strictEqual(await admin.buscarJornadaIgual("maestroB", datos), null, "la de otro gestor no cuenta");
+
+  const cuantas = async (titulo) => {
+    let n = 0;
+    await env.withSecurityRulesDisabled(async (c) => {
+      const todas = await fb.getDocs(fb.collection(c.firestore(), "jornadas"));
+      n = todas.docs.filter((d) => d.data().titulo === titulo).length;
+    });
+    return n;
+  };
+  assert.strictEqual(await cuantas("Se guardó"), 1);
+
+  // Con la API, repetir la creación con la misma clave devuelve la misma jornada
+  if (MODO === "api") {
+    const clave = "clave-de-prueba-123";
+    const a = await admin.crearJornada("maestroA", datosForm({ titulo: "Con clave" }), clave);
+    const b = await admin.crearJornada("maestroA", datosForm({ titulo: "Con clave" }), clave);
+    assert.strictEqual(b.id, a.id);
+    assert.strictEqual(await cuantas("Con clave"), 1);
+  }
 });
 
 prueba("gestor: NO puede crear a nombre de otro, con espacio inválido ni con fecha pasada", async () => {
@@ -241,7 +270,7 @@ prueba("gestor: lee los inscritos de su jornada para la planilla (datos completo
   const inscritos = await admin.obtenerInscritos("j1");
   assert.deepStrictEqual(inscritos.map((i) => i.emailUsuario).sort(), ["ana@x.co", "beto@x.co"]);
   assert.ok(inscritos.every((i) => typeof i.inscritoEn === "number" && i.asistio === false));
-  assert.deepStrictEqual(Object.keys(inscritos[0]).sort(), ["asistio", "emailUsuario", "id", "inscritoEn", "nombreUsuario", "userId"]);
+  assert.deepStrictEqual(Object.keys(inscritos[0]).sort(), ["asistio", "emailUsuario", "id", "inscritoEn", "metodoAsistencia", "nombreUsuario", "userId"]);
   comoUsuario("maestroB");
   await assert.rejects(admin.obtenerInscritos("j1"), sinPermiso);
   comoUsuario("est1");
@@ -433,7 +462,7 @@ prueba("gestor y estudiante no pueden administrar cuentas", async () => {
 
 prueba("administrador: crea una jornada para un gestor, la edita, la reasigna, la cancela y la elimina", async () => {
   comoUsuario("admin1");
-  const datos = { titulo: "Del admin", descripcion: "Desc", entidad: "TdeA", responsable: "Admin", lugar: "Coliseo", fecha: Date.now() + 5 * DIA, cuposTotales: 15 };
+  const datos = { titulo: "Del admin", descripcion: "Desc", entidad: "TdeA", responsable: "Admin", lugar: "Coliseo", fecha: Date.now() + 5 * DIA, duracionMin: 60, cuposTotales: 15 };
   const ref = await admin.crearJornada("gestorB", datos);
   assert.strictEqual((await leer(`jornadas/${ref.id}`)).creadoPor, "gestorB");
   await admin.editarJornada(ref.id, { ...datos, titulo: "Editada por el admin" }, "gestorB");

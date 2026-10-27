@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import { duracionJornadaMin } from "./duracion.js";
 import { OFFSET_NEGOCIO_MIN } from "./zonaNegocio.js";
 
 // Convierte lo que venga de Firestore a milisegundos epoch. Acepta:
@@ -37,8 +38,9 @@ export function jornadaYaPaso(millis, ahora = Date.now()) {
   return millis == null || millis <= ahora;
 }
 
-// Documento de Firestore -> jornada de la API (`fecha` en ms, sin `hora`)
+// Documento de Firestore -> jornada de la API (`fecha` en ms, sin `hora`). Las jornadas que
+// todavía no tienen `duracionMin` salen con la duración por defecto.
 export function normalizarJornada(id, datos) {
   const { hora, fecha, ...resto } = datos;
-  return { id, ...resto, fecha: fechaAMillis(fecha, hora) };
+  return { id, ...resto, fecha: fechaAMillis(fecha, hora), duracionMin: duracionJornadaMin(datos) };
 }

@@ -68,6 +68,7 @@ export default function AdminDashboardScreen({ navigation }) {
       <View style={estilos.fila}>
         <Indicador valor={stats.totalJornadas} etiqueta="Total de jornadas" />
         <Indicador valor={stats.porEstado.activa} etiqueta="Activas" color={colors.success} />
+        <Indicador valor={stats.porEstado.en_curso} etiqueta="En curso" color={colors.accent} />
         <Indicador valor={stats.porEstado.cancelada} etiqueta="Canceladas" color={colors.error} />
         <Indicador valor={stats.porEstado.finalizada} etiqueta="Finalizadas" color={colors.textDisabled} />
         <Indicador valor={`${stats.ocupacion}%`} etiqueta="Ocupación de cupos" />

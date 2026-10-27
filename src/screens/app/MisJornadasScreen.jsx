@@ -103,6 +103,8 @@ export default function MisJornadasScreen({ navigation }) {
               ? { texto: "No disponible", color: colors.textDisabled }
               : item.finalizada
               ? { texto: "Finalizada", color: colors.textDisabled }
+              : item.enCurso
+              ? { texto: "En curso", color: colors.accent }
               : { texto: "Inscrito", color: colors.success }
           }
           onPress={() => {
@@ -113,8 +115,8 @@ export default function MisJornadasScreen({ navigation }) {
               );
               return;
             }
-            // `finalizada` y `pendiente` son solo de la lista; el detalle los calcula por su cuenta
-            const { finalizada, pendiente, ...jornada } = item;
+            // `finalizada`, `enCurso` y `pendiente` son solo de la lista; el detalle los calcula por su cuenta
+            const { finalizada, enCurso, pendiente, ...jornada } = item;
             navigation.navigate("JornadaDetail", { jornada });
           }}
         />

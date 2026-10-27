@@ -7,6 +7,7 @@ import { ESTADOS_JORNADA, ETIQUETA_ESTADO } from "../utils/estadoJornada";
 export const colorEstado = (estado) =>
   ({
     [ESTADOS_JORNADA.ACTIVA]: colors.success,
+    [ESTADOS_JORNADA.EN_CURSO]: colors.accent,
     [ESTADOS_JORNADA.CANCELADA]: colors.error,
     [ESTADOS_JORNADA.FINALIZADA]: colors.textDisabled,
   })[estado] || colors.textDisabled;

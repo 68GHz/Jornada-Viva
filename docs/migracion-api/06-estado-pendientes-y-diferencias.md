@@ -58,3 +58,16 @@ Inevitables o consecuencia directa de decisiones tomadas con el usuario. Ninguna
 | 7 | Encolar sin conexión «marcar leída/eliminar» notificación (diferencia 5) | Opcional |
 | 8 | Validar el plazo de cancelación en el servidor (cambiaría el comportamiento: requiere decisión) | Opcional |
 | 9 | Documento OpenAPI de los endpoints | Opcional |
+
+## 5. Cambios posteriores: duración de las jornadas y asistencia por la API
+
+Resueltos a partir de los choques de reglas detectados al probar la asistencia con QR (rama `IA_Agents`):
+
+| Cambio | Detalle |
+|---|---|
+| **Duración (`duracionMin`)** | Campo nuevo (10–1440 min) en cada jornada, con campo en el formulario. Una jornada está **en curso** desde su hora de inicio hasta `fecha + duración`; solo entonces pasa a finalizada y se desactiva. Las que no tienen el campo se tratan como de 60 min (en la app, la API y las reglas) hasta guardarlo con `node scripts/admin.js migrar --aplicar` (primero sin `--aplicar` para simular) |
+| **Asistencia por la API** | El estudiante registra con un QR cuyo código firma el servidor y caduca en 60 s (el modal del gestor lo renueva cada 30 s). La API valida código, ventana (primeros 20 min, o toda la jornada si dura menos), jornada activa e inscripción. `firestore.rules` ya no permite escribir en `inscripciones` |
+| **Corrección manual** | Gestor (suyas) y administrador pueden marcar o quitar la asistencia sin límite de tiempo **desde que empieza** la jornada; queda quién y cuándo (y auditoría si es administrador) |
+| **Duplicados al reintentar «Crear jornada»** | `POST /v1/jornadas` acepta `claveIdempotencia` (8–100 caracteres `A-Za-z0-9_-`): el formulario genera una por intento y la renueva al cambiar cualquier dato; repetirla devuelve la misma jornada (`200 { id, repetida: true }`) sin duplicar ni auditar otra vez. Además, tras un error de conexión el formulario comprueba (`buscarJornadaIgual`) si el intento anterior sí se guardó antes de volver a crear. La clave solo opera con la API; en modo local queda la comprobación previa |
+
+Diferencias respecto al comportamiento anterior: una jornada ya empezada deja de aparecer como «Finalizada» y pasa a «En curso»; los cambios de duración no generan aviso a los inscritos; una captura del QR deja de servir al minuto, así que «Guardar / Compartir imagen» solo es útil para proyectar enseguida. La asistencia no funciona en modo local (sin `EXPO_PUBLIC_API_URL`).

@@ -14,10 +14,13 @@ import {
   parsearPayloadQrAsistencia,
   estadoVentanaAsistencia,
 } from "../../utils/asistencia";
-import { registrarAsistenciaEstudiante } from "../../services/asistenciaService";
+import {
+  mensajeDeErrorAsistencia,
+  registrarAsistenciaEstudiante,
+} from "../../services/asistenciaService";
 
 export default function EscanearAsistenciaScreen({ navigation, route }) {
-  const { jornadaId, jornadaFecha, inscripcionId, tituloJornada } = route.params || {};
+  const { jornadaId, jornadaFecha, duracionMin, tituloJornada } = route.params || {};
   const [permission, requestPermission] = useCameraPermissions();
   const [procesando, setProcesando] = useState(false);
   const [escaneado, setEscaneado] = useState(false);
@@ -68,33 +71,33 @@ export default function EscanearAsistenciaScreen({ navigation, route }) {
       return;
     }
 
-    const fechaEvaluada = jornadaFecha || datos.fecha;
-    const ventana = estadoVentanaAsistencia(fechaEvaluada);
+    // Aviso rápido con el reloj del dispositivo; quien decide es el servidor
+    const ventana = estadoVentanaAsistencia(jornadaFecha, Date.now(), duracionMin);
 
-    if (!ventana.disponible) {
+    if (jornadaFecha && !ventana.disponible) {
       Alert.alert("Asistencia no disponible", ventana.mensaje, [
         { text: "Entendido", onPress: () => navigation.goBack() },
       ]);
       return;
     }
 
-    // Registrar en Firestore
-    const targetInscripcionId = inscripcionId || `${datos.jornadaId}`;
+    // El servidor valida el código del QR, la ventana de asistencia y tu inscripción
     setProcesando(true);
     try {
-      await registrarAsistenciaEstudiante(targetInscripcionId, fechaEvaluada);
+      const resultado = await registrarAsistenciaEstudiante(datos.jornadaId, datos.codigo);
+      const titulo = datos.titulo || tituloJornada || "la jornada";
       Alert.alert(
-        "¡Asistencia Registrada!",
-        `Se ha confirmado tu asistencia exitosamente a "${datos.titulo || tituloJornada || "la jornada"}".`,
+        resultado === "ya-registrada" ? "Asistencia ya registrada" : "¡Asistencia Registrada!",
+        resultado === "ya-registrada"
+          ? `Tu asistencia a "${titulo}" ya estaba confirmada.`
+          : `Se ha confirmado tu asistencia exitosamente a "${titulo}".`,
         [{ text: "Aceptar", onPress: () => navigation.goBack() }]
       );
     } catch (err) {
       console.warn("Error al registrar asistencia:", err);
-      Alert.alert(
-        "No se pudo registrar",
-        err?.message || "Ocurrió un error al procesar tu asistencia. Intenta nuevamente.",
-        [{ text: "Reintentar", onPress: () => setEscaneado(false) }]
-      );
+      Alert.alert("No se pudo registrar", mensajeDeErrorAsistencia(err), [
+        { text: "Reintentar", onPress: () => setEscaneado(false) },
+      ]);
     } finally {
       setProcesando(false);
     }

@@ -10,6 +10,8 @@ import {
 
 const AHORA = Date.UTC(2026, 10, 1, 12, 0);
 const DIA = 24 * 3600 * 1000;
+const MIN = 60 * 1000;
+// Sin `duracionMin` una jornada dura 60 minutos (la duración por defecto)
 const j = (extra) => ({ id: "x", activa: true, fecha: AHORA + 5 * DIA, creadoPor: "m1", ...extra });
 
 describe("estado de una jornada", () => {
@@ -19,14 +21,37 @@ describe("estado de una jornada", () => {
     assert.equal(estadoJornada(j({ fecha: AHORA - DIA }), AHORA), ESTADOS_JORNADA.FINALIZADA);
   });
 
-  it("una jornada vencida es finalizada aunque aún figure activa o ya esté desactivada", () => {
-    assert.equal(estadoJornada(j({ fecha: AHORA - 1, activa: true }), AHORA), ESTADOS_JORNADA.FINALIZADA);
-    assert.equal(estadoJornada(j({ fecha: AHORA - 1, activa: false }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+  it("una jornada que ya terminó es finalizada aunque aún figure activa o ya esté desactivada", () => {
+    assert.equal(estadoJornada(j({ fecha: AHORA - 61 * MIN, activa: true }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+    assert.equal(estadoJornada(j({ fecha: AHORA - 61 * MIN, activa: false }), AHORA), ESTADOS_JORNADA.FINALIZADA);
   });
 
-  it("en el instante exacto de la fecha ya está finalizada", () => {
-    assert.equal(estadoJornada(j({ fecha: AHORA }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+  it("una jornada activa que ya empezó y no ha terminado está en curso", () => {
+    assert.equal(estadoJornada(j({ fecha: AHORA - 1 }), AHORA), ESTADOS_JORNADA.EN_CURSO);
+    assert.equal(estadoJornada(j({ fecha: AHORA - 59 * MIN }), AHORA), ESTADOS_JORNADA.EN_CURSO);
+  });
+
+  it("una cancelada cuya hora de inicio ya llegó figura finalizada: nunca llegó a realizarse", () => {
+    assert.equal(estadoJornada(j({ fecha: AHORA - 1, activa: false }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+    assert.equal(estadoJornada(j({ fecha: AHORA + 1, activa: false }), AHORA), ESTADOS_JORNADA.CANCELADA);
+  });
+
+  it("en el instante exacto del inicio pasa a en curso y en el exacto del fin, a finalizada", () => {
     assert.equal(estadoJornada(j({ fecha: AHORA + 1 }), AHORA), ESTADOS_JORNADA.ACTIVA);
+    assert.equal(estadoJornada(j({ fecha: AHORA }), AHORA), ESTADOS_JORNADA.EN_CURSO);
+    assert.equal(estadoJornada(j({ fecha: AHORA - 60 * MIN + 1 }), AHORA), ESTADOS_JORNADA.EN_CURSO);
+    assert.equal(estadoJornada(j({ fecha: AHORA - 60 * MIN }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+  });
+
+  it("la duración de la jornada decide cuándo termina", () => {
+    const empezo = AHORA - 90 * MIN;
+    assert.equal(estadoJornada(j({ fecha: empezo, duracionMin: 120 }), AHORA), ESTADOS_JORNADA.EN_CURSO);
+    assert.equal(estadoJornada(j({ fecha: empezo, duracionMin: 90 }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+    assert.equal(estadoJornada(j({ fecha: empezo, duracionMin: 30 }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+    // sin duración (o con una inválida) se usa la de por defecto: 60 minutos
+    assert.equal(estadoJornada(j({ fecha: empezo }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+    assert.equal(estadoJornada(j({ fecha: empezo, duracionMin: "mucho" }), AHORA), ESTADOS_JORNADA.FINALIZADA);
+    assert.equal(estadoJornada(j({ fecha: empezo, duracionMin: 1 }), AHORA), ESTADOS_JORNADA.FINALIZADA);
   });
 
   it("solo `activa: true` cuenta como activa", () => {
@@ -59,7 +84,21 @@ describe("permisos sobre una jornada (interfaz)", () => {
       reactivar: false,
       eliminar: true,
       reasignar: false, // solo el administrador reasigna jornadas
+      generarQr: true, // se puede preparar antes de que empiece
+      marcarAsistencia: false, // la asistencia se marca desde que empieza
     });
+  });
+
+  it("jornada en curso: no se edita ni se cancela; sí QR, asistencia manual, inscritos y planilla", () => {
+    const p = permisos("maestro", "m1", j({ fecha: AHORA - 10 * MIN }));
+    assert.equal(p.editar, false);
+    assert.equal(p.cancelar, false);
+    assert.equal(p.reactivar, false);
+    assert.equal(p.generarQr, true);
+    assert.equal(p.marcarAsistencia, true);
+    assert.equal(p.verInscritos, true);
+    assert.equal(p.descargarPlanilla, true);
+    assert.equal(p.eliminar, true);
   });
 
   it("jornada cancelada: se puede reactivar, editar y eliminar (no cancelar)", () => {
@@ -68,9 +107,11 @@ describe("permisos sobre una jornada (interfaz)", () => {
     assert.equal(p.cancelar, false);
     assert.equal(p.editar, true);
     assert.equal(p.eliminar, true);
+    assert.equal(p.generarQr, false, "una cancelada no toma asistencia");
+    assert.equal(p.marcarAsistencia, false);
   });
 
-  it("jornada finalizada: solo consultar, descargar la planilla y eliminar", () => {
+  it("jornada finalizada: solo consultar, descargar la planilla, corregir la asistencia y eliminar", () => {
     const p = permisos("maestro", "m1", j({ fecha: AHORA - DIA, activa: false }));
     assert.equal(p.editar, false);
     assert.equal(p.cancelar, false);
@@ -78,6 +119,8 @@ describe("permisos sobre una jornada (interfaz)", () => {
     assert.equal(p.verInscritos, true);
     assert.equal(p.descargarPlanilla, true);
     assert.equal(p.eliminar, true);
+    assert.equal(p.generarQr, false, "el QR ya no sirve");
+    assert.equal(p.marcarAsistencia, true, "la asistencia se puede corregir después, sin límite");
   });
 });
 
@@ -88,12 +131,13 @@ describe("orden y conteo para el maestro", () => {
     j({ id: "canc", activa: false, fecha: AHORA + 3 * DIA }),
     j({ id: "fin-reciente", fecha: AHORA - 1 * DIA }),
     j({ id: "act-cercana", fecha: AHORA + 2 * DIA }),
+    j({ id: "en-curso", fecha: AHORA - 5 * MIN }),
   ];
 
-  it("activas primero (la más próxima arriba), luego canceladas y al final finalizadas (la más reciente arriba)", () => {
+  it("en curso primero, luego activas (la más próxima arriba), canceladas y al final finalizadas (la más reciente arriba)", () => {
     assert.deepEqual(
       ordenarParaMaestro(lista, AHORA).map((x) => x.id),
-      ["act-cercana", "act-lejana", "canc", "fin-reciente", "fin-vieja"]
+      ["en-curso", "act-cercana", "act-lejana", "canc", "fin-reciente", "fin-vieja"]
     );
   });
 
@@ -105,11 +149,12 @@ describe("orden y conteo para el maestro", () => {
 
   it("cuenta las jornadas por estado", () => {
     assert.deepEqual(contarPorEstado(lista, AHORA), {
-      total: 5,
+      total: 6,
+      en_curso: 1,
       activa: 2,
       cancelada: 1,
       finalizada: 2,
     });
-    assert.deepEqual(contarPorEstado([], AHORA), { total: 0, activa: 0, cancelada: 0, finalizada: 0 });
+    assert.deepEqual(contarPorEstado([], AHORA), { total: 0, en_curso: 0, activa: 0, cancelada: 0, finalizada: 0 });
   });
 });

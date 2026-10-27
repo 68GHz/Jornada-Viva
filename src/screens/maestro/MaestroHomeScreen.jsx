@@ -10,7 +10,7 @@ import { colorEstado, estadoParaCard } from "../../components/EstadoJornadaChip"
 import { colors } from "../../theme/colors";
 import {
   ESTADOS_JORNADA,
-  ETIQUETA_ESTADO,
+  ETIQUETA_ESTADO_PLURAL,
   contarPorEstado,
   estadoJornada,
 } from "../../utils/estadoJornada";
@@ -19,7 +19,7 @@ const FILTROS = [
   { valor: "todas", etiqueta: "Todas", color: colors.primary },
   ...Object.values(ESTADOS_JORNADA).map((estado) => ({
     valor: estado,
-    etiqueta: ETIQUETA_ESTADO[estado] + "s",
+    etiqueta: ETIQUETA_ESTADO_PLURAL[estado],
     color: colorEstado(estado),
   })),
 ];

@@ -1,3 +1,4 @@
+import { DURACION_POR_DEFECTO, LIMITES_DURACION } from "./duracion.js";
 import { esEspacioValido } from "./espacios.js";
 
 // Límites que también validaba firestore.rules (se mantienen idénticos)
@@ -13,7 +14,9 @@ const texto = (v) => String(v ?? "").trim();
 
 // Valida los datos de una jornada (crear/editar) con las mismas reglas y mensajes que el
 // formulario de la app (validarJornada) y que firestore.rules. La fecha llega ya combinada, en
-// milisegundos epoch (la app la arma con la hora de negocio UTC-5).
+// milisegundos epoch (la app la arma con la hora de negocio UTC-5). `duracionMin` (minutos) es
+// opcional para que sigan funcionando las versiones de la app anteriores a ese campo: si no llega
+// se usa la duración por defecto.
 //   - ahora:        reloj del servidor
 //   - cuposOcupados: inscritos actuales (los cupos no pueden quedar por debajo)
 //   - exigirFutura: la fecha debe ser posterior a `ahora` (jornadas activas)
@@ -53,6 +56,15 @@ export function validarDatosJornada(campos, { ahora, cuposOcupados = 0, exigirFu
     errores.fecha = "La fecha y la hora deben ser posteriores a este momento.";
   }
 
+  const duracionMin = c.duracionMin === undefined ? DURACION_POR_DEFECTO : c.duracionMin;
+  if (!Number.isSafeInteger(duracionMin)) {
+    errores.duracionMin = "La duración debe ser un número entero de minutos.";
+  } else if (duracionMin < LIMITES_DURACION.minimo) {
+    errores.duracionMin = `La duración mínima es de ${LIMITES_DURACION.minimo} minutos.`;
+  } else if (duracionMin > LIMITES_DURACION.maximo) {
+    errores.duracionMin = `La duración máxima es de ${LIMITES_DURACION.maximo} minutos (24 horas).`;
+  }
+
   const cuposTotales = c.cuposTotales;
   if (!Number.isSafeInteger(cuposTotales) || cuposTotales < 1) {
     errores.cuposTotales = "Los cupos deben ser un número entero mayor que 0.";
@@ -65,6 +77,6 @@ export function validarDatosJornada(campos, { ahora, cuposOcupados = 0, exigirFu
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
-    datos: { titulo, descripcion, entidad, responsable, lugar, fecha, cuposTotales },
+    datos: { titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales },
   };
 }

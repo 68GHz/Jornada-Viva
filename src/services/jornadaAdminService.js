@@ -13,7 +13,8 @@ import {
 import { db } from "../../firebaseConfig";
 import { usaApi } from "../config/api";
 import { llamarApi } from "./apiClient";
-import { fechaAMillis } from "../utils/jornadaFecha";
+import { esMismaJornada } from "../utils/jornadaForm";
+import { fechaAMillis, normalizarJornada } from "../utils/jornadaFecha";
 import { conTiempoLimite } from "../utils/sincronizacion";
 
 // Administración de jornadas (gestor y administrador). Estas operaciones solo funcionan
@@ -22,13 +23,14 @@ import { conTiempoLimite } from "../utils/sincronizacion";
 // eliminar, leer inscritos); el administrador, cualquiera.
 const ESPERA_MS = 15000;
 
-const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fecha, cuposTotales }) => ({
+const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales }) => ({
   titulo,
   descripcion,
   entidad,
   responsable,
   lugar,
   fecha: Timestamp.fromMillis(fecha),
+  duracionMin,
   cuposTotales,
 });
 
@@ -36,9 +38,13 @@ const rutaJornada = (id) => `/v1/jornadas/${encodeURIComponent(id)}`;
 
 // Con la API (módulo "jornadas") el servidor aplica los permisos y validaciones, crea los avisos
 // a los inscritos y audita las acciones del administrador.
-export const crearJornada = (uid, datos) =>
+// `claveIdempotencia` (solo con la API): al reintentar con la misma clave el servidor devuelve la
+// jornada ya creada en vez de crear otra.
+export const crearJornada = (uid, datos, claveIdempotencia) =>
   usaApi("jornadas")
-    ? llamarApi("POST", "/v1/jornadas", { cuerpo: { ...datos, creadoPor: uid } })
+    ? llamarApi("POST", "/v1/jornadas", {
+        cuerpo: { ...datos, creadoPor: uid, ...(claveIdempotencia ? { claveIdempotencia } : {}) },
+      })
     : conTiempoLimite(
     addDoc(collection(db, "jornadas"), {
       ...camposEditables(datos),
@@ -79,6 +85,23 @@ export const eliminarJornada = (jornadaId) =>
     ? llamarApi("DELETE", rutaJornada(jornadaId))
     : conTiempoLimite(deleteDoc(doc(db, "jornadas", jornadaId)), ESPERA_MS);
 
+// Error de conexión: no se sabe si el servidor llegó a guardar lo pedido
+export const esErrorDeConexion = (error) =>
+  error?.name === "ErrorRed" ||
+  ["unavailable", "deadline-exceeded"].includes(String(error?.code || "").replace(/^firestore\//, ""));
+
+// ¿Ya existe una jornada igual a `datos` para ese gestor? Se consulta antes de reintentar una
+// creación que falló por conexión: si el primer intento sí se guardó, no se crea otra. Devuelve su
+// ID o null. Siempre lee del servidor (la caché podría no tenerla todavía).
+export async function buscarJornadaIgual(creadoPor, datos) {
+  const snapshot = await conTiempoLimite(
+    getDocsFromServer(query(collection(db, "jornadas"), where("creadoPor", "==", creadoPor))),
+    ESPERA_MS
+  );
+  const igual = snapshot.docs.find((d) => esMismaJornada(normalizarJornada(d.id, d.data()), datos));
+  return igual ? igual.id : null;
+}
+
 // Estudiantes inscritos en una jornada (siempre desde el servidor)
 export async function obtenerInscritos(jornadaId) {
   if (usaApi("jornadas")) {
@@ -99,6 +122,7 @@ export async function obtenerInscritos(jornadaId) {
       emailUsuario: datos.emailUsuario || "",
       inscritoEn: fechaAMillis(datos.inscritoEn),
       asistio: !!datos.asistio,
+      metodoAsistencia: datos.metodoAsistencia || null,
     };
   });
 }
@@ -114,7 +138,7 @@ export function mensajeDeError(error) {
   if (codigo === "permission-denied") {
     return "No tienes permiso para realizar esta acción. Solo puedes administrar las jornadas que tienes asignadas.";
   }
-  if (error?.name === "ErrorRed" || ["unavailable", "deadline-exceeded"].includes(codigo)) {
+  if (esErrorDeConexion(error)) {
     return "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.";
   }
   return "No se pudo completar la operación. Intenta de nuevo.";

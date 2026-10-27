@@ -28,14 +28,38 @@ Límites: título/entidad/responsable ≤ 120, descripción ≤ 2000, cupos 1–
 
 | Método y ruta | Rol | Notas | Respuesta |
 |---|---|---|---|
-| `POST /v1/jornadas` | gestor, administrador | Fecha futura. Gestor: a su nombre (otro `creadoPor` → 403). Administrador: `creadoPor` = gestor/administrador activo (por defecto él) | `201 { id }` · `400 VALIDACION` |
-| `PUT /v1/jornadas/{id}` | gestor (suyas), administrador (todas) | Cupos ≥ inscritos; si está activa, fecha futura; `creadoPor` distinto = reasignar (solo administrador, a un responsable válido). Crea avisos a los inscritos | `204` · `400` · `403` · `404` |
+| `POST /v1/jornadas` | gestor, administrador | Fecha futura. `duracionMin` (entero, 10–1440): opcional, por defecto 60, para no romper versiones de la app sin el campo. Gestor: a su nombre (otro `creadoPor` → 403). Administrador: `creadoPor` = gestor/administrador activo (por defecto él) | `201 { id }` · `400 VALIDACION` |
+| `PUT /v1/jornadas/{id}` | gestor (suyas), administrador (todas) | Cupos ≥ inscritos; `duracionMin` (si no llega se conserva la guardada); si está activa, fecha futura; `creadoPor` distinto = reasignar (solo administrador, a un responsable válido). Crea avisos a los inscritos | `204` · `400` · `403` · `404` |
 | `POST /v1/jornadas/{id}/cancelar` | ídem | `activa:false`; avisa a los inscritos | `204` |
 | `POST /v1/jornadas/{id}/reactivar` | ídem | Exige fecha futura; avisa | `204` · `409 FECHA_PASADA` |
 | `DELETE /v1/jornadas/{id}` | ídem | Las inscripciones se conservan; avisa | `204` |
-| `GET /v1/jornadas/{id}/inscritos` | gestor (suyas), administrador | — | `200 { inscritos: [{ id, userId, nombreUsuario, emailUsuario, inscritoEn (ms), asistio }] }` |
+| `GET /v1/jornadas/{id}/inscritos` | gestor (suyas), administrador | — | `200 { inscritos: [{ id, userId, nombreUsuario, emailUsuario, inscritoEn (ms), asistio, metodoAsistencia ("qr" \| "manual" \| null) }] }` |
 | `GET /v1/jornadas/{id}/planilla.csv` | ídem | CSV UTF-8 con BOM, `sep=;`, fórmulas neutralizadas | `200 text/csv` (adjunto `planilla-<titulo>.csv`) |
-| `POST /v1/mantenimiento/vencidas` | cualquier cuenta activa | Desactiva las activas con fecha pasada (no avisa) | `200 { desactivadas }` |
+| `POST /v1/mantenimiento/vencidas` | cualquier cuenta activa | Desactiva las activas que ya terminaron (inicio + `duracionMin`; 60 si no la tienen). Una jornada en curso sigue activa. No avisa | `200 { desactivadas }` |
+
+### Estado de una jornada
+
+No se guarda: se deduce de `activa`, `fecha` y `duracionMin` (`estadoJornada.js`, idéntico en la app y la API).
+
+| Estado | Cuándo |
+|---|---|
+| `activa` | `activa: true` y aún no empieza |
+| `en_curso` | `activa: true`, ya empezó y no ha terminado (`fecha + duracionMin`) |
+| `cancelada` | `activa: false` y aún no empieza |
+| `finalizada` | ya terminó; también una cancelada cuya hora de inicio ya llegó |
+
+## Asistencia
+
+La asistencia solo se escribe por la API (las reglas de Firestore no permiten escribir en `inscripciones`).
+
+| Método y ruta | Rol | Cuerpo | Respuesta |
+|---|---|---|---|
+| `POST /v1/jornadas/{id}/asistencia/codigo` | gestor (suyas), administrador | — | `200 { codigo, expiraEn (ms), renovarEnMs }`. Código firmado (HMAC-SHA256) y válido 60 s para esa jornada; el modal del QR pide uno nuevo cada 30 s · `403` · `404` |
+| `POST /v1/jornadas/{id}/asistencia` | estudiante inscrito | `{ codigo }` | `200 { resultado: "registrada" \| "ya-registrada" }` (método `qr`) · `400` sin código · `409 CODIGO_INVALIDO` / `CODIGO_CADUCADO` / `JORNADA_NO_DISPONIBLE` (cancelada o inexistente) / `ASISTENCIA_FUERA_DE_VENTANA` / `NO_INSCRITO` |
+| `PUT /v1/jornadas/{id}/inscritos/{inscripcionId}/asistencia` | gestor (suyas), administrador | `{ asistio: boolean }` | `200 { asistio }` · `400` · `403` · `404` · `409 ASISTENCIA_NO_INICIADA` (antes de la hora de inicio) |
+
+- **Ventana del estudiante:** desde la hora de inicio, los primeros 20 minutos (o toda la jornada si dura menos de 20).
+- **Corrección manual:** sin límite de tiempo desde que empieza la jornada. Guarda `metodoAsistencia: "manual"`, `asistenciaModificadaPor` y `asistenciaModificadaEn`; si lo hace un administrador queda en la auditoría (`asistencia.marcar` / `asistencia.desmarcar`). Marcar lo que ya está así no cambia nada.
 
 Cuando actúa un **administrador**, cada operación escribe en `auditoria` (`jornada.crear`, `.editar`, `.reasignar`, `.cancelar`, `.reactivar`, `.eliminar`) en la misma operación atómica.
 

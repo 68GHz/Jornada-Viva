@@ -139,7 +139,7 @@ describe("panel de control: estadísticas", () => {
 
   it("cuenta jornadas por estado, espacio y gestor", () => {
     assert.equal(s.totalJornadas, 4);
-    assert.deepEqual(s.porEstado, { activa: 2, cancelada: 1, finalizada: 1 });
+    assert.deepEqual(s.porEstado, { activa: 2, en_curso: 0, cancelada: 1, finalizada: 1 });
     assert.deepEqual(s.porEspacio, { Coliseo: 2, Cancha: 1, Auditorio: 1 });
     assert.deepEqual(s.porGestor, { g1: 2, g2: 1, "sin-gestor": 1 });
   });

@@ -4,6 +4,7 @@ import {
   estadoVentanaAsistencia,
   generarPayloadQrAsistencia,
   parsearPayloadQrAsistencia,
+  ventanaAsistenciaMin,
   VENTANA_ASISTENCIA_MS,
 } from "../../src/utils/asistencia.js";
 
@@ -48,23 +49,41 @@ describe("asistencia y ventana de 20 minutos", () => {
     assert.equal(res.estado, "EXPIRADA");
   });
 
+  it("una jornada de menos de 20 minutos tiene una ventana igual a su duración", () => {
+    assert.equal(ventanaAsistenciaMin(60), 20);
+    assert.equal(ventanaAsistenciaMin(20), 20);
+    assert.equal(ventanaAsistenciaMin(10), 10);
+    assert.equal(ventanaAsistenciaMin(undefined), 20, "sin duración usa la de por defecto");
+
+    const alMinuto11 = fechaJornada + 11 * 60 * 1000;
+    assert.equal(estadoVentanaAsistencia(fechaJornada, alMinuto11, 10).estado, "EXPIRADA");
+    assert.equal(estadoVentanaAsistencia(fechaJornada, alMinuto11, 60).estado, "EN_CURSO");
+    assert.match(estadoVentanaAsistencia(fechaJornada, alMinuto11, 10).mensaje, /10 minutos/);
+  });
+
   it("genera y valida correctamente el payload del código QR", () => {
     const jornada = {
       id: "jornada123",
       titulo: "Taller de Liderazgo",
       fecha: fechaJornada,
     };
-    const payload = generarPayloadQrAsistencia(jornada);
+    const payload = generarPayloadQrAsistencia(jornada, "codigo.firmado");
     assert.equal(typeof payload, "string");
 
     const parsed = parsearPayloadQrAsistencia(payload);
     assert.equal(parsed.valido, true);
     assert.equal(parsed.datos.jornadaId, "jornada123");
     assert.equal(parsed.datos.tipo, "ASISTENCIA_JORNADA");
+    assert.equal(parsed.datos.codigo, "codigo.firmado");
   });
 
-  it("rechaza códigos QR de formato inválido o ajenos", () => {
+  it("rechaza códigos QR de formato inválido, ajenos o sin código firmado (QR antiguo)", () => {
     assert.equal(parsearPayloadQrAsistencia("texto plano").valido, false);
     assert.equal(parsearPayloadQrAsistencia(JSON.stringify({ otro: 123 })).valido, false);
+    const antiguo = parsearPayloadQrAsistencia(
+      JSON.stringify({ tipo: "ASISTENCIA_JORNADA", jornadaId: "j1", titulo: "T", fecha: 1, creadoEn: 2 })
+    );
+    assert.equal(antiguo.valido, false);
+    assert.match(antiguo.error, /antiguo/);
   });
 });

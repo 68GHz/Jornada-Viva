@@ -1,26 +1,29 @@
 import { normalizarJornada, jornadaYaPaso } from "./jornadaFecha";
+import { jornadaTerminada } from "./duracion";
+import { ESTADOS_JORNADA, estadoJornada } from "./estadoJornada";
 import { TIPOS, accionActiva } from "./sincronizacion";
 
 // Una jornada solo cuenta como activa si `activa` es exactamente true
 // (mismo criterio que usaba la consulta del listado).
 export const estaActiva = (jornada) => jornada?.activa === true;
 
-// Visible para el público: activa y aún no vencida
+// Visible para el público: activa y aún no empezada (una vez que empieza ya no admite inscripciones)
 export const jornadaDisponible = (jornada, ahora = Date.now()) =>
   estaActiva(jornada) && !jornadaYaPaso(jornada.fecha, ahora);
 
-// Activa en Firestore pero con fecha ya pasada: hay que desactivarla.
-// Sin fecha no se desactiva (no se puede asegurar que haya vencido).
+// Activa en Firestore pero que ya terminó (inicio + duración): hay que desactivarla. Mientras
+// está en curso sigue activa. Sin fecha no se desactiva (no se puede asegurar que haya terminado).
 export const jornadaVencidaActiva = (jornada, ahora = Date.now()) =>
-  estaActiva(jornada) && jornada.fecha != null && jornadaYaPaso(jornada.fecha, ahora);
+  estaActiva(jornada) && jornada.fecha != null && jornadaTerminada(jornada, ahora);
 
 // Jornadas del usuario a partir de sus inscripciones y las jornadas en vivo.
 // - Jornada eliminada: se conserva con los datos guardados en la inscripción
 //   y se marca `noDisponible`.
 // - Jornada desactivada que aún no vence: se oculta.
-// - Jornada vencida (aunque ya esté desactivada): se conserva como `finalizada`
-//   para mantener el historial.
-// Orden: próximas primero (más cercanas arriba), luego las finalizadas.
+// - Jornada que ya terminó (aunque ya esté desactivada): se conserva como `finalizada`
+//   para mantener el historial. Una cancelada cuya fecha de inicio ya llegó cuenta como finalizada.
+// - Jornada que ya empezó y no ha terminado: `enCurso` (cuenta entre las próximas).
+// Orden: próximas y en curso primero (más cercanas arriba), luego las finalizadas.
 export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.now()) {
   // Una inscripción por jornada (se ignoran duplicados)
   const porJornada = new Map(inscripciones.map((i) => [i.jornadaId, i]));
@@ -36,12 +39,21 @@ export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.
         }),
         noDisponible: true,
       };
-    const finalizada = jornadaYaPaso(base.fecha, ahora);
+    // Con la jornada en vivo el estado sale de `activa`, el inicio y la duración; si fue eliminada
+    // solo queda lo guardado en la inscripción (título y fecha): termina al pasar su duración
+    // por defecto.
+    const estado = jornada ? estadoJornada(base, ahora) : null;
+    // Sin fecha (dato incompleto) siempre se trató como finalizada: se mantiene
+    const finalizada =
+      base.fecha == null ||
+      (jornada ? estado === ESTADOS_JORNADA.FINALIZADA : jornadaTerminada(base, ahora));
+    const enCurso = estado === ESTADOS_JORNADA.EN_CURSO;
 
     if (jornada && !estaActiva(jornada) && !finalizada) continue;
     resultado.push({
       ...base,
       finalizada,
+      enCurso,
       ...(inscripcion.pendiente ? { pendiente: inscripcion.pendiente } : {}),
     });
   }

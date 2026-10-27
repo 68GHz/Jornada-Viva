@@ -24,8 +24,11 @@
 //  - rol:           cambia users/{uid}.rol.
 //  - usuarios:      lista las cuentas (opcionalmente de un rol).
 //  - migrar:        migración compatible hacia atrás: renombra el rol "maestro" a "gestor",
-//                   asigna "estudiante" a quien no tiene rol y lista las jornadas sin
-//                   propietario (`creadoPor`). Es idempotente.
+//                   asigna "estudiante" a quien no tiene rol, guarda la duración por defecto
+//                   (`duracionMin`, 60 minutos) en las jornadas que no la tienen y lista las
+//                   jornadas sin propietario (`creadoPor`). Es idempotente.
+//
+// Con FIRESTORE_EMULATOR_HOST (p. ej. localhost:8080) usa el emulador en vez de producción.
 //  - propietario:   asigna un gestor como responsable de jornadas anteriores a los roles.
 
 const { execSync } = require("node:child_process");
@@ -33,6 +36,12 @@ const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const ROLES = ["estudiante", "gestor", "administrador"];
+
+// Deben coincidir con DURACION_POR_DEFECTO y LIMITES_DURACION de src/utils/duracion.js
+// (lo comprueba tests/unit/duracion.test.mjs)
+const DURACION_POR_DEFECTO = 60;
+const DURACION_MINIMA = 10;
+const DURACION_MAXIMA = 1440;
 const normalizar = (rol) => (rol === "maestro" ? "gestor" : rol);
 
 function leerArgs(argv) {
@@ -95,8 +104,11 @@ function token() {
 }
 
 function cliente(proyecto) {
-  const acceso = token();
-  const base = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(proyecto)}/databases/(default)/documents`;
+  // El emulador no pide credenciales: el token "owner" salta las reglas, como el Admin SDK
+  const emulador = process.env.FIRESTORE_EMULATOR_HOST;
+  const acceso = emulador ? "owner" : token();
+  const servidor = emulador ? `http://${emulador}` : "https://firestore.googleapis.com";
+  const base = `${servidor}/v1/projects/${encodeURIComponent(proyecto)}/databases/(default)/documents`;
   async function api(url, { method = "GET", body } = {}) {
     const respuesta = await fetch(url, {
       method,
@@ -135,7 +147,9 @@ function cliente(proyecto) {
   // Cambia solo algunos campos de texto de un documento existente
   const actualizar = (ruta, campos) => {
     const mascara = Object.keys(campos).map((c) => `updateMask.fieldPaths=${encodeURIComponent(c)}`);
-    const fields = Object.fromEntries(Object.entries(campos).map(([k, v]) => [k, { stringValue: v }]));
+    const fields = Object.fromEntries(
+      Object.entries(campos).map(([k, v]) => [k, Number.isInteger(v) ? { integerValue: String(v) } : { stringValue: v }])
+    );
     return api(`${base}/${ruta}?${mascara.join("&")}&currentDocument.exists=true`, {
       method: "PATCH",
       body: { fields },
@@ -256,8 +270,24 @@ const comandos = {
     }
 
     const jornadas = await c.listar("jornadas");
+
+    // Duración: las jornadas anteriores al campo (o con un valor inválido) reciben la de por defecto
+    const duracionValida = (j) => {
+      const min = Number(j.fields?.duracionMin?.integerValue);
+      return Number.isInteger(min) && min >= DURACION_MINIMA && min <= DURACION_MAXIMA;
+    };
+    const sinDuracion = jornadas.filter((j) => !duracionValida(j));
+    console.log(
+      `\nJornadas: ${jornadas.length}. Sin duración: ${sinDuracion.length} (se les guardará ${DURACION_POR_DEFECTO} minutos)${mensajeModo(aplicar)}`
+    );
+    sinDuracion.forEach((j) => console.log(`  - ${c.idDe(j)}  ${c.campo(j, "titulo") || ""}`));
+    if (aplicar && sinDuracion.length) {
+      for (const j of sinDuracion) await c.actualizar(`jornadas/${c.idDe(j)}`, { duracionMin: DURACION_POR_DEFECTO });
+      console.log(`Se actualizaron ${sinDuracion.length} jornadas.`);
+    }
+
     const huerfanas = jornadas.filter((j) => !c.campo(j, "creadoPor"));
-    console.log(`\nJornadas: ${jornadas.length}. Sin propietario (anteriores a los roles): ${huerfanas.length}`);
+    console.log(`\nSin propietario (anteriores a los roles): ${huerfanas.length}`);
     huerfanas.forEach((j) => console.log(`  - ${c.idDe(j)}  ${c.campo(j, "titulo") || ""}`));
     if (huerfanas.length) {
       console.log("Solo un administrador puede gestionarlas hasta asignarles un gestor (desde la app o con):");

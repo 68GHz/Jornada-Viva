@@ -1,6 +1,7 @@
 import { crearApp } from "./app.js";
 import { leerConfig } from "./config.js";
 import { iniciarFirebase } from "./firebase.js";
+import { resolverSecretoAsistencia } from "./secreto.js";
 import { desactivarVencidas } from "./servicios/mantenimiento.js";
 
 const config = leerConfig();
@@ -11,6 +12,7 @@ const app = crearApp({
   auth,
   verificarToken: (token) => auth.verifyIdToken(token),
   origenesCors: config.origenesCors,
+  secretoAsistencia: resolverSecretoAsistencia(config),
 });
 
 const servidor = app.listen(config.puerto, () => {

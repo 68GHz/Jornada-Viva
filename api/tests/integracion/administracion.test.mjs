@@ -195,7 +195,7 @@ describe("M6 · estadísticas y reporte global (solo administrador)", () => {
     assert.equal(s.administradores, 2);
     assert.equal(s.cuentasInactivas, 1);
     assert.equal(s.totalJornadas, 4);
-    assert.deepEqual(s.porEstado, { activa: 2, cancelada: 1, finalizada: 1 });
+    assert.deepEqual(s.porEstado, { activa: 2, en_curso: 0, cancelada: 1, finalizada: 1 });
     assert.deepEqual(s.porEspacio, { Coliseo: 2, Auditorio: 1, Cancha: 1 });
     assert.equal(s.cuposTotales, 50);
     assert.equal(s.cuposOcupados, 10);

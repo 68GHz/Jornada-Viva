@@ -102,7 +102,7 @@ service cloud.firestore {
 
     function jornadaValida(d) {
       return d.keys().hasOnly([
-          'titulo', 'descripcion', 'entidad', 'responsable', 'lugar', 'fecha',
+          'titulo', 'descripcion', 'entidad', 'responsable', 'lugar', 'fecha', 'duracionMin',
           'cuposTotales', 'cuposOcupados', 'activa', 'creadoPor', 'creadaEn'
         ])
         && d.keys().hasAll([
@@ -119,6 +119,10 @@ service cloud.firestore {
           'Bloque 13', 'Auditorio', 'Cancha', 'Coliseo'
         ]
         && d.fecha is timestamp
+        // Duración en minutos. Es opcional: las jornadas anteriores al campo no lo tienen y se
+        // tratan como de 60 minutos hasta correr `node scripts/admin.js migrar --aplicar`.
+        && (!('duracionMin' in d)
+            || (d.duracionMin is int && d.duracionMin >= 10 && d.duracionMin <= 1440))
         && d.cuposTotales is int && d.cuposTotales >= 1 && d.cuposTotales <= 1000
         && d.cuposOcupados is int
         && d.activa is bool;
@@ -160,13 +164,14 @@ service cloud.firestore {
         && request.resource.data.cuposOcupados <= resource.data.cuposTotales;
     }
 
-    // Cualquier usuario puede desactivar una jornada cuya fecha ya pasó
+    // Cualquier usuario puede desactivar una jornada que ya terminó: la hora de inicio más su
+    // duración (60 minutos si todavía no tiene el campo). Mientras está en curso no.
     function soloVencimiento() {
       let cambios = request.resource.data.diff(resource.data).affectedKeys();
       return cambios.hasOnly(['activa'])
         && request.resource.data.activa == false
         && resource.data.get('fecha', null) is timestamp
-        && resource.data.fecha <= request.time;
+        && resource.data.fecha + duration.value(resource.data.get('duracionMin', 60), 'm') <= request.time;
     }
 
     match /jornadas/{jornadaId} {
@@ -188,15 +193,6 @@ service cloud.firestore {
     }
 
     // ================= Inscripciones =================
-    function jornadaDeInscripcion(jornadaId) {
-      return get(/databases/$(database)/documents/jornadas/$(jornadaId)).data;
-    }
-
-    function ventanaAsistenciaValida(jornadaFecha) {
-      return request.time >= jornadaFecha
-        && request.time <= jornadaFecha + duration.value(20, 'm');
-    }
-
     match /inscripciones/{inscripcionId} {
       // El estudiante lee las suyas; el gestor, las de sus jornadas (planilla); el administrador, todas
       allow read: if request.auth != null
@@ -207,26 +203,8 @@ service cloud.firestore {
       allow create: if usuarioActivo()
         && request.resource.data.userId == request.auth.uid;
 
-      // Actualización: exclusivamente para registro de asistencia durante los primeros 20 minutos
-      allow update: if request.auth != null && (
-        // Asistencia autónoma por el estudiante inscrito:
-        (
-          resource.data.userId == request.auth.uid
-          && usuarioActivo()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['asistio', 'asistioEn', 'metodoAsistencia'])
-          && request.resource.data.asistio == true
-          && request.resource.data.get('metodoAsistencia', 'qr') in ['qr', 'autonoma']
-          && ventanaAsistenciaValida(jornadaDeInscripcion(resource.data.jornadaId).fecha)
-        )
-        // Asistencia manual por el gestor de la jornada o administrador:
-        || (
-          (esAdmin() || esPropietarioDeJornada(resource.data.jornadaId))
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['asistio', 'asistioEn', 'metodoAsistencia'])
-          && request.resource.data.asistio is bool
-          && (!('metodoAsistencia' in request.resource.data) || request.resource.data.metodoAsistencia in ['manual', 'qr', 'autonoma'])
-          && ventanaAsistenciaValida(jornadaDeInscripcion(resource.data.jornadaId).fecha)
-        )
-      );
+      // La asistencia (QR firmado y marcado manual) la registra la API: no se escribe desde el cliente
+      allow update: if false;
 
       allow delete: if request.auth != null
         && resource.data.userId == request.auth.uid;

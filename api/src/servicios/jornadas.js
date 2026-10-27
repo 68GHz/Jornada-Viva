@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { validarDatosJornada } from "../dominio/jornada.js";
 import { fechaAMillis, normalizarJornada } from "../dominio/jornadaFecha.js";
@@ -18,11 +19,11 @@ const MENSAJE_AJENA =
 
 const puedeGestionar = (usuario) => esGestor(usuario.rol) || esAdministrador(usuario.rol);
 
-function exigirGestor(usuario) {
+export function exigirGestor(usuario) {
   if (!puedeGestionar(usuario)) throw sinPermiso(MENSAJE_AJENA);
 }
 
-function exigirPropiedad(usuario, datos) {
+export function exigirPropiedad(usuario, datos) {
   if (!puedeAdministrarJornada(usuario.rol, usuario.uid, datos)) throw sinPermiso(MENSAJE_AJENA);
 }
 
@@ -48,14 +49,31 @@ const camposEditables = (d) => ({
   responsable: d.responsable,
   lugar: d.lugar,
   fecha: Timestamp.fromMillis(d.fecha),
+  duracionMin: d.duracionMin,
   cuposTotales: d.cuposTotales,
 });
 
 const nombreDe = (perfil, uid) => perfil?.nombre || perfil?.email || uid;
 
+// Clave de idempotencia de «crear jornada»: el cliente genera una por intento y la repite al
+// reintentar. Si el primer intento sí llegó al servidor (la app solo vio un error de conexión o
+// un tiempo agotado), el reintento devuelve esa misma jornada en lugar de crear un duplicado.
+const CLAVE_VALIDA = /^[A-Za-z0-9_-]{8,100}$/;
+
+// El ID de la jornada se deriva de quién actúa, para quién es y la clave: la misma clave de otra
+// persona (o para otro gestor) nunca choca ni permite adivinar jornadas ajenas.
+const idIdempotente = (actor, creadoPor, clave) =>
+  createHash("sha256").update(`${actor}|${creadoPor}|${clave}`).digest("hex").slice(0, 20);
+
+// Devuelve { id } y, si es la repetición de una creación ya hecha, { id, repetida: true }
 export async function crear(ctx, usuario, cuerpo = {}) {
   const { db, ahora } = ctx;
   exigirGestor(usuario);
+
+  const clave = cuerpo.claveIdempotencia;
+  if (clave !== undefined && !(typeof clave === "string" && CLAVE_VALIDA.test(clave))) {
+    throw validacion({ claveIdempotencia: "La clave de idempotencia no es válida." });
+  }
 
   const { errores, datos } = validarDatosJornada(cuerpo, { ahora: ahora(), exigirFutura: true });
   if (!datos) throw validacion(errores);
@@ -70,25 +88,41 @@ export async function crear(ctx, usuario, cuerpo = {}) {
   const responsable =
     creadoPor === usuario.uid ? usuario.perfil : await validarResponsable(null, db, creadoPor);
 
-  const ref = db.collection("jornadas").doc();
-  const lote = db.batch();
-  lote.set(ref, {
+  const ref = clave
+    ? db.collection("jornadas").doc(idIdempotente(usuario.uid, creadoPor, clave))
+    : db.collection("jornadas").doc();
+  const documento = {
     ...camposEditables(datos),
     cuposOcupados: 0,
     activa: true,
     creadoPor,
     creadaEn: FieldValue.serverTimestamp(),
-  });
-  if (esAdministrador(usuario.rol)) {
-    agregarAuditoria(db, lote, actorDe(usuario), {
+  };
+  const auditar = (escritor) => {
+    if (!esAdministrador(usuario.rol)) return;
+    agregarAuditoria(db, escritor, actorDe(usuario), {
       accion: "jornada.crear",
       entidad: "jornada",
       entidadId: ref.id,
       detalle: `${datos.titulo} · gestor: ${nombreDe(responsable, creadoPor)}`,
     });
+  };
+
+  if (!clave) {
+    const lote = db.batch();
+    lote.set(ref, documento);
+    auditar(lote);
+    await lote.commit();
+    return { id: ref.id };
   }
-  await lote.commit();
-  return { id: ref.id };
+
+  // Con clave: si la jornada ya existe es un reintento y no se crea (ni se audita) otra vez
+  return db.runTransaction(async (tx) => {
+    if ((await tx.get(ref)).exists) return { id: ref.id, repetida: true };
+    tx.set(ref, documento);
+    auditar(tx);
+    return { id: ref.id };
+  });
 }
 
 // Edita los datos y, solo el administrador, reasigna la jornada (`creadoPor`)
@@ -112,7 +146,9 @@ export async function editar(ctx, usuario, jornadaId, cuerpo = {}) {
       responsable = await validarResponsable(tx, db, cuerpo.creadoPor);
     }
 
-    const { errores, datos } = validarDatosJornada(cuerpo, {
+    // Una versión de la app sin el campo de duración no lo envía: se conserva la que ya tenía
+    const campos = { ...cuerpo, duracionMin: cuerpo.duracionMin ?? antes.duracionMin };
+    const { errores, datos } = validarDatosJornada(campos, {
       ahora: ahora(),
       cuposOcupados: antes.cuposOcupados || 0,
       // una jornada cancelada puede conservar una fecha pasada; las activas, no
@@ -222,6 +258,7 @@ export async function inscritos(ctx, usuario, jornadaId) {
         emailUsuario: datos.emailUsuario || "",
         inscritoEn: fechaAMillis(datos.inscritoEn),
         asistio: !!datos.asistio,
+        metodoAsistencia: datos.metodoAsistencia || null,
       };
     }),
   };

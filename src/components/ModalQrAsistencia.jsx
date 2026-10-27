@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
   View,
@@ -15,22 +15,65 @@ import { File, Paths } from "expo-file-system";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import {
+  CODIGO_QR_RENOVAR_MS,
   estadoVentanaAsistencia,
   generarPayloadQrAsistencia,
 } from "../utils/asistencia";
 import { formatearFecha, formatearHora } from "../utils/jornadaFecha";
+import { mensajeDeErrorAsistencia, pedirCodigoQr } from "../services/asistenciaService";
 
+const TAMANO_QR = 220;
+
+// QR de asistencia de una jornada. El código lo firma el servidor y caduca en un minuto: mientras
+// el modal está abierto se pide uno nuevo cada 30 segundos. Así hay que estar viendo la pantalla
+// del gestor para escanearlo; una captura compartida deja de servir enseguida.
 export default function ModalQrAsistencia({ visible, jornada, alCerrar, ahora = Date.now() }) {
   const viewShotRef = useRef(null);
   const [compartiendo, setCompartiendo] = useState(false);
+  const [codigo, setCodigo] = useState(null);
+  const [errorCodigo, setErrorCodigo] = useState(null);
+  const [reintento, setReintento] = useState(0);
+
+  // Con la ventana de asistencia ya cerrada el QR no sirve: no se piden más códigos
+  const expirada = jornada
+    ? estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin).estado === "EXPIRADA"
+    : false;
+  const jornadaId = jornada?.id;
+
+  useEffect(() => {
+    if (!visible || !jornadaId || expirada) {
+      setCodigo(null);
+      setErrorCodigo(null);
+      return undefined;
+    }
+    let activo = true;
+    const pedir = async () => {
+      try {
+        const nuevo = await pedirCodigoQr(jornadaId);
+        if (!activo) return;
+        setCodigo(nuevo.codigo);
+        setErrorCodigo(null);
+      } catch (err) {
+        if (!activo) return;
+        console.warn("No se pudo obtener el código del QR:", err);
+        setErrorCodigo(mensajeDeErrorAsistencia(err));
+      }
+    };
+    pedir();
+    const temporizador = setInterval(pedir, CODIGO_QR_RENOVAR_MS);
+    return () => {
+      activo = false;
+      clearInterval(temporizador);
+    };
+  }, [visible, jornadaId, expirada, reintento]);
 
   if (!jornada) return null;
 
-  const ventana = estadoVentanaAsistencia(jornada.fecha, ahora);
-  const payload = generarPayloadQrAsistencia(jornada);
+  const ventana = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin);
+  const payload = codigo ? generarPayloadQrAsistencia(jornada, codigo) : null;
 
   const guardarOCompartirImagen = async () => {
-    if (!viewShotRef.current?.capture) return;
+    if (!viewShotRef.current?.capture || !payload) return;
     setCompartiendo(true);
     try {
       if (!(await Sharing.isAvailableAsync())) {
@@ -76,7 +119,7 @@ export default function ModalQrAsistencia({ visible, jornada, alCerrar, ahora = 
             </TouchableOpacity>
           </View>
 
-          {/* Banner de estado de la ventana de 20 minutos */}
+          {/* Banner de estado de la ventana de asistencia del estudiante */}
           <View
             style={[
               styles.bannerVentana,
@@ -132,22 +175,55 @@ export default function ModalQrAsistencia({ visible, jornada, alCerrar, ahora = 
             </Text>
 
             <View style={styles.marcoQr}>
-              <QRCode
-                value={payload}
-                size={220}
-                color={colors.textPrimary}
-                backgroundColor={colors.white}
-              />
+              {payload ? (
+                <QRCode
+                  value={payload}
+                  size={TAMANO_QR}
+                  color={colors.textPrimary}
+                  backgroundColor={colors.white}
+                />
+              ) : (
+                <View style={styles.sinQr}>
+                  {expirada ? (
+                    <Text style={styles.sinQrTexto}>
+                      La ventana de asistencia terminó. Marca la asistencia a mano en la lista de
+                      inscritos.
+                    </Text>
+                  ) : errorCodigo ? (
+                    <>
+                      <Ionicons name="cloud-offline-outline" size={32} color={colors.textDisabled} />
+                      <Text style={styles.sinQrTexto}>{errorCodigo}</Text>
+                      <TouchableOpacity
+                        style={styles.botonReintentar}
+                        onPress={() => setReintento((n) => n + 1)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.botonReintentarTexto}>Reintentar</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <ActivityIndicator color={colors.primary} />
+                      <Text style={styles.sinQrTexto}>Generando código…</Text>
+                    </>
+                  )}
+                </View>
+              )}
             </View>
 
             <Text style={styles.pieQr}>Escanea con la app Jornada Viva</Text>
           </ViewShot>
 
+          <Text style={styles.nota}>
+            El código se renueva cada {Math.round(CODIGO_QR_RENOVAR_MS / 1000)} segundos: muéstralo
+            en esta pantalla. Una captura deja de servir en un minuto.
+          </Text>
+
           <View style={styles.acciones}>
             <TouchableOpacity
-              style={styles.botonCompartir}
+              style={[styles.botonCompartir, !payload && styles.botonDeshabilitado]}
               onPress={guardarOCompartirImagen}
-              disabled={compartiendo}
+              disabled={compartiendo || !payload}
               activeOpacity={0.8}
             >
               {compartiendo ? (
@@ -269,10 +345,42 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 12,
   },
+  sinQr: {
+    width: TAMANO_QR,
+    height: TAMANO_QR,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 8,
+  },
+  sinQrTexto: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  botonReintentar: {
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  botonReintentarTexto: {
+    color: colors.primary,
+    fontWeight: "700",
+    fontSize: 13,
+  },
   pieQr: {
     fontSize: 11,
     color: colors.textSecondary,
     fontWeight: "600",
+  },
+  nota: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 16,
   },
   acciones: {
     width: "100%",
@@ -287,6 +395,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     gap: 8,
+  },
+  botonDeshabilitado: {
+    opacity: 0.5,
   },
   botonCompartirTexto: {
     color: colors.white,

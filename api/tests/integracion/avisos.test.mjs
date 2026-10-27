@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import {
-  DIA, Timestamp, coleccion, cuerpoJornada, docJornada, existe, iniciarApi, leer, limpiar, reloj, sembrar, sembrarPerfiles,
+  DIA, MINUTO, Timestamp, coleccion, cuerpoJornada, docJornada, existe, iniciarApi, leer, limpiar, reloj, sembrar, sembrarPerfiles,
 } from "./entorno.mjs";
 
 const inscribir = (api, uid, jornada = "j1") =>
@@ -154,8 +154,11 @@ describe("M3 · jornadas vencidas (tarea del servidor)", () => {
     await sembrarPerfiles();
   });
 
-  it("desactiva las activas cuya fecha ya pasó y deja el resto como está", async () => {
-    await sembrar("jornadas/vencida", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 1000) }));
+  it("desactiva las activas que ya terminaron (inicio + duración) y deja el resto como está", async () => {
+    await sembrar("jornadas/vencida", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 61 * MINUTO) }));
+    await sembrar("jornadas/vencidaConDuracion", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 31 * MINUTO), duracionMin: 30 }));
+    await sembrar("jornadas/enCurso", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 10 * MINUTO) }));
+    await sembrar("jornadas/enCursoLarga", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 61 * MINUTO), duracionMin: 180 }));
     await sembrar("jornadas/futura", docJornada());
     await sembrar("jornadas/yaCancelada", docJornada({ activa: false, fecha: Timestamp.fromMillis(reloj.ahora - DIA) }));
     const sinFecha = docJornada();
@@ -165,9 +168,12 @@ describe("M3 · jornadas vencidas (tarea del servidor)", () => {
 
     const r = await api.llamar("est1", "POST", "/v1/mantenimiento/vencidas");
     assert.equal(r.estado, 200);
-    assert.deepEqual(r.cuerpo, { desactivadas: 2 });
+    assert.deepEqual(r.cuerpo, { desactivadas: 3 });
     assert.equal((await leer("jornadas/vencida")).activa, false);
+    assert.equal((await leer("jornadas/vencidaConDuracion")).activa, false);
     assert.equal((await leer("jornadas/legadoVencida")).activa, false);
+    assert.equal((await leer("jornadas/enCurso")).activa, true, "en curso sigue activa hasta que termina");
+    assert.equal((await leer("jornadas/enCursoLarga")).activa, true, "su duración de 3 h aún no se cumple");
     assert.equal((await leer("jornadas/futura")).activa, true);
     assert.equal((await leer("jornadas/sinFecha")).activa, true, "sin fecha no se desactiva");
   });
@@ -183,14 +189,14 @@ describe("M3 · jornadas vencidas (tarea del servidor)", () => {
   });
 
   it("es idempotente y lo puede pedir cualquier usuario con sesión (no sin ella)", async () => {
-    await sembrar("jornadas/vencida", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 1000) }));
+    await sembrar("jornadas/vencida", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 61 * MINUTO) }));
     assert.equal((await api.llamar("est1", "POST", "/v1/mantenimiento/vencidas")).cuerpo.desactivadas, 1);
     assert.equal((await api.llamar("est1", "POST", "/v1/mantenimiento/vencidas")).cuerpo.desactivadas, 0);
     assert.equal((await api.llamar(null, "POST", "/v1/mantenimiento/vencidas")).estado, 401);
   });
 
   it("una jornada vencida desactivada no se puede reactivar sin cambiar antes la fecha", async () => {
-    await sembrar("jornadas/vencida", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 1000) }));
+    await sembrar("jornadas/vencida", docJornada({ fecha: Timestamp.fromMillis(reloj.ahora - 61 * MINUTO) }));
     await api.llamar("est1", "POST", "/v1/mantenimiento/vencidas");
     assert.equal((await api.llamar("gestorA", "POST", "/v1/jornadas/vencida/reactivar")).estado, 409);
     assert.equal((await api.llamar("gestorA", "PUT", "/v1/jornadas/vencida", cuerpoJornada({ fecha: reloj.ahora + 3 * DIA }))).estado, 204);

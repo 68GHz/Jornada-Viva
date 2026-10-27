@@ -50,7 +50,7 @@ export function puedeModificarCuenta(actorUid, usuarioObjetivo) {
 }
 
 // Jornadas por estado y filtros del administrador:
-// estado ("todos" | activa | cancelada | finalizada), gestor (uid | "todos"), desde/hasta ("YYYY-MM-DD")
+// estado ("todos" | activa | en_curso | cancelada | finalizada), gestor (uid | "todos"), desde/hasta ("YYYY-MM-DD")
 export function filtrarJornadas(jornadas, filtros = {}, ahora = Date.now(), diaDe = (ms) => new Date(ms).toISOString().slice(0, 10)) {
   const { texto = "", estado = "todos", gestor = "todos", desde = null, hasta = null } = filtros;
   const q = sinTildes(texto).trim();
@@ -78,6 +78,7 @@ export function calcularEstadisticas(usuarios, jornadas, ahora = Date.now()) {
 
   const porEstado = {
     [ESTADOS_JORNADA.ACTIVA]: 0,
+    [ESTADOS_JORNADA.EN_CURSO]: 0,
     [ESTADOS_JORNADA.CANCELADA]: 0,
     [ESTADOS_JORNADA.FINALIZADA]: 0,
   };

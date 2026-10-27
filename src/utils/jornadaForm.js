@@ -1,3 +1,4 @@
+import { DURACION_POR_DEFECTO, LIMITES_DURACION } from "./duracion.js";
 import { esEspacioValido } from "./espacios.js";
 import { combinarFechaHora } from "./zonaNegocio.js";
 
@@ -10,9 +11,26 @@ export const LIMITES = {
   cuposMaximos: 1000,
 };
 
+// Duración que propone el formulario al crear una jornada
+export const DURACION_SUGERIDA = String(DURACION_POR_DEFECTO);
+
 export const ENTIDAD_POR_DEFECTO = "Institución Universitaria Tecnológico de Antioquia";
 
 const texto = (v) => String(v ?? "").trim();
+
+// Clave de idempotencia para un intento de «crear jornada». El formulario genera una y la repite
+// al reintentar sin cambiar nada; si el usuario modifica algo, se genera otra. Así un error de
+// conexión (cuando el servidor sí guardó la jornada) no produce un duplicado al reintentar.
+export const nuevaClaveCreacion = () =>
+  `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+
+// Campos con los que se reconoce que una jornada ya guardada es la que el formulario intenta
+// crear (la duración no entra: una jornada guardada por una versión anterior de la API no la tiene)
+const CAMPOS_DE_IGUALDAD = ["titulo", "descripcion", "entidad", "responsable", "lugar", "fecha", "cuposTotales"];
+
+// `jornada`: la guardada (con `fecha` en milisegundos); `datos`: los que devolvió validarJornada
+export const esMismaJornada = (jornada, datos) =>
+  !!jornada && !!datos && CAMPOS_DE_IGUALDAD.every((campo) => jornada[campo] === datos[campo]);
 
 // Valida el formulario de crear/editar jornada con la fecha del dispositivo.
 // `campos` son los textos del formulario; `contexto`:
@@ -52,6 +70,16 @@ export function validarJornada(campos, { ahora = Date.now(), cuposOcupados = 0, 
   else if (fecha == null) errores.hora = "Fecha u hora no válidas. La hora va como HH:mm (24 h).";
   else if (exigirFutura && fecha <= ahora) errores.dia = "La fecha y la hora deben ser posteriores a este momento.";
 
+  const textoDuracion = texto(campos.duracionMin);
+  const duracionMin = Number(textoDuracion);
+  if (!/^\d+$/.test(textoDuracion) || !Number.isSafeInteger(duracionMin)) {
+    errores.duracionMin = "La duración debe ser un número entero de minutos.";
+  } else if (duracionMin < LIMITES_DURACION.minimo) {
+    errores.duracionMin = `La duración mínima es de ${LIMITES_DURACION.minimo} minutos.`;
+  } else if (duracionMin > LIMITES_DURACION.maximo) {
+    errores.duracionMin = `La duración máxima es de ${LIMITES_DURACION.maximo} minutos (24 horas).`;
+  }
+
   const textoCupos = texto(campos.cuposTotales);
   const cuposTotales = Number(textoCupos);
   if (!/^\d+$/.test(textoCupos) || !Number.isSafeInteger(cuposTotales) || cuposTotales < 1) {
@@ -65,6 +93,6 @@ export function validarJornada(campos, { ahora = Date.now(), cuposOcupados = 0, 
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
-    datos: { titulo, descripcion, entidad, responsable, lugar, fecha, cuposTotales },
+    datos: { titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales },
   };
 }

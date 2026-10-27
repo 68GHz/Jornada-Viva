@@ -3,6 +3,7 @@ import utc from "dayjs/plugin/utc";
 import "dayjs/locale/es";
 // Zona horaria de negocio de las jornadas (UTC-5): definida en zonaNegocio.js
 import { OFFSET_NEGOCIO_MIN } from "./zonaNegocio";
+import { duracionJornadaMin } from "./duracion";
 
 dayjs.extend(utc);
 
@@ -41,10 +42,11 @@ export function fechaAMillis(fecha, horaLegado) {
   );
 }
 
-// Documento de Firestore -> jornada para la UI (`fecha` en ms, sin `hora`)
+// Documento de Firestore -> jornada para la UI (`fecha` en ms, sin `hora`). Las jornadas que
+// todavía no tienen `duracionMin` salen con la duración por defecto.
 export function normalizarJornada(id, datos) {
   const { hora, fecha, ...resto } = datos;
-  return { id, ...resto, fecha: fechaAMillis(fecha, hora) };
+  return { id, ...resto, fecha: fechaAMillis(fecha, hora), duracionMin: duracionJornadaMin(datos) };
 }
 
 // Instante (ms) -> dayjs en la zona de negocio. null si no es válido.

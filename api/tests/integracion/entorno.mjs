@@ -7,6 +7,8 @@ import { crearApp } from "../../src/app.js";
 
 export const PROYECTO = "demo-jornadaviva";
 export const DIA = 24 * 60 * 60 * 1000;
+export const MINUTO = 60 * 1000;
+export const SECRETO_ASISTENCIA = "secreto-solo-para-pruebas";
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error("Estas pruebas solo corren contra el emulador (npm run test:api).");
@@ -37,6 +39,7 @@ export async function iniciarApi(opciones = {}) {
     ahora: opciones.ahora ?? (() => reloj.ahora),
     registro: { ...silencioso, error: (...a) => registroErrores.push(a) },
     origenesCors: opciones.origenesCors,
+    secretoAsistencia: SECRETO_ASISTENCIA,
   });
   const servidor = await new Promise((resolver) => {
     const s = express.listen(0, "127.0.0.1", () => resolver(s));

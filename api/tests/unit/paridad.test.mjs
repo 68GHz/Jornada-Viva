@@ -18,7 +18,7 @@ const leer = (...partes) => readFileSync(join(raiz, ...partes), "utf8");
 
 describe("la API usa las mismas reglas puras que la app", () => {
   // Módulos copiados sin cambios: deben ser idénticos al de la app
-  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada"]) {
+  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia"]) {
     it(`${modulo}.js es idéntico en la app y en la API`, () => {
       assert.equal(
         leer("api", "src", "dominio", `${modulo}.js`).replace(/\r\n/g, "\n"),
@@ -38,11 +38,13 @@ describe("la API usa las mismas reglas puras que la app", () => {
     const ahora = Date.UTC(2026, 5, 1, 12, 0);
     const base = {
       titulo: "Jornada", descripcion: "Descripción", entidad: "TdeA", responsable: "Ana",
-      lugar: "Coliseo", dia: "2026-06-10", hora: "14:30", cuposTotales: "20",
+      lugar: "Coliseo", dia: "2026-06-10", hora: "14:30", duracionMin: "60", cuposTotales: "20",
     };
     const casos = [
       {}, { titulo: "" }, { titulo: "x".repeat(121) }, { descripcion: "" }, { descripcion: "x".repeat(2001) },
       { entidad: "  " }, { responsable: "" }, { lugar: "Piscina" }, { lugar: "" },
+      { duracionMin: "" }, { duracionMin: "9" }, { duracionMin: "10" }, { duracionMin: "1440" }, { duracionMin: "1441" },
+      { duracionMin: "abc" }, { duracionMin: "45.5" }, { duracionMin: "-30" },
       { cuposTotales: "0" }, { cuposTotales: "1001" }, { cuposTotales: "2.5" }, { cuposTotales: "abc" }, { cuposTotales: "" },
       { dia: "2026-05-01" }, { dia: "2026-06-01", hora: "12:00" }, { dia: "2026-06-01", hora: "12:01" },
       { titulo: "  Con espacios  ", responsable: " Ana " },
@@ -54,7 +56,12 @@ describe("la API usa las mismas reglas puras que la app", () => {
           const app = validarJornada(campos, { ahora, ...opciones });
           const fecha = combinarFechaHora(campos.dia, campos.hora);
           const api = validarDatosJornada(
-            { ...campos, fecha, cuposTotales: /^\d+$/.test(campos.cuposTotales) ? Number(campos.cuposTotales) : NaN },
+            {
+              ...campos,
+              fecha,
+              duracionMin: /^\d+$/.test(campos.duracionMin) ? Number(campos.duracionMin) : NaN,
+              cuposTotales: /^\d+$/.test(campos.cuposTotales) ? Number(campos.cuposTotales) : NaN,
+            },
             { ahora, ...opciones }
           );
           // La app informa la fecha en `dia`/`hora`; la API, en `fecha`

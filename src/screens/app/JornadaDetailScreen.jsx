@@ -22,6 +22,7 @@ import {
 } from "../../utils/jornadaFecha";
 import { jornadaDisponible } from "../../utils/jornadaEstado";
 import { estadoVentanaAsistencia } from "../../utils/asistencia";
+import { formatearDuracion, jornadaTerminada } from "../../utils/duracion";
 
 const TITULO_ERROR = {
   YA_INSCRITO: "Ya inscrito",
@@ -63,7 +64,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
     [inscripciones, jornada.id]
   );
   const yaAsistio = Boolean(inscripcionActual?.asistio);
-  const ventanaAsistencia = estadoVentanaAsistencia(jornada.fecha, ahora);
+  const ventanaAsistencia = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin);
 
   const [inscribiendo, setInscribiendo] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -260,7 +261,9 @@ export default function JornadaDetailScreen({ route, navigation }) {
           <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
           <Text style={styles.avisoNoDisponibleTexto}>
             {vencida
-              ? "Esta jornada ya finalizó."
+              ? jornadaTerminada(jornada, ahora)
+                ? "Esta jornada ya finalizó."
+                : "Esta jornada ya comenzó y no admite nuevas inscripciones."
               : "Esta jornada fue desactivada y no está disponible por el momento."}
           </Text>
         </View>
@@ -305,6 +308,18 @@ export default function JornadaDetailScreen({ route, navigation }) {
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Hora</Text>
             <Text style={styles.filaValor}>{formatearHora(jornada.fecha)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.separador} />
+
+        <View style={styles.filaInfo}>
+          <Ionicons name="hourglass-outline" size={18} color={colors.primary} style={styles.filaIcono} />
+          <View style={styles.filaTexto}>
+            <Text style={styles.filaEtiqueta}>Duración</Text>
+            <Text style={[styles.filaValor, { textTransform: "none" }]}>
+              {formatearDuracion(jornada.duracionMin)}
+            </Text>
           </View>
         </View>
 
@@ -379,7 +394,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
                   navigation?.navigate("EscanearAsistencia", {
                     jornadaId: jornada.id,
                     jornadaFecha: jornada.fecha,
-                    inscripcionId: inscripcionActual?.id,
+                    duracionMin: jornada.duracionMin,
                     tituloJornada: jornada.titulo,
                   })
                 }

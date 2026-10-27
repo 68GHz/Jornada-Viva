@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LIMITES, validarJornada } from "../../src/utils/jornadaForm.js";
+import { LIMITES_DURACION } from "../../src/utils/duracion.js";
+import {
+  DURACION_SUGERIDA,
+  LIMITES,
+  esMismaJornada,
+  nuevaClaveCreacion,
+  validarJornada,
+} from "../../src/utils/jornadaForm.js";
 import { combinarFechaHora, descomponerFecha } from "../../src/utils/zonaNegocio.js";
 
 // 1 de noviembre de 2026, 12:00 hora de negocio (UTC-5)
@@ -14,6 +21,7 @@ const formulario = (extra = {}) => ({
   lugar: "Coliseo",
   dia: "2026-11-10",
   hora: "09:30",
+  duracionMin: "90",
   cuposTotales: "40",
   ...extra,
 });
@@ -57,8 +65,23 @@ describe("validación del formulario de jornada", () => {
       responsable: "Bienestar",
       lugar: "Coliseo",
       fecha: combinarFechaHora("2026-11-10", "09:30"),
+      duracionMin: 90,
       cuposTotales: 40,
     });
+  });
+
+  it("la duración es un entero de minutos dentro de los límites", () => {
+    for (const duracionMin of ["", " ", "0", "9", "-30", "45.5", "abc", "1e2", "1441", "99999999999999999999"]) {
+      assert.ok(errores({ duracionMin }).duracionMin, JSON.stringify(duracionMin));
+    }
+    assert.equal(errores({ duracionMin: String(LIMITES_DURACION.minimo) }).duracionMin, undefined);
+    assert.equal(errores({ duracionMin: String(LIMITES_DURACION.maximo) }).duracionMin, undefined);
+    assert.ok(errores({ duracionMin: String(LIMITES_DURACION.minimo - 1) }).duracionMin);
+    assert.ok(errores({ duracionMin: String(LIMITES_DURACION.maximo + 1) }).duracionMin);
+  });
+
+  it("el formulario propone una duración válida al crear", () => {
+    assert.equal(errores({ duracionMin: DURACION_SUGERIDA }).duracionMin, undefined);
   });
 
   it("exige título, descripción, entidad y responsable (no solo espacios)", () => {
@@ -106,5 +129,41 @@ describe("validación del formulario de jornada", () => {
 
   it("si hay errores no devuelve datos", () => {
     assert.equal(validarJornada(formulario({ titulo: "" }), { ahora: AHORA }).datos, null);
+  });
+});
+
+describe("reintentar «Crear jornada» sin duplicar", () => {
+  it("genera claves válidas para la API y distintas en cada intento", () => {
+    const claves = new Set(Array.from({ length: 200 }, () => nuevaClaveCreacion()));
+    assert.equal(claves.size, 200);
+    for (const clave of claves) assert.match(clave, /^[A-Za-z0-9_-]{8,100}$/);
+  });
+
+  const datos = () => validarJornada(formulario(), { ahora: AHORA }).datos;
+  const guardada = (extra = {}) => ({ id: "j1", ...datos(), creadoPor: "g1", activa: true, cuposOcupados: 0, ...extra });
+
+  it("reconoce como la misma la jornada que ya se guardó con esos datos", () => {
+    assert.equal(esMismaJornada(guardada(), datos()), true);
+    // lo que no es del formulario (id, cupos ocupados, estado) no cuenta
+    assert.equal(esMismaJornada(guardada({ cuposOcupados: 3, activa: false, id: "otra" }), datos()), true);
+  });
+
+  it("si el usuario cambió algo entre un intento y otro, no es la misma", () => {
+    for (const cambio of [
+      { titulo: "Otro título" }, { descripcion: "Otra" }, { entidad: "Otra entidad" }, { responsable: "Otro" },
+      { lugar: "Cancha" }, { fecha: datos().fecha + 60000 }, { cuposTotales: 41 },
+    ]) {
+      assert.equal(esMismaJornada(guardada(cambio), datos()), false, JSON.stringify(cambio));
+    }
+  });
+
+  it("la duración no cuenta (una jornada guardada por una API anterior no la tiene)", () => {
+    assert.equal(esMismaJornada(guardada({ duracionMin: 60 }), datos()), true);
+    assert.equal(esMismaJornada({ ...guardada(), duracionMin: undefined }, datos()), true);
+  });
+
+  it("sin jornada o sin datos nunca coincide", () => {
+    assert.equal(esMismaJornada(null, datos()), false);
+    assert.equal(esMismaJornada(guardada(), null), false);
   });
 });

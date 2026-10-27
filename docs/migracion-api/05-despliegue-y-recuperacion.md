@@ -13,7 +13,8 @@
 | `FIREBASE_PROJECT_ID` | `jornadaviva-476ff` |
 | `FIREBASE_SERVICE_ACCOUNT` | JSON de la clave (una línea) o su base64 |
 | `PORT` | lo fija el hosting (por defecto 8080) |
-| `MANTENIMIENTO_MINUTOS` | `5` (desactiva jornadas vencidas); `0` = solo bajo demanda |
+| `MANTENIMIENTO_MINUTOS` | `5` (desactiva jornadas que ya terminaron); `0` = solo bajo demanda |
+| `ASISTENCIA_SECRETO` | (opcional) cadena larga y aleatoria con la que se firman los códigos del QR de asistencia. Si falta se deriva de `FIREBASE_SERVICE_ACCOUNT` |
 | `CORS_ORIGINS` | vacío (la app móvil no lo necesita) |
 
 ## 3. Despliegue

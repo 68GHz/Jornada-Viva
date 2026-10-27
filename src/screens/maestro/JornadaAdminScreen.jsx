@@ -21,12 +21,12 @@ import {
   reactivarJornada,
 } from "../../services/jornadaAdminService";
 import { compartirPlanilla } from "../../services/planillaService";
-import { registrarAsistenciaManual } from "../../services/asistenciaService";
-import { estadoVentanaAsistencia } from "../../utils/asistencia";
+import { marcarAsistenciaManual, mensajeDeErrorAsistencia } from "../../services/asistenciaService";
 import ModalQrAsistencia from "../../components/ModalQrAsistencia";
 import EstadoJornadaChip from "../../components/EstadoJornadaChip";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colors } from "../../theme/colors";
+import { formatearDuracion } from "../../utils/duracion";
 import { estadoJornada, permisosJornada } from "../../utils/estadoJornada";
 import { formatearFecha, formatearHora } from "../../utils/jornadaFecha";
 import { formatearFechaHoraNegocio } from "../../utils/zonaNegocio";
@@ -84,27 +84,24 @@ export default function JornadaAdminScreen({ navigation, route }) {
   const [modalQrVisible, setModalQrVisible] = useState(false);
   const [actualizandoAsistenciaId, setActualizandoAsistenciaId] = useState(null);
 
-  const ventanaAsistencia = jornada ? estadoVentanaAsistencia(jornada.fecha, ahora) : null;
-
+  // Marcar o corregir la asistencia a mano: desde que empieza la jornada y sin límite de tiempo
   const alternarAsistenciaManual = async (inscrito) => {
     if (!jornada) return;
-    const nuevoValor = !inscrito.asistio;
-    const ventana = estadoVentanaAsistencia(jornada.fecha, ahora);
-    if (!ventana.disponible) {
+    if (!permisos?.marcarAsistencia) {
       Alert.alert(
-        "Ventana de asistencia no disponible",
-        ventana.mensaje
+        "Aún no empieza",
+        "La asistencia se puede marcar desde la hora de inicio de la jornada."
       );
       return;
     }
 
     setActualizandoAsistenciaId(inscrito.id);
     try {
-      await registrarAsistenciaManual(inscrito.id, jornada.fecha, nuevoValor);
+      await marcarAsistenciaManual(jornada.id, inscrito.id, !inscrito.asistio);
       await recargar();
     } catch (err) {
       console.warn("Error al registrar asistencia manual:", err);
-      Alert.alert("No se pudo actualizar", err?.message || "Ocurrió un error. Intenta de nuevo.");
+      Alert.alert("No se pudo actualizar", mensajeDeErrorAsistencia(err));
     } finally {
       setActualizandoAsistenciaId(null);
     }
@@ -234,6 +231,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
           capitalizar
         />
         <Fila icono="time-outline" etiqueta="Hora" valor={formatearHora(jornada.fecha)} />
+        <Fila icono="hourglass-outline" etiqueta="Duración" valor={formatearDuracion(jornada.duracionMin)} />
         <Fila icono="location-outline" etiqueta="Espacio" valor={jornada.lugar} />
         <Fila icono="person-outline" etiqueta="Responsable" valor={jornada.responsable} />
         {esAdministrador && (
@@ -259,7 +257,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
       </View>
 
       <View style={styles.acciones}>
-        {permisos.editar && (
+        {permisos.generarQr && (
           <Boton
             texto="Generar QR de asistencia"
             icono="qr-code-outline"

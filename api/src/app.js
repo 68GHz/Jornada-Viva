@@ -2,6 +2,7 @@ import express from "express";
 import { autenticar, soloAdministrador } from "./middleware/autenticacion.js";
 import { manejarErrores, rutaNoEncontrada } from "./middleware/errores.js";
 import * as perfiles from "./servicios/perfiles.js";
+import * as asistencia from "./servicios/asistencia.js";
 import * as inscripciones from "./servicios/inscripciones.js";
 import * as jornadas from "./servicios/jornadas.js";
 import * as notificaciones from "./servicios/notificaciones.js";
@@ -15,8 +16,18 @@ import { desactivarVencidas } from "./servicios/mantenimiento.js";
 //   verificarToken  (idToken) => { uid, email?, name? }; lanza si no es válido
 //   ahora           reloj en ms (por defecto Date.now)
 //   registro        consola (por defecto console)
-export function crearApp({ db, auth, verificarToken, ahora = Date.now, registro = console, origenesCors = [] }) {
-  const ctx = { db, auth, ahora, registro };
+//   secretoAsistencia  secreto con el que se firman los códigos del QR de asistencia
+export function crearApp({
+  db,
+  auth,
+  verificarToken,
+  ahora = Date.now,
+  registro = console,
+  origenesCors = [],
+  secretoAsistencia,
+}) {
+  if (!secretoAsistencia) throw new Error("crearApp necesita el secreto de asistencia (secretoAsistencia).");
+  const ctx = { db, auth, ahora, registro, secretoAsistencia };
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "100kb" }));
@@ -58,7 +69,9 @@ export function crearApp({ db, auth, verificarToken, ahora = Date.now, registro 
 
   // ---- Gestión de jornadas (M3) ----
   v1.post("/jornadas", async (req, res) => {
-    res.status(201).json(await jornadas.crear(ctx, req.usuario, req.body));
+    const creada = await jornadas.crear(ctx, req.usuario, req.body);
+    // 201 al crearla; 200 si es el reintento de una creación que ya se había hecho
+    res.status(creada.repetida ? 200 : 201).json(creada);
   });
   v1.put("/jornadas/:id", async (req, res) => {
     await jornadas.editar(ctx, req.usuario, req.params.id, req.body);
@@ -83,6 +96,17 @@ export function crearApp({ db, auth, verificarToken, ahora = Date.now, registro 
   v1.get("/jornadas/:id/planilla.csv", async (req, res) => {
     const { nombre, csv } = await jornadas.planilla(ctx, req.usuario, req.params.id);
     res.type("text/csv; charset=utf-8").set("Content-Disposition", `attachment; filename="${nombre}"`).send(csv);
+  });
+
+  // ---- Asistencia (QR firmado y marcado manual) ----
+  v1.post("/jornadas/:id/asistencia/codigo", async (req, res) => {
+    res.json(await asistencia.emitirCodigo(ctx, req.usuario, req.params.id));
+  });
+  v1.post("/jornadas/:id/asistencia", async (req, res) => {
+    res.json({ resultado: await asistencia.registrar(ctx, req.usuario, req.params.id, req.body) });
+  });
+  v1.put("/jornadas/:id/inscritos/:inscripcionId/asistencia", async (req, res) => {
+    res.json(await asistencia.marcar(ctx, req.usuario, req.params.id, req.params.inscripcionId, req.body));
   });
 
   // Cualquier usuario con sesión puede pedirlo (antes lo hacía cualquier cliente); además corre solo
