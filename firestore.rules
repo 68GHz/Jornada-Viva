@@ -188,6 +188,15 @@ service cloud.firestore {
     }
 
     // ================= Inscripciones =================
+    function jornadaDeInscripcion(jornadaId) {
+      return get(/databases/$(database)/documents/jornadas/$(jornadaId)).data;
+    }
+
+    function ventanaAsistenciaValida(jornadaFecha) {
+      return request.time >= jornadaFecha
+        && request.time <= jornadaFecha + duration.value(20, 'm');
+    }
+
     match /inscripciones/{inscripcionId} {
       // El estudiante lee las suyas; el gestor, las de sus jornadas (planilla); el administrador, todas
       allow read: if request.auth != null
@@ -198,7 +207,26 @@ service cloud.firestore {
       allow create: if usuarioActivo()
         && request.resource.data.userId == request.auth.uid;
 
-      allow update: if false;
+      // Actualización: exclusivamente para registro de asistencia durante los primeros 20 minutos
+      allow update: if request.auth != null && (
+        // Asistencia autónoma por el estudiante inscrito:
+        (
+          resource.data.userId == request.auth.uid
+          && usuarioActivo()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['asistio', 'asistioEn', 'metodoAsistencia'])
+          && request.resource.data.asistio == true
+          && request.resource.data.get('metodoAsistencia', 'qr') in ['qr', 'autonoma']
+          && ventanaAsistenciaValida(jornadaDeInscripcion(resource.data.jornadaId).fecha)
+        )
+        // Asistencia manual por el gestor de la jornada o administrador:
+        || (
+          (esAdmin() || esPropietarioDeJornada(resource.data.jornadaId))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['asistio', 'asistioEn', 'metodoAsistencia'])
+          && request.resource.data.asistio is bool
+          && (!('metodoAsistencia' in request.resource.data) || request.resource.data.metodoAsistencia in ['manual', 'qr', 'autonoma'])
+          && ventanaAsistenciaValida(jornadaDeInscripcion(resource.data.jornadaId).fecha)
+        )
+      );
 
       allow delete: if request.auth != null
         && resource.data.userId == request.auth.uid;
