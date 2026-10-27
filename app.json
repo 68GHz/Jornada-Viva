@@ -1,14 +1,18 @@
 {
   "expo": {
-    "name": "JornadaViva",
-    "slug": "jornadaviva",
+    "name": "Jornada Viva",
+    "slug": "jornada-viva",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A6B4A"
+    },
     "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "com.brigadas.app"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
