@@ -17,7 +17,7 @@ import {
 import { db, firebaseConfig } from "../../firebaseConfig";
 import { usaApi } from "../config/api";
 import { llamarApi } from "./apiClient";
-import { conTiempoLimite } from "../utils/sincronizacion";
+import { conTiempoLimite, mensajeDeRed } from "../utils/sincronizacion";
 import { ETIQUETA_ROL } from "../utils/roles";
 
 // Operaciones del módulo de administración. Solo funcionan con conexión y
@@ -147,7 +147,7 @@ export function mensajeErrorAdmin(error) {
   if (codigo === "weak-password") return "La contraseña es demasiado débil (mínimo 6 caracteres).";
   if (codigo === "permission-denied") return "No tienes permiso para realizar esta acción.";
   if (error?.name === "ErrorRed" || ["unavailable", "deadline-exceeded", "network-request-failed"].includes(codigo)) {
-    return "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+    return mensajeDeRed(error);
   }
   return "No se pudo completar la operación. Intenta de nuevo.";
 }

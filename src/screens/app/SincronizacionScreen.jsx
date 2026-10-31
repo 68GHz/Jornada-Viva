@@ -13,7 +13,7 @@ import "dayjs/locale/es";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useSync } from "../../context/SyncContext";
 import { colors } from "../../theme/colors";
-import { ESTADOS, TIPOS } from "../../utils/sincronizacion";
+import { ESTADOS, TIPOS, resumenSincronizacion } from "../../utils/sincronizacion";
 
 const ETIQUETA_TIPO = {
   [TIPOS.INSCRIBIR]: "Inscripción",
@@ -33,7 +33,8 @@ const estadoVisual = (accion) => {
 // Acciones realizadas sin conexión que aún no llegan a Firestore
 export default function SincronizacionScreen() {
   const { enLinea } = useConnectivity();
-  const { cola, sincronizando, ultimaSync, procesar, reintentar, descartar } = useSync();
+  const { cola, pendientes, rechazadas, sincronizando, ultimaSync, procesar, reintentar, descartar } =
+    useSync();
 
   const sincronizarAhora = () => {
     if (!enLinea) {
@@ -65,6 +66,9 @@ export default function SincronizacionScreen() {
   return (
     <View style={styles.contenedor}>
       <View style={styles.resumen}>
+        <Text style={styles.resumenTitulo}>
+          {resumenSincronizacion({ nPendientes: pendientes.length, nRechazadas: rechazadas.length })}
+        </Text>
         <Text style={styles.resumenTexto}>
           {ultimaSync
             ? `Última sincronización: ${dayjs(ultimaSync).locale("es").format("D MMM, h:mm A")}`
@@ -159,6 +163,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  resumenTitulo: { fontSize: 16, color: colors.textPrimary, fontWeight: "800" },
   resumenTexto: { fontSize: 13, color: colors.textSecondary, fontWeight: "600" },
   botonSincronizar: {
     flexDirection: "row",

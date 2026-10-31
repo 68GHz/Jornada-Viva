@@ -13,6 +13,14 @@ describe("configuración por variables de entorno", () => {
     assert.equal(c.cuentaServicio, "");
   });
 
+  it("antigüedad máxima de una cancelación sin conexión: 7 días por defecto y configurable en horas", () => {
+    assert.equal(leerConfig({}).cancelacionAntiguedadMaxMs, 7 * 24 * 3600000);
+    assert.equal(leerConfig({ CANCELACION_ANTIGUEDAD_MAX_HORAS: "48" }).cancelacionAntiguedadMaxMs, 48 * 3600000);
+    for (const invalido of ["0", "-3", "abc", ""]) {
+      assert.equal(leerConfig({ CANCELACION_ANTIGUEDAD_MAX_HORAS: invalido }).cancelacionAntiguedadMaxMs, 7 * 24 * 3600000, invalido);
+    }
+  });
+
   it("lee puerto, proyecto, orígenes CORS y desactiva el mantenimiento con 0", () => {
     const c = leerConfig({ PORT: "3000", FIREBASE_PROJECT_ID: "p", CORS_ORIGINS: "https://a.com, https://b.com ,", MANTENIMIENTO_MINUTOS: "0" });
     assert.equal(c.puerto, 3000);

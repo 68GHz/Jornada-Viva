@@ -37,9 +37,9 @@ Inevitables o consecuencia directa de decisiones tomadas con el usuario. Ninguna
 
 ## 3. Defectos preexistentes (documentados, **no corregidos**)
 
-- El plazo de cancelación de 2 días solo lo valida la app, con la fecha del dispositivo: la API acepta cualquier cancelación (igual que las reglas de antes).
+- ~~El plazo de cancelación de 2 días solo lo valida la app~~ **Corregido en el código (Fase 2, D3, 2026-10-31):** la API lo valida por día de negocio (`409 PLAZO_VENCIDO`). Una cancelación hecha sin conexión usa la hora en que se hizo (acotada por la del servidor y por `CANCELACION_ANTIGUEDAD_MAX_HORAS`). Falta redesplegar la API en Render.
 - ~~La inscripción no se restringe por rol~~ **Corregido (Fase 1, D2, 2026-10-30):** `PUT /jornadas/{id}/inscripcion` responde 403 `SIN_PERMISO` a gestores y administradores. Cancelar sigue sin restringirse por rol.
-- Con las reglas actuales, cualquier cliente puede mover el contador de cupos dentro de sus límites. **Se cierra** al publicar `firestore.api.rules` (M7).
+- Con las reglas actuales, cualquier cliente puede mover el contador de cupos dentro de sus límites (comprobado el 2026-10-31 con el token de un alumno y de un administrador: la escritura directa devuelve 200). **Se cierra** al publicar `firestore.api.rules` con `firebase.produccion.json`: los datos ya están migrados y las reglas listas; **falta publicarlas**.
 - Nombre y correo de la planilla vienen de lo que cada alumno envía al inscribirse (la API usa los del perfil solo si faltan).
 - La Cloud Function `functions/index.js` (`onJornadaUpdated`) no está desplegada y duplicaría los avisos si se desplegara junto a la API: eliminarla en M7.
 - Un error 500 se trata como temporal en la cola offline y se reintenta con espera creciente (igual que el código `internal` de Firestore).
@@ -56,7 +56,7 @@ Inevitables o consecuencia directa de decisiones tomadas con el usuario. Ninguna
 | 5 | Notificaciones *push* reales desde el servidor (Expo Push con el `pushToken` ya guardado): mejora, no existía | Opcional |
 | 6 | Limitar la tasa de solicitudes y añadir métricas/alertas | Opcional |
 | 7 | Encolar sin conexión «marcar leída/eliminar» notificación (diferencia 5) | Opcional |
-| 8 | Validar el plazo de cancelación en el servidor (cambiaría el comportamiento: requiere decisión) | Opcional |
+| 8 | ~~Validar el plazo de cancelación en el servidor~~ Hecho en el código (Fase 2); falta redesplegar la API | Equipo |
 | 9 | Documento OpenAPI de los endpoints | Opcional |
 
 ## 5. Cambios posteriores: duración de las jornadas y asistencia por la API

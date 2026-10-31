@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import {
-  DIA, Timestamp, coleccion, docJornada, existe, iniciarApi, leer, limpiar, reloj, sembrar, sembrarPerfiles,
+  DIA, MINUTO, Timestamp, coleccion, db, docJornada, existe, iniciarApi, leer, limpiar, reloj, sembrar, sembrarPerfiles,
 } from "./entorno.mjs";
+import { combinarFechaHora } from "../../src/dominio/zonaNegocio.js";
 
 const inscribir = (api, uid, jornada = "j1", cuerpo) =>
   api.llamar(uid, "PUT", `/v1/jornadas/${jornada}/inscripcion`, cuerpo ?? { nombreUsuario: uid, emailUsuario: `${uid}@x.co` });
-const cancelar = (api, uid, jornada = "j1") => api.llamar(uid, "DELETE", `/v1/jornadas/${jornada}/inscripcion`);
+const cancelar = (api, uid, jornada = "j1", cuerpo) =>
+  api.llamar(uid, "DELETE", `/v1/jornadas/${jornada}/inscripcion`, cuerpo);
 
 describe("M2 · inscribirse y cancelar la inscripción", () => {
   let api;
@@ -227,9 +229,9 @@ describe("M2 · inscribirse y cancelar la inscripción", () => {
       assert.equal((await leer("jornadas/j1")).cuposOcupados, 0);
     });
 
-    it("sigue funcionando aunque la jornada esté desactivada o vencida (el plazo de 2 días solo lo valida la app)", async () => {
+    it("sigue funcionando aunque la jornada esté desactivada (si el plazo de 2 días no ha vencido)", async () => {
       await inscribir(api, "est1");
-      await sembrar("jornadas/j1", docJornada({ activa: false, cuposOcupados: 1, cuposTotales: 2, fecha: Timestamp.fromMillis(reloj.ahora + 60000) }));
+      await sembrar("jornadas/j1", docJornada({ activa: false, cuposOcupados: 1, cuposTotales: 2 })); // dentro de 5 días
       assert.equal((await cancelar(api, "est1")).cuerpo.resultado, "completada");
     });
 
@@ -243,6 +245,159 @@ describe("M2 · inscribirse y cancelar la inscripción", () => {
 
     it("requiere sesión", async () => {
       assert.equal((await api.llamar(null, "DELETE", "/v1/jornadas/j1/inscripcion")).estado, 401);
+    });
+  });
+
+  describe("plazo de cancelación (2 días, validado por el servidor)", () => {
+    const D = "2026-11-20"; // día de la jornada de estas pruebas
+    const jornadaEl = (dia, hora) => Timestamp.fromMillis(combinarFechaHora(dia, hora));
+    const ahoraEs = (dia, hora) => {
+      reloj.ahora = combinarFechaHora(dia, hora);
+    };
+    const relojOriginal = reloj.ahora;
+
+    beforeEach(async () => {
+      await sembrar("jornadas/j1", docJornada({ fecha: jornadaEl(D, "08:00"), cuposTotales: 2, cuposOcupados: 1 }));
+      await sembrar("inscripciones/est1_j1", { userId: "est1", jornadaId: "j1", asistio: false });
+    });
+    after(() => {
+      reloj.ahora = relojOriginal;
+    });
+
+    const sigueInscrito = async () => {
+      assert.equal(await existe("inscripciones/est1_j1"), true, "la inscripción sigue");
+      assert.equal((await leer("jornadas/j1")).cuposOcupados, 1, "el cupo sigue ocupado");
+    };
+
+    it("dentro del plazo: se cancela y se libera el cupo", async () => {
+      ahoraEs("2026-11-17", "12:00");
+      assert.equal((await cancelar(api, "est1")).cuerpo.resultado, "completada");
+      assert.equal(await existe("inscripciones/est1_j1"), false);
+      assert.equal((await leer("jornadas/j1")).cuposOcupados, 0);
+    });
+
+    it("el último minuto del día límite (2 días antes) todavía se puede cancelar", async () => {
+      ahoraEs("2026-11-18", "23:59");
+      assert.equal((await cancelar(api, "est1")).estado, 200);
+      assert.equal(await existe("inscripciones/est1_j1"), false);
+    });
+
+    it("desde el primer minuto del día siguiente: 409 PLAZO_VENCIDO y no cambia nada", async () => {
+      ahoraEs("2026-11-19", "00:00");
+      const r = await cancelar(api, "est1");
+      assert.equal(r.estado, 409);
+      assert.equal(r.cuerpo.error.codigo, "PLAZO_VENCIDO");
+      assert.equal(r.cuerpo.error.mensaje, "Solo puedes cancelar hasta 2 días antes de la jornada.");
+      await sigueInscrito();
+    });
+
+    it("el mismo día de la jornada, ya empezada o ya terminada: tampoco se puede", async () => {
+      for (const [dia, hora] of [["2026-11-20", "07:00"], ["2026-11-20", "08:30"], ["2026-11-21", "10:00"]]) {
+        ahoraEs(dia, hora);
+        const r = await cancelar(api, "est1");
+        assert.equal(r.cuerpo.error?.codigo, "PLAZO_VENCIDO", `${dia} ${hora}`);
+      }
+      await sigueInscrito();
+    });
+
+    it("una jornada desactivada también respeta el plazo (la regla es por fecha)", async () => {
+      await sembrar("jornadas/j1", docJornada({ activa: false, fecha: jornadaEl(D, "08:00"), cuposTotales: 2, cuposOcupados: 1 }));
+      ahoraEs("2026-11-19", "10:00");
+      assert.equal((await cancelar(api, "est1")).cuerpo.error?.codigo, "PLAZO_VENCIDO");
+      await sigueInscrito();
+    });
+
+    it("repetir una cancelación ya hecha sigue siendo «ya-cancelada», aunque el plazo haya vencido", async () => {
+      ahoraEs("2026-11-17", "12:00");
+      await cancelar(api, "est1");
+      ahoraEs("2026-11-20", "12:00");
+      const r = await cancelar(api, "est1");
+      assert.equal(r.estado, 200);
+      assert.equal(r.cuerpo.resultado, "ya-cancelada");
+    });
+
+    it("si la jornada fue eliminada, la inscripción huérfana se borra aunque el plazo ya hubiera vencido", async () => {
+      await db.doc("jornadas/j1").delete();
+      ahoraEs("2026-11-21", "12:00");
+      assert.equal((await cancelar(api, "est1")).cuerpo.resultado, "completada");
+      assert.equal(await existe("inscripciones/est1_j1"), false);
+    });
+
+    it("una jornada sin fecha no se puede evaluar: liberar el cupo se permite", async () => {
+      const sinFecha = docJornada({ cuposTotales: 2, cuposOcupados: 1 });
+      delete sinFecha.fecha;
+      await sembrar("jornadas/j1", sinFecha);
+      ahoraEs("2026-11-19", "10:00");
+      assert.equal((await cancelar(api, "est1")).cuerpo.resultado, "completada");
+    });
+
+    describe("cancelación hecha sin conexión (hora del cliente)", () => {
+      it("se valida con la hora en que se hizo, aunque llegue después de vencido el plazo", async () => {
+        ahoraEs("2026-11-19", "09:00"); // el servidor la recibe cuando el plazo ya venció
+        const r = await cancelar(api, "est1", "j1", { canceladaEn: combinarFechaHora("2026-11-18", "20:00") });
+        assert.equal(r.cuerpo.resultado, "completada");
+        assert.equal(await existe("inscripciones/est1_j1"), false);
+        assert.equal((await leer("jornadas/j1")).cuposOcupados, 0);
+      });
+
+      it("pero si la hizo ya fuera de plazo, se rechaza igual", async () => {
+        ahoraEs("2026-11-20", "09:00");
+        const r = await cancelar(api, "est1", "j1", { canceladaEn: combinarFechaHora("2026-11-19", "20:00") });
+        assert.equal(r.cuerpo.error?.codigo, "PLAZO_VENCIDO");
+        await sigueInscrito();
+      });
+
+      it("una hora del cliente adelantada (en el futuro) no ayuda: manda la del servidor", async () => {
+        ahoraEs("2026-11-19", "09:00");
+        const r = await cancelar(api, "est1", "j1", { canceladaEn: reloj.ahora + 40 * DIA });
+        assert.equal(r.cuerpo.error?.codigo, "PLAZO_VENCIDO");
+        await sigueInscrito();
+      });
+
+      it("una hora demasiado antigua (más de 7 días) se rechaza: 409 ACCION_DEMASIADO_ANTIGUA", async () => {
+        ahoraEs("2026-11-19", "09:00");
+        const r = await cancelar(api, "est1", "j1", { canceladaEn: reloj.ahora - 8 * DIA });
+        assert.equal(r.estado, 409);
+        assert.equal(r.cuerpo.error.codigo, "ACCION_DEMASIADO_ANTIGUA");
+        await sigueInscrito();
+      });
+
+      it("justo en el límite de antigüedad (7 días) todavía se acepta", async () => {
+        ahoraEs("2026-11-19", "09:00"); // hace exactamente 7 días: el 12/11, dentro del plazo
+        const r = await cancelar(api, "est1", "j1", { canceladaEn: reloj.ahora - 7 * DIA });
+        assert.equal(r.estado, 200);
+        assert.equal(r.cuerpo.resultado, "completada");
+      });
+
+      it("el límite de antigüedad se puede configurar", async () => {
+        const corta = await iniciarApi({ cancelacionAntiguedadMaxMs: 60 * MINUTO });
+        try {
+          ahoraEs("2026-11-17", "12:00");
+          const vieja = await corta.llamar("est1", "DELETE", "/v1/jornadas/j1/inscripcion", { canceladaEn: reloj.ahora - 2 * 60 * MINUTO });
+          assert.equal(vieja.cuerpo.error?.codigo, "ACCION_DEMASIADO_ANTIGUA");
+          const reciente = await corta.llamar("est1", "DELETE", "/v1/jornadas/j1/inscripcion", { canceladaEn: reloj.ahora - 30 * MINUTO });
+          assert.equal(reciente.cuerpo.resultado, "completada");
+        } finally {
+          await corta.cerrar();
+        }
+      });
+
+      it("una hora que no es un número válido es un error de validación (400) y no cambia nada", async () => {
+        ahoraEs("2026-11-17", "12:00");
+        for (const canceladaEn of ["ayer", "1700000000000", -5, 0, true, {}, [123]]) {
+          const r = await cancelar(api, "est1", "j1", { canceladaEn });
+          assert.equal(r.estado, 400, JSON.stringify(canceladaEn));
+          assert.ok(r.cuerpo.error.campos.canceladaEn);
+        }
+        await sigueInscrito();
+      });
+
+      it("con conexión no hace falta enviar la hora: se usa la del servidor (compatible con la app anterior)", async () => {
+        ahoraEs("2026-11-19", "09:00");
+        assert.equal((await cancelar(api, "est1")).cuerpo.error?.codigo, "PLAZO_VENCIDO");
+        ahoraEs("2026-11-17", "09:00");
+        assert.equal((await cancelar(api, "est1", "j1", {})).cuerpo.resultado, "completada");
+      });
     });
   });
 });

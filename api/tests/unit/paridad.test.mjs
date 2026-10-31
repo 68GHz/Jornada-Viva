@@ -18,7 +18,7 @@ const leer = (...partes) => readFileSync(join(raiz, ...partes), "utf8");
 
 describe("la API usa las mismas reglas puras que la app", () => {
   // Módulos copiados sin cambios: deben ser idénticos al de la app
-  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia", "bannerJornada"]) {
+  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia", "bannerJornada", "plazoCancelacion"]) {
     it(`${modulo}.js es idéntico en la app y en la API`, () => {
       assert.equal(
         leer("api", "src", "dominio", `${modulo}.js`).replace(/\r\n/g, "\n"),

@@ -1,4 +1,5 @@
 // Utilidades puras del modo offline (sin dependencias de React ni de Firebase).
+import { conteoPlural } from "./plural.js";
 
 export const ESTADOS = {
   PENDIENTE: "pendiente",
@@ -11,7 +12,8 @@ export const TIPOS = {
   CANCELAR: "CANCELAR",
 };
 
-// Los avisos "Conectado" / "Sin conexión" se muestran exactamente este tiempo
+// El aviso "Conectado" (al recuperar la red) se muestra exactamente este tiempo.
+// El aviso "Sin conexión", en cambio, es permanente: dura mientras no haya red.
 export const DURACION_AVISO_CONEXION_MS = 10000;
 
 // Acción que todavía debe enviarse al servidor
@@ -32,18 +34,33 @@ export class ErrorNegocio extends Error {
 }
 
 // Error de conectividad (incluye el tiempo de espera agotado). Se reintenta.
+// `motivo` distingue «no hay red» (por defecto) de «el servidor no respondió a tiempo»
+// ("tiempo-agotado") o «respondió que no está disponible» ("servidor-no-disponible"):
+// en el plan gratuito de Render el servidor se duerme y tarda en despertar.
 export class ErrorRed extends Error {
-  constructor(mensaje = "Sin conexión con el servidor.") {
+  constructor(mensaje = "Sin conexión con el servidor.", motivo = "sin-red") {
     super(mensaje);
     this.name = "ErrorRed";
     this.code = "unavailable";
+    this.motivo = motivo;
   }
 }
+
+export const MENSAJE_SIN_RED = "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+export const MENSAJE_SERVIDOR_DESPERTANDO =
+  "El servidor está despertando o tarda en responder. Espera unos segundos e intenta de nuevo.";
+
+// Mensaje para el usuario ante un error de conexión: distingue la falta de red de un
+// servidor que todavía está despertando.
+export const mensajeDeRed = (error) =>
+  error?.motivo === "tiempo-agotado" || error?.motivo === "servidor-no-disponible"
+    ? MENSAJE_SERVIDOR_DESPERTANDO
+    : MENSAJE_SIN_RED;
 
 export function conTiempoLimite(promesa, ms = 20000) {
   return new Promise((resolve, reject) => {
     const temporizador = setTimeout(
-      () => reject(new ErrorRed("Tiempo de espera agotado.")),
+      () => reject(new ErrorRed("Tiempo de espera agotado.", "tiempo-agotado")),
       ms
     );
     promesa.then(
@@ -101,8 +118,10 @@ export function clasificarError(error) {
 
 // Elige el ÚNICO aviso de estado que se muestra (nunca dos a la vez), por prioridad:
 //  1. Sincronizando datos: mientras dure el envío, sin límite de tiempo
-//  2. Sin conexión / Conectado: solo durante DURACION_AVISO_CONEXION_MS tras el cambio
-//  3. Errores que requieren atención (acciones rechazadas; fallo al sincronizar)
+//  2. Sin conexión: PERMANENTE mientras no haya red (con el número de acciones pendientes).
+//     No depende de ningún temporizador ni de `avisoConexion`.
+//  3. Conectado: solo durante DURACION_AVISO_CONEXION_MS tras recuperar la red
+//  4. Errores que requieren atención (acciones rechazadas; fallo al sincronizar)
 // Devuelve { tipo, texto } o null si no hay nada que mostrar.
 export function elegirAviso({
   enLinea,
@@ -115,11 +134,17 @@ export function elegirAviso({
   if (enLinea && sincronizando) {
     return { tipo: "sincronizando", texto: "Sincronizando datos" };
   }
-  // Un aviso de conexión que ya no coincide con el estado real se ignora
-  if (avisoConexion === "sin-conexion" && !enLinea) {
-    return { tipo: "sin-conexion", texto: "Sin conexión" };
+  if (!enLinea) {
+    return {
+      tipo: "sin-conexion",
+      texto:
+        nPendientes > 0
+          ? `Sin conexión · ${conteoPlural(nPendientes, "pendiente", "pendientes")}`
+          : "Sin conexión",
+    };
   }
-  if (avisoConexion === "conectado" && enLinea) {
+  // Un aviso de conexión que ya no coincide con el estado real se ignora
+  if (avisoConexion === "conectado") {
     return { tipo: "conectado", texto: "Conectado" };
   }
   if (nRechazadas > 0) {
@@ -138,4 +163,15 @@ export function elegirAviso({
     };
   }
   return null;
+}
+
+// Resumen de lo que falta por enviar, para el inicio y la pantalla de Sincronización:
+// "Todo sincronizado" · "2 pendientes por sincronizar" · "1 pendiente por sincronizar · 1 con error"
+export function resumenSincronizacion({ nPendientes = 0, nRechazadas = 0 } = {}) {
+  const partes = [];
+  if (nPendientes > 0) {
+    partes.push(conteoPlural(nPendientes, "pendiente por sincronizar", "pendientes por sincronizar"));
+  }
+  if (nRechazadas > 0) partes.push(`${nRechazadas} con error`);
+  return partes.length > 0 ? partes.join(" · ") : "Todo sincronizado";
 }

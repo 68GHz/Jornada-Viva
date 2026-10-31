@@ -15,7 +15,7 @@ import { usaApi } from "../config/api";
 import { llamarApi } from "./apiClient";
 import { esMismaJornada } from "../utils/jornadaForm";
 import { fechaAMillis, normalizarJornada } from "../utils/jornadaFecha";
-import { conTiempoLimite } from "../utils/sincronizacion";
+import { conTiempoLimite, mensajeDeRed } from "../utils/sincronizacion";
 
 // Administración de jornadas (gestor y administrador). Estas operaciones solo funcionan
 // con conexión y firestore.rules las valida en el servidor: un gestor crea jornadas a su
@@ -138,8 +138,6 @@ export function mensajeDeError(error) {
   if (codigo === "permission-denied") {
     return "No tienes permiso para realizar esta acción. Solo puedes administrar las jornadas que tienes asignadas.";
   }
-  if (esErrorDeConexion(error)) {
-    return "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.";
-  }
+  if (esErrorDeConexion(error)) return mensajeDeRed(error);
   return "No se pudo completar la operación. Intenta de nuevo.";
 }

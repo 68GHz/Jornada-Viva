@@ -13,6 +13,7 @@ import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import { useAccionesInscripcion } from "../../hooks/useAccionesInscripcion";
 import BannerJornada from "../../components/BannerJornada";
+import EspaciosAlternos from "../../components/EspaciosAlternos";
 import { colors } from "../../theme/colors";
 import {
   puedeCancelarInscripcion,
@@ -31,6 +32,7 @@ const TITULO_ERROR = {
   SIN_CUPOS: "Sin cupos",
   JORNADA_NO_DISPONIBLE: "Jornada no disponible",
   PLAZO_VENCIDO: "Plazo vencido",
+  ACCION_DEMASIADO_ANTIGUA: "Cancelación demasiado antigua",
 };
 
 export default function JornadaDetailScreen({ route, navigation }) {
@@ -52,6 +54,8 @@ export default function JornadaDetailScreen({ route, navigation }) {
     () => (jornadaEnVivo ? { ...jornadaInicial, ...jornadaEnVivo } : jornadaInicial),
     [jornadaInicial, jornadaEnVivo]
   );
+  // Todas las jornadas guardadas en el dispositivo (FE-01: también las de otros espacios)
+  const todasLasJornadas = useMemo(() => Array.from(jornadasPorId.values()), [jornadasPorId]);
   const vencida = jornadaYaPaso(jornada.fecha, ahora);
   // Mientras cargan los datos no se bloquea; luego debe existir, estar activa y no vencida
   const disponible =
@@ -349,6 +353,14 @@ export default function JornadaDetailScreen({ route, navigation }) {
           </View>
         </View>
       </View>
+
+      {/* FE-01: espacios alternos si la jornada fue cancelada o su espacio está ocupado */}
+      <EspaciosAlternos
+        jornada={jornada}
+        jornadas={todasLasJornadas}
+        ahora={ahora}
+        enLinea={enLinea}
+      />
 
       {/* Descripción */}
       <View style={styles.seccion}>

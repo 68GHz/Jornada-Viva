@@ -1,5 +1,6 @@
 import { usaApi } from "../config/api";
 import { llamarApi } from "./apiClient";
+import { mensajeDeRed } from "../utils/sincronizacion";
 
 export * from "../utils/asistencia";
 
@@ -46,8 +47,6 @@ export function marcarAsistenciaManual(jornadaId, inscripcionId, asistio) {
 
 // Mensaje para el usuario según el error (los de la API ya vienen redactados para mostrarse)
 export function mensajeDeErrorAsistencia(error) {
-  if (error?.name === "ErrorRed") {
-    return "No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.";
-  }
+  if (error?.name === "ErrorRed") return mensajeDeRed(error);
   return error?.message || "No se pudo completar la operación. Intenta de nuevo.";
 }

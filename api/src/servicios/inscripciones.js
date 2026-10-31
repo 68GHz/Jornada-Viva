@@ -3,6 +3,7 @@ import { fechaAMillis } from "../dominio/jornadaFecha.js";
 import { instantaneaDeJornada } from "../dominio/instantaneaJornada.js";
 import { negocio, sinPermiso, validacion } from "../errores.js";
 import { esEstudiante } from "../dominio/roles.js";
+import { evaluarCancelacion } from "../dominio/plazoCancelacion.js";
 
 // Inscribirse y cancelar la inscripción. Mismo comportamiento que tenía la app móvil:
 //  - ID determinista `${uid}_${jornadaId}` (más búsqueda por campos para las inscripciones
@@ -13,6 +14,7 @@ import { esEstudiante } from "../dominio/roles.js";
 //  - solo los alumnos se inscriben (quien aún no tiene perfil cuenta como alumno); gestores y
 //    administradores reciben 403. Cancelar no se restringe por rol: quien se inscribió como
 //    alumno y luego pasó a gestor debe poder liberar su cupo
+//  - cancelar solo se permite hasta 2 días antes de la jornada (409 PLAZO_VENCIDO)
 export const idInscripcion = (uid, jornadaId) => `${uid}_${jornadaId}`;
 
 const texto = (v, max) => String(v ?? "").trim().slice(0, max);
@@ -72,18 +74,39 @@ export async function inscribir(ctx, usuario, jornadaId, cuerpo = {}) {
   });
 }
 
-export async function cancelar(ctx, usuario, jornadaId) {
-  const { db } = ctx;
+// `cuerpo.canceladaEn` (opcional, ms): hora en que el usuario canceló SIN conexión. Si falta se usa la
+// hora del servidor. Ver plazoCancelacion.js para la política de reloj.
+export async function cancelar(ctx, usuario, jornadaId, cuerpo = {}) {
+  const { db, ahora } = ctx;
   const jornadaRef = db.collection("jornadas").doc(jornadaId);
   const usuarioRef = db.collection("users").doc(usuario.uid);
+
+  const canceladaEn = cuerpo?.canceladaEn;
+  if (canceladaEn != null && !(Number.isFinite(canceladaEn) && canceladaEn > 0)) {
+    throw validacion({ canceladaEn: "La hora de la cancelación no es válida." });
+  }
 
   return db.runTransaction(async (tx) => {
     const existentes = await tx.get(
       db.collection("inscripciones").where("userId", "==", usuario.uid).where("jornadaId", "==", jornadaId)
     );
+    // Repetir la cancelación nunca falla, aunque el plazo ya haya vencido: no hay nada que cancelar
     if (existentes.empty) return "ya-cancelada";
 
     const jornada = await tx.get(jornadaRef);
+
+    // El plazo se valida con los datos del servidor. Si la jornada ya no existe (la eliminaron) la
+    // inscripción huérfana se borra igual: liberar es siempre válido.
+    if (jornada.exists) {
+      const datos = jornada.data();
+      const evaluacion = evaluarCancelacion({
+        fechaJornada: fechaAMillis(datos.fecha, datos.hora),
+        canceladaEn,
+        ahora: ahora(),
+        antiguedadMaxMs: ctx.cancelacionAntiguedadMaxMs,
+      });
+      if (!evaluacion.ok) throw negocio(evaluacion.codigo, evaluacion.mensaje);
+    }
 
     existentes.docs.forEach((d) => tx.delete(d.ref));
     if (jornada.exists) {

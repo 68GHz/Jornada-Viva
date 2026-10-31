@@ -44,7 +44,8 @@ export function SyncProvider({ children }) {
   const [cola, setCola] = useState([]);
   const [sincronizando, setSincronizando] = useState(false);
   const [ultimaSync, setUltimaSync] = useState(null);
-  // Avisos de estado (ver elegirAviso): el de conexión dura DURACION_AVISO_CONEXION_MS
+  // Avisos de estado (ver elegirAviso): "Conectado" dura DURACION_AVISO_CONEXION_MS;
+  // "Sin conexión" es permanente y lo deduce elegirAviso del estado de la red
   const [avisoConexion, setAvisoConexion] = useState(null);
   const [errorSync, setErrorSync] = useState(false);
 
@@ -62,7 +63,7 @@ export function SyncProvider({ children }) {
     setAvisoConexion(null);
   }, []);
 
-  // Cada cambio de conexión reemplaza al aviso anterior y reinicia su cuenta de 10 s
+  // El aviso "Conectado" aparece al recuperar la red y desaparece solo a los 10 s
   const mostrarAvisoConexion = useCallback((tipo) => {
     clearTimeout(temporizadorAviso.current);
     setAvisoConexion(tipo);
@@ -173,8 +174,10 @@ export function SyncProvider({ children }) {
     enLineaPrevia.current = enLinea;
 
     if (!enLinea) {
+      // Al perder la red desaparece el "Conectado" que siguiera visible; el indicador
+      // "Sin conexión" no necesita estado propio: es permanente (ver elegirAviso)
       setErrorSync(false);
-      mostrarAvisoConexion("sin-conexion");
+      ocultarAvisoConexion();
     } else if (hayAccionesRef.current) {
       // Hay cambios por enviar: "Sincronizando datos" toma el relevo (sin superponerse)
       ocultarAvisoConexion();

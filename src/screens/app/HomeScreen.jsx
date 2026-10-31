@@ -14,8 +14,9 @@ import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import { useSync } from "../../context/SyncContext";
 import { colors } from "../../theme/colors";
-import { formatearDiasFaltan, formatearHora } from "../../utils/jornadaFecha";
+import { formatearDiasFaltan, formatearFecha, formatearHora } from "../../utils/jornadaFecha";
 import { conteoPlural } from "../../utils/plural";
+import { resumenSincronizacion } from "../../utils/sincronizacion";
 
 export default function HomeScreen({ navigation }) {
   const { usuario, cerrarSesion } = useAuth();
@@ -32,7 +33,15 @@ export default function HomeScreen({ navigation }) {
     [inscritas]
   );
   const { enLinea } = useConnectivity();
-  const { pendientes } = useSync();
+  const { pendientes, rechazadas, ultimaSync } = useSync();
+  const hayPendientes = pendientes.length > 0 || rechazadas.length > 0;
+  const resumenSync = resumenSincronizacion({
+    nPendientes: pendientes.length,
+    nRechazadas: rechazadas.length,
+  });
+  const textoUltimaSync = ultimaSync
+    ? `Última sincronización: ${formatearFecha(ultimaSync, "D MMM, h:mm A")}`
+    : "Aún no hay sincronizaciones";
 
   // Cerrar sesión borra los datos locales: si hay algo en juego se informa y se pide confirmación
   const confirmarCerrarSesion = () => {
@@ -98,6 +107,31 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.tarjetaSecundariaFila}>
             <Ionicons name="notifications-outline" size={22} color={colors.primary} />
             <Text style={styles.tarjetaSecundariaTitulo}>Centro de notificaciones</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+        </TouchableOpacity>
+
+        {/* Estado de la sincronización: se puede abrir siempre, aunque no haya errores */}
+        <TouchableOpacity
+          style={styles.tarjetaSecundaria}
+          onPress={() => navigation.navigate("Sincronizacion")}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Sincronización. ${resumenSync}. ${textoUltimaSync}`}
+        >
+          <View style={styles.tarjetaSecundariaFila}>
+            <Ionicons
+              name={hayPendientes ? "sync-outline" : "checkmark-done-outline"}
+              size={22}
+              color={hayPendientes ? colors.warning : colors.primary}
+            />
+            <View style={styles.tarjetaSecundariaTextos}>
+              <Text style={styles.tarjetaSecundariaTitulo}>Sincronización</Text>
+              <Text style={[styles.sincronizacionDetalle, hayPendientes && styles.sincronizacionPendiente]}>
+                {resumenSync}
+              </Text>
+              <Text style={styles.sincronizacionDetalle}>{textoUltimaSync}</Text>
+            </View>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.primary} />
         </TouchableOpacity>
@@ -266,10 +300,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  tarjetaSecundariaTextos: {
+    flexShrink: 1,
+    gap: 2,
+  },
   tarjetaSecundariaTitulo: {
     fontSize: 15,
     fontWeight: "700",
     color: colors.textPrimary,
+  },
+  sincronizacionDetalle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  sincronizacionPendiente: {
+    color: colors.textPrimary,
+    fontWeight: "700",
   },
   misJornadasEncabezado: {
     flexDirection: "row",

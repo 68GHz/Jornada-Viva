@@ -74,6 +74,28 @@ describe("cliente HTTP de la API", () => {
     }
   });
 
+  it("409 por plazo de cancelación vencido o cancelación demasiado antigua: ErrorNegocio con su mensaje (no se reintenta)", async () => {
+    for (const [codigo, mensaje] of [
+      ["PLAZO_VENCIDO", "Solo puedes cancelar hasta 2 días antes de la jornada."],
+      ["ACCION_DEMASIADO_ANTIGUA", "Esta cancelación se registró hace demasiado tiempo para poder validarla."],
+    ]) {
+      const api = cliente(async () => respuesta(409, { error: { codigo, mensaje } }));
+      await assert.rejects(api.llamar("DELETE", "/v1/x"), (e) => {
+        const c = clasificarError(e);
+        return e.name === "ErrorNegocio" && e.codigo === codigo && c.tipo === "negocio" && c.mensaje === mensaje;
+      });
+    }
+  });
+
+  it("DELETE con cuerpo (hora de una cancelación sin conexión) lo envía como JSON", async () => {
+    let enviado;
+    const api = cliente(async (_u, o) => { enviado = o; return respuesta(200, { resultado: "completada" }); });
+    await api.llamar("DELETE", "/v1/x", { cuerpo: { canceladaEn: 1700000000000 } });
+    assert.equal(enviado.method, "DELETE");
+    assert.equal(enviado.headers["Content-Type"], "application/json");
+    assert.deepEqual(JSON.parse(enviado.body), { canceladaEn: 1700000000000 });
+  });
+
   it("409 con código de negocio: ErrorNegocio con el mismo código y mensaje (no se reintenta)", async () => {
     const api = cliente(async () => respuesta(409, { error: { codigo: "SIN_CUPOS", mensaje: "La jornada ya no tiene cupos disponibles." } }));
     await assert.rejects(api.llamar("PUT", "/v1/x"), (e) => {

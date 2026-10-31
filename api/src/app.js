@@ -9,6 +9,7 @@ import * as notificaciones from "./servicios/notificaciones.js";
 import * as usuarios from "./servicios/usuarios.js";
 import * as estadisticas from "./servicios/estadisticas.js";
 import { desactivarVencidas } from "./servicios/mantenimiento.js";
+import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
 
 // Crea la aplicación Express. Todo lo externo se inyecta para poder probarla sin red:
 //   db              Firestore (Admin SDK)
@@ -17,6 +18,7 @@ import { desactivarVencidas } from "./servicios/mantenimiento.js";
 //   ahora           reloj en ms (por defecto Date.now)
 //   registro        consola (por defecto console)
 //   secretoAsistencia  secreto con el que se firman los códigos del QR de asistencia
+//   cancelacionAntiguedadMaxMs  antigüedad máxima (ms) de una cancelación hecha sin conexión
 export function crearApp({
   db,
   auth,
@@ -25,9 +27,10 @@ export function crearApp({
   registro = console,
   origenesCors = [],
   secretoAsistencia,
+  cancelacionAntiguedadMaxMs = ANTIGUEDAD_MAX_CANCELACION_MS,
 }) {
   if (!secretoAsistencia) throw new Error("crearApp necesita el secreto de asistencia (secretoAsistencia).");
-  const ctx = { db, auth, ahora, registro, secretoAsistencia };
+  const ctx = { db, auth, ahora, registro, secretoAsistencia, cancelacionAntiguedadMaxMs };
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "100kb" }));
@@ -64,7 +67,7 @@ export function crearApp({
     res.json({ resultado: await inscripciones.inscribir(ctx, req.usuario, req.params.id, req.body) });
   });
   v1.delete("/jornadas/:id/inscripcion", async (req, res) => {
-    res.json({ resultado: await inscripciones.cancelar(ctx, req.usuario, req.params.id) });
+    res.json({ resultado: await inscripciones.cancelar(ctx, req.usuario, req.params.id, req.body ?? {}) });
   });
 
   // ---- Gestión de jornadas (M3) ----

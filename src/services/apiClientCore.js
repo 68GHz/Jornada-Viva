@@ -4,7 +4,8 @@ import { ErrorNegocio, ErrorRed, conTiempoLimite } from "../utils/sincronizacion
 // Convierte las respuestas de error al mismo vocabulario de errores que ya usaba la app, así
 // el resto del código (clasificarError, mensajeDeError, la cola offline...) no cambia:
 //
-//   sin red / tiempo agotado / 502-504  -> ErrorRed         (temporal: se reintenta)
+//   sin red / tiempo agotado / 502-504  -> ErrorRed         (temporal: se reintenta; `motivo` distingue
+//                                          «sin red» de «el servidor tarda o está despertando»)
 //   409 con código de negocio           -> ErrorNegocio     (sin cupos, jornada no disponible...)
 //   403                                 -> code "permission-denied"
 //   401                                 -> code "unauthenticated"
@@ -12,7 +13,12 @@ import { ErrorNegocio, ErrorRed, conTiempoLimite } from "../utils/sincronizacion
 //   404                                 -> code "not-found"
 //   otros 409                           -> code "email-already-in-use" / "failed-precondition"
 //   500 y demás                         -> code "internal" (temporal)
-const CODIGOS_DE_NEGOCIO = new Set(["JORNADA_NO_DISPONIBLE", "SIN_CUPOS"]);
+const CODIGOS_DE_NEGOCIO = new Set([
+  "JORNADA_NO_DISPONIBLE",
+  "SIN_CUPOS",
+  "PLAZO_VENCIDO", // cancelar fuera del plazo de 2 días
+  "ACCION_DEMASIADO_ANTIGUA", // cancelación sin conexión demasiado antigua para validarla
+]);
 
 export class ErrorApi extends Error {
   constructor({ estado, codigo, mensaje, campos, code }) {
@@ -39,7 +45,7 @@ export function errorDeRespuesta(estado, cuerpo) {
   const e = cuerpo && typeof cuerpo === "object" ? cuerpo.error || {} : {};
   const mensaje = e.mensaje || "No se pudo completar la operación.";
 
-  if ([502, 503, 504].includes(estado)) return new ErrorRed(mensaje);
+  if ([502, 503, 504].includes(estado)) return new ErrorRed(mensaje, "servidor-no-disponible");
   if (estado === 409 && CODIGOS_DE_NEGOCIO.has(e.codigo)) return new ErrorNegocio(e.codigo, mensaje);
   return new ErrorApi({
     estado,

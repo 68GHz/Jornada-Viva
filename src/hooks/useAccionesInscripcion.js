@@ -73,6 +73,8 @@ export function useAccionesInscripcion() {
         // Con conexión el usuario espera la respuesta en pantalla; sin ella se
         // avisará cuando la acción se sincronice
         interactiva: enLinea,
+        // Se hizo sin conexión: al cancelar, el servidor valida el plazo con la hora en que se hizo
+        sinConexion: !enLinea,
       });
       if (resultado === "anulada") return { estado: "anulada" };
       if (resultado === "duplicada") return { estado: "duplicada" };

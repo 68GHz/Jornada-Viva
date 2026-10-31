@@ -39,12 +39,19 @@ Debe mostrar `OK` en: salud, rechazo sin token (401) e inicio de sesión + `GET 
 
 ## 4. Orden de puesta en marcha en la app
 
-1. **Respaldo** de Firestore (`gcloud firestore export gs://<bucket>/respaldo-antes-api`) y anotar la versión actual de las reglas (`304ecec8-9ad5-46d1-ad08-bb67dd9a9946`).
+1. **Respaldo** de Firestore y anotar la versión actual de las reglas. `gcloud firestore export` necesita un bucket de Storage (plan Blaze); en el plan sin facturación, el respaldo se hace descargando las colecciones por la API REST (`jornadas`, `inscripciones`, `users`, `notificaciones`, `auditoria`) a archivos JSON con `gcloud auth print-access-token`. Reglas publicadas el 2026-10-31, antes del cierre: conjunto `projects/jornadaviva-476ff/rulesets/a45c22b5-1a54-42e0-ab2b-bbfc93419c26` (26-oct-2026).
 2. Desplegar la API y pasar la verificación.
 3. Compilar/publicar la app con `EXPO_PUBLIC_API_URL`. Se puede encender por etapas con `EXPO_PUBLIC_API_MODULOS`:
    `sesion` → `inscripciones` → `jornadas` → `notificaciones` → `usuarios` → `reportes`. Probar cada etapa con las cuentas de prueba antes de pasar a la siguiente.
 4. **Cuidado con las versiones mezcladas:** con `jornadas` encendido el servidor crea los avisos y la app nueva deja de detectarlos. Una app **vieja** (con lógica local) seguiría detectándolos y podría duplicar un aviso. Publicar la app como actualización obligatoria o aceptar el duplicado ocasional durante la transición.
-5. **Cierre (M7) — solo cuando todo lo anterior esté validado y no queden apps viejas:** publicar `firestore.api.rules` (las apps antiguas dejarán de poder escribir), retirar la lógica local sin uso y eliminar `functions/` (la Cloud Function sin desplegar duplicaría avisos si algún día se desplegara).
+5. **Migrar los datos** (idempotente; solo guarda `duracionMin: 60` en las jornadas que no la tienen y renombra el rol `maestro`): `node scripts/admin.js migrar` (simulación) y luego `node scripts/admin.js migrar --aplicar`. Comparar después contra el respaldo.
+6. **Cierre (M7) — solo cuando todo lo anterior esté validado y no queden apps viejas:** publicar las reglas de solo lectura (las apps antiguas dejarán de poder escribir), retirar la lógica local sin uso y eliminar `functions/` (la Cloud Function sin desplegar duplicaría avisos si algún día se desplegara).
+
+   ```bash
+   npx firebase-tools deploy --only firestore:rules --config firebase.produccion.json --project jornadaviva-476ff
+   ```
+
+   `firebase.produccion.json` apunta a `firestore.api.rules`. **No** publicar con `firebase.json` (carga `firestore.rules`, que permite escritura directa). Después de publicar, probar con el token de cada rol que escribir `jornadas/{id}.cuposOcupados` directamente devuelve 403 y que las acciones normales de cada rol siguen funcionando por la API.
 
 ## 5. Procedimiento de recuperación
 
@@ -52,12 +59,13 @@ Debe mostrar `OK` en: salud, rechazo sin token (401) e inicio de sesión + `GET 
 |---|---|---|
 | Un módulo falla en la app | Publicar la app con ese módulo fuera de `EXPO_PUBLIC_API_MODULOS` (vuelve a la lógica local). Funciona mientras las reglas actuales sigan publicadas | actualización de la app |
 | La API se cae o se despliega mal | Redesplegar la versión anterior desde el hosting (los datos no cambian de formato, nada que revertir). Mientras tanto, la app puede seguir leyendo (listeners) pero no escribir | minutos |
-| Se publicaron las reglas de solo lectura y hay que volver atrás | `git checkout <commit> -- firestore.rules` y `npx firebase-tools deploy --only firestore:rules --project jornadaviva-476ff`, o publicar de nuevo el ruleset `304ecec8-9ad5-46d1-ad08-bb67dd9a9946` | minutos |
+| Se publicaron las reglas de solo lectura y hay que volver atrás | Volver a apuntar la publicación al conjunto anterior (sigue existiendo): `PATCH https://firebaserules.googleapis.com/v1/projects/jornadaviva-476ff/releases/cloud.firestore` con `{"release":{"name":"projects/jornadaviva-476ff/releases/cloud.firestore","rulesetName":"projects/jornadaviva-476ff/rulesets/a45c22b5-1a54-42e0-ab2b-bbfc93419c26"}}` (token de `gcloud auth print-access-token`), o `npx firebase-tools deploy --only firestore:rules --project jornadaviva-476ff` (publica `firestore.rules`, que permite escritura directa) | segundos |
 | Datos dañados | Restaurar el respaldo (`gcloud firestore import`) | según tamaño |
 | Una jornada o cuenta quedó mal | Se corrige desde el módulo de administración; todo cambio del administrador está en `auditoria` | — |
 
 La API **no migra ni transforma datos**: escribe el mismo esquema que la app. Por eso la vuelta
-atrás nunca requiere un script de datos.
+atrás nunca requiere un script de datos. (La única migración, `scripts/admin.js migrar`, solo añade
+`duracionMin: 60`, que ya era el valor que se asumía.)
 
 ## 6. Operación
 

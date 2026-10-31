@@ -40,6 +40,7 @@ export async function iniciarApi(opciones = {}) {
     registro: { ...silencioso, error: (...a) => registroErrores.push(a) },
     origenesCors: opciones.origenesCors,
     secretoAsistencia: SECRETO_ASISTENCIA,
+    cancelacionAntiguedadMaxMs: opciones.cancelacionAntiguedadMaxMs,
   });
   const servidor = await new Promise((resolver) => {
     const s = express.listen(0, "127.0.0.1", () => resolver(s));

@@ -13,6 +13,7 @@ const app = crearApp({
   verificarToken: (token) => auth.verifyIdToken(token),
   origenesCors: config.origenesCors,
   secretoAsistencia: resolverSecretoAsistencia(config),
+  cancelacionAntiguedadMaxMs: config.cancelacionAntiguedadMaxMs,
 });
 
 const servidor = app.listen(config.puerto, () => {

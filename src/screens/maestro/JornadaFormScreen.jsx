@@ -16,6 +16,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/es";
 import { useAuth } from "../../context/AuthContext";
 import { useConnectivity } from "../../context/ConnectivityContext";
+import { useJornadas } from "../../context/JornadasContext";
 import { useJornadaMaestro } from "../../hooks/useJornadasMaestro";
 import { useUsuarios } from "../../hooks/useAdmin";
 import { auditar } from "../../services/adminService";
@@ -34,6 +35,7 @@ import CalendarioRango from "../../components/CalendarioRango";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colors } from "../../theme/colors";
 import { ESPACIOS } from "../../utils/espacios";
+import { espaciosOcupados, listaCorta } from "../../utils/espaciosLibres";
 import { permisosJornada } from "../../utils/estadoJornada";
 import { esDuracionValida, formatearDuracion } from "../../utils/duracion";
 import { aDayjsNegocio, formatearHora } from "../../utils/jornadaFecha";
@@ -74,6 +76,8 @@ export default function JornadaFormScreen({ navigation, route }) {
   const responsables = usuarios.filter((u) => puedeSerResponsable(u.rol));
   const [gestorId, setGestorId] = useState(null);
   const { enLinea } = useConnectivity();
+  // Todas las jornadas guardadas en el dispositivo (para marcar los espacios ocupados, FE-01)
+  const { jornadasPorId } = useJornadas();
   // Al crear no hay jornada que leer (el hook no escucha nada con `null`)
   const { jornada, cargando, noExiste, propia, ahora } = useJornadaMaestro(
     esEdicion ? jornadaId : null
@@ -231,6 +235,15 @@ export default function JornadaFormScreen({ navigation, route }) {
       }.`
     : "La jornada aparece «En curso» hasta que termina su duración.";
 
+  // FE-01: espacios que ya tienen una jornada en esa franja. Se calcula con las jornadas guardadas
+  // en el dispositivo (funciona sin conexión) y al editar no cuenta la propia jornada.
+  const ocupados = espaciosOcupados(Array.from(jornadasPorId.values()), inicioMs, finMs, {
+    excluirId: jornadaId ?? null,
+    ahora: Date.now(),
+  });
+  const ocupadosElegido = form.lugar ? ocupados.get(form.lugar) : undefined;
+  const libres = ESPACIOS.filter((espacio) => !ocupados.has(espacio));
+
   const etiquetaDia = form.dia
     ? dayjs(form.dia).locale("es").format("dddd D [de] MMMM [de] YYYY")
     : "Elegir fecha";
@@ -313,23 +326,58 @@ export default function JornadaFormScreen({ navigation, route }) {
           <View style={styles.espacios}>
             {ESPACIOS.map((espacio) => {
               const activo = form.lugar === espacio;
+              // FE-01: ya tiene una jornada a la fecha y hora elegidas (solo informa; se puede elegir)
+              const ocupado = ocupados.has(espacio);
               return (
                 <TouchableOpacity
                   key={espacio}
-                  style={[styles.espacio, activo && styles.espacioActivo]}
+                  style={[
+                    styles.espacio,
+                    ocupado && styles.espacioOcupado,
+                    activo && styles.espacioActivo,
+                  ]}
                   onPress={() => cambiar("lugar", espacio)}
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityState={{ selected: activo }}
-                  accessibilityLabel={espacio}
+                  accessibilityLabel={ocupado ? `${espacio}, ocupado a esa hora` : espacio}
                 >
-                  <Text style={[styles.espacioTexto, activo && styles.espacioTextoActivo]}>
+                  {ocupado && !activo && (
+                    <Ionicons name="alert-circle" size={13} color={colors.warning} />
+                  )}
+                  <Text
+                    style={[
+                      styles.espacioTexto,
+                      ocupado && styles.espacioTextoOcupado,
+                      activo && styles.espacioTextoActivo,
+                    ]}
+                  >
                     {espacio}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
+          {ocupados.size > 0 && (
+            <Text style={styles.ayuda}>
+              Los espacios con el aviso ya tienen una jornada a esa fecha y hora. Puedes elegirlos
+              igualmente.
+            </Text>
+          )}
+          {!!ocupadosElegido && (
+            <View style={styles.avisoEspacio} accessibilityLiveRegion="polite">
+              <Ionicons name="alert-circle-outline" size={16} color={colors.textPrimary} />
+              <Text style={styles.avisoEspacioTexto}>
+                {`${form.lugar} ya tiene «${ocupadosElegido[0].titulo}»${
+                  ocupadosElegido.length > 1 ? ` y ${ocupadosElegido.length - 1} más` : ""
+                } a esa hora. ${
+                  libres.length > 0
+                    ? `Espacios libres: ${listaCorta(libres)}.`
+                    : "No hay espacios libres a esa hora."
+                }`}
+              </Text>
+            </View>
+          )}
         </Campo>
 
         <Campo etiqueta="Fecha" error={errores.dia}>
@@ -493,9 +541,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  espacioOcupado: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderColor: colors.warning,
+    backgroundColor: colors.background,
+  },
   espacioActivo: { backgroundColor: colors.primary, borderColor: colors.primary },
   espacioTexto: { fontSize: 13, fontWeight: "600", color: colors.textPrimary },
+  espacioTextoOcupado: { color: colors.textSecondary },
   espacioTextoActivo: { color: colors.white },
+  avisoEspacio: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#FFF4DE",
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  avisoEspacioTexto: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.textPrimary },
   selectorFecha: { flexDirection: "row", alignItems: "center", gap: 10 },
   selectorFechaTexto: { fontSize: 15, color: colors.textPrimary, textTransform: "capitalize" },
   boton: {

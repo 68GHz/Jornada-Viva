@@ -151,7 +151,15 @@ async function ejecutarEnApi(accion) {
             ...(accion.tituloJornada !== undefined ? { tituloJornada: accion.tituloJornada } : {}),
           },
         })
-      : await llamarApi("DELETE", ruta);
+      : await llamarApi("DELETE", ruta, {
+          // Una cancelación hecha sin conexión lleva la hora en que el usuario la hizo, para que el
+          // servidor valide el plazo con ella y no con la hora de la sincronización. Con conexión no
+          // se envía nada: el servidor usa su propia hora y el reloj del teléfono no cuenta.
+          cuerpo:
+            accion.sinConexion === true && Number.isFinite(accion.creadaEn)
+              ? { canceladaEn: accion.creadaEn }
+              : undefined,
+        });
   return respuesta.resultado;
 }
 

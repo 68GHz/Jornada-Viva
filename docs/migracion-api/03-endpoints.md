@@ -17,7 +17,7 @@ Cuerpos y respuestas en JSON (salvo los CSV). Errores: ver [02-arquitectura-y-se
 | Método y ruta | Rol | Cuerpo | Respuesta |
 |---|---|---|---|
 | `PUT /v1/jornadas/{id}/inscripcion` | cualquier cuenta activa | `{ nombreUsuario?, emailUsuario?, tituloJornada? }` | `200 { resultado: "completada" \| "ya-inscrito" }` · `409 JORNADA_NO_DISPONIBLE` («La jornada ya no existe.» / «…fue desactivada.» / «…ya finalizó.») · `409 SIN_CUPOS` |
-| `DELETE /v1/jornadas/{id}/inscripcion` | cualquier cuenta activa | — | `200 { resultado: "completada" \| "ya-cancelada" }` |
+| `DELETE /v1/jornadas/{id}/inscripcion` | cualquier cuenta activa | `{ canceladaEn? }` (ms): hora en que el usuario canceló **sin conexión**; si falta se usa la hora del servidor | `200 { resultado: "completada" \| "ya-cancelada" }` · `400` (hora inválida) · `409 PLAZO_VENCIDO` (solo hasta 2 días calendario antes de la jornada, hora de Colombia) · `409 ACCION_DEMASIADO_ANTIGUA` (`canceladaEn` con más de `CANCELACION_ANTIGUEDAD_MAX_HORAS`, 7 días por defecto). Repetir una cancelación ya hecha es siempre `ya-cancelada`. Si la jornada ya no existe, la inscripción huérfana se borra igual |
 
 Idempotentes: repetirlas no duplica inscripción ni cupos. Si faltan nombre/correo se usan los del perfil.
 

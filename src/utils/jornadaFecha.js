@@ -4,6 +4,7 @@ import "dayjs/locale/es";
 // Zona horaria de negocio de las jornadas (UTC-5): definida en zonaNegocio.js
 import { OFFSET_NEGOCIO_MIN } from "./zonaNegocio";
 import { duracionJornadaMin } from "./duracion";
+import { DIAS_LIMITE_CANCELACION } from "./plazoCancelacion";
 
 dayjs.extend(utc);
 
@@ -72,7 +73,8 @@ export function jornadaYaPaso(millis, ahora = Date.now()) {
 
 const hoyNegocio = () => aDayjsNegocio(Date.now()).startOf("day");
 
-export const DIAS_LIMITE_CANCELACION = 2;
+// El plazo (y su constante) se define una sola vez en plazoCancelacion.js, que también usa la API
+export { DIAS_LIMITE_CANCELACION } from "./plazoCancelacion";
 
 // Se puede cancelar hasta DIAS_LIMITE_CANCELACION días antes de la jornada
 export function puedeCancelarInscripcion(millis) {

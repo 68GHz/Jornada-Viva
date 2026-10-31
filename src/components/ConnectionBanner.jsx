@@ -17,6 +17,7 @@ const ESTILOS = {
     fondo: colors.textPrimary,
     texto: colors.white,
     icono: "cloud-offline-outline",
+    abre: true,
   },
   "error-sync": {
     fondo: colors.warning,

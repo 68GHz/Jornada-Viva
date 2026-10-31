@@ -144,6 +144,16 @@ prueba("estudiante: cancelar borra su inscripción y libera el cupo; repetir es 
   assert.strictEqual(await ejecutarAccion("est1", accion("CANCELAR", "j1")), "ya-cancelada");
 });
 
+prueba("estudiante: una cancelación hecha sin conexión (con su hora de origen) se envía y se completa igual", async () => {
+  comoUsuario("est1");
+  await ejecutarAccion("est1", accion("INSCRIBIR", "j1"));
+  // La acción de la cola lleva `sinConexion` y `creadaEn`: con la API viajan como `canceladaEn`
+  const diferida = { ...accion("CANCELAR", "j1"), sinConexion: true, creadaEn: Date.now() - 3600000 };
+  assert.strictEqual(await ejecutarAccion("est1", diferida), "completada");
+  assert.ok(!(await existe("inscripciones/est1_j1")));
+  assert.strictEqual((await leer("jornadas/j1")).cuposOcupados, 0);
+});
+
 prueba("estudiante: cancelar una inscripción antigua (ID aleatorio) funciona", async () => {
   await env.withSecurityRulesDisabled(async (c) => {
     await fb.setDoc(fb.doc(c.firestore(), "inscripciones/aleatorio"), { userId: "est1", jornadaId: "j1", nombreUsuario: "A", emailUsuario: "a@x.co" });

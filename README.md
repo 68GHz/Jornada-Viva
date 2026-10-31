@@ -127,7 +127,7 @@ El estado de la red se detecta con **NetInfo**. La persistencia propia de Firest
 ### Cómo funciona
 
 1. **Lectura.** `JornadasContext` es la fuente única de datos. Al iniciar carga lo guardado en AsyncStorage y, cuando el servidor responde, se actualiza y se vuelve a guardar. Un snapshot vacío que llega de la caché (sin red) nunca borra lo que ya se muestra, y nunca queda cargando indefinidamente.
-2. **Avisos de estado.** `ConnectionBanner` (parte inferior de las pantallas) muestra un solo aviso a la vez: *Conectado* o *Sin conexión* durante exactamente 10 s tras cada cambio de conexión; *Sincronizando datos* mientras se envían los cambios pendientes (se oculta al terminar bien, sin límite de tiempo si la sincronización es larga); y, si algo falla, un aviso de error que conserva los datos pendientes y se reintenta solo. Al tocar un aviso de error se abre la pantalla **Sincronización** (reintentar o descartar cada acción).
+2. **Avisos de estado.** `ConnectionBanner` (parte inferior de todas las pantallas) muestra un solo aviso a la vez: *Sin conexión* es **permanente** mientras no haya red e indica cuántas acciones están pendientes ("Sin conexión · 2 pendientes"); *Conectado* aparece 10 s al recuperar la red; *Sincronizando datos* aparece mientras se envían los cambios (sin límite de tiempo si la sincronización es larga); y, si algo falla, un aviso de error que conserva los datos pendientes y se reintenta solo. Tocar el aviso (sin conexión o con error) abre la pantalla **Sincronización**, que también se abre desde la tarjeta *Sincronización* del inicio, con el número de pendientes, la última sincronización y las acciones (reintentar o descartar cada una).
 3. **Escritura.** Inscribirse y cancelar pasan siempre por la cola (`src/services/syncQueueService.js`). Con conexión se envían al instante; sin conexión quedan como **"Pendiente por sincronizar"** (en la lista, el detalle, Mis jornadas y el inicio) y los cupos mostrados incluyen su efecto. Antes de continuar sin conexión la app informa y pide confirmación.
 4. **Sincronización.** `src/services/syncEngine.js` envía las acciones una a una y en orden cuando vuelve internet, al volver a abrir la app o desde "Sincronizar ahora". Cada envío (`src/services/inscripcionService.js`) llama a la **API** (`PUT/DELETE /v1/jornadas/{id}/inscripcion`) o, sin API configurada, ejecuta la transacción de Firestore equivalente; en ambos casos valida jornada activa y vigente, cupos y duplicados.
 5. **Cierre de sesión.** Si hay acciones pendientes (o no hay conexión) se avisa de que se perderán y se pide confirmación.
@@ -142,8 +142,10 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 | La inscripción ya existe (otro dispositivo, reenvío) | Se da por hecha, sin duplicarla ni sumar otro cupo |
 | Cancelación de algo ya cancelado | Se da por hecha, el cupo nunca baja de 0 |
 | Inscribirse y cancelar sin haber enviado nada | Se anulan entre sí; no se envía nada |
+| Cancelación fuera del plazo de 2 días | Se **rechaza** (`PLAZO_VENCIDO`) con el motivo; la inscripción y el cupo no cambian |
+| Cancelación hecha sin conexión hace más de 7 días | Se **rechaza** (`ACCION_DEMASIADO_ANTIGUA`): hay que descartarla y volver a cancelar si aún se está a tiempo |
 
-- **Fechas:** el plazo de cancelación (2 días) se valida en la app con la fecha del dispositivo; el vencimiento de la inscripción ("la jornada ya finalizó") lo valida el servidor con su reloj.
+- **Fechas y reloj:** la hora del teléfono no es confiable, así que **el servidor decide**. El plazo de cancelación (hasta 2 días calendario antes de la jornada, en hora de Colombia) lo valida el servidor con su propio reloj; la app solo lo comprueba antes para avisar rápido. Una cancelación hecha **sin conexión** viaja con la hora en que el usuario la hizo (`canceladaEn`): el servidor usa la **menor** entre esa hora y la suya (una hora adelantada no sirve), de modo que cancelar a tiempo sin red sigue valiendo aunque se sincronice después del plazo; y la rechaza si es más antigua que `CANCELACION_ANTIGUEDAD_MAX_HORAS` (7 días por defecto), para que atrasar el reloj del teléfono no dé ventaja. Cancelar con conexión no envía hora: cuenta solo la del servidor. El vencimiento de la inscripción ("la jornada ya finalizó") también lo valida el servidor.
 - **Duplicados:** la inscripción nueva usa el ID `<uid>_<jornadaId>` y nunca se actualiza, así que un doble toque o un reenvío no la duplican. También se detectan las inscripciones antiguas (ID aleatorio).
 - **Errores de red:** la acción sigue pendiente y se reintenta sola con espera creciente (5 s, 10 s, 20 s... hasta 2 min) o al recuperar la conexión; no se pierde nada aunque se cierre la app (se vuelve a enviar sin duplicar).
 - **Errores permanentes** (sin cupos, sin permiso...): la acción queda **rechazada** con el motivo, sin perder datos, y se avisa al usuario.
@@ -152,11 +154,21 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 ### Cómo probarlo
 
 1. Inicia sesión con conexión y abre *Jornadas disponibles* y *Mis jornadas* (así se descargan).
-2. Activa el **modo avión** y cierra y vuelve a abrir la app: se ven las jornadas y las inscripciones guardadas, y aparece el aviso "Sin conexión" durante 10 s.
-3. Sin conexión, inscríbete en una jornada: la app pide confirmación, la marca "Pendiente por sincronizar" y descuenta el cupo en pantalla. Cancela una inscripción y verifica la marca "Cancelación pendiente".
+2. Activa el **modo avión** y cierra y vuelve a abrir la app: se ven las jornadas y las inscripciones guardadas, y el aviso **"Sin conexión" permanece** en todas las pantallas mientras no haya red.
+3. Sin conexión, inscríbete en una jornada: la app pide confirmación, la marca "Pendiente por sincronizar" y descuenta el cupo en pantalla; el aviso pasa a "Sin conexión · 1 pendiente". Cancela una inscripción y verifica la marca "Cancelación pendiente". Toca el aviso (o la tarjeta *Sincronización* del inicio) para ver las acciones guardadas.
 4. Cierra la app con acciones pendientes y vuelve a abrirla: siguen ahí.
 5. Desactiva el modo avión: aparece "Conectado" (10 s) o, si hay acciones pendientes, "Sincronizando datos" hasta que terminen; luego el aviso se oculta y la marca de pendiente desaparece. Si una jornada se llenó mientras tanto, la acción queda rechazada y se explica el motivo en *Sincronización*.
 6. Con acciones pendientes, intenta **Cerrar sesión**: se avisa y se pide confirmación; al confirmar se borran los datos locales.
+
+## FE-01 · Espacios alternos disponibles
+
+- **Problema que resuelve.** Cuando el espacio de una actividad está ocupado, cerrado o en mantenimiento, la actividad se reubica (piscina, cancha, recorrido) y el estudiante no tiene forma de saber qué otros espacios hay libres a esa hora.
+- **Quién lo reportó.** Alejo (Gimnasio / Bienestar Universitario), en su entrevista ([`entrevista-02.pdf`](docs/investigacion/entrevistas/entrevista-02.pdf), pregunta 7 y el dolor principal que la propia entrevista identifica). Corresponde al requisito **RF-05** del backlog de la [matriz de trazabilidad](docs/investigacion/matriz-trazabilidad.pdf).
+- **Cómo se implementó.** Una función pura calcula, para una franja horaria (inicio y `duracionMin` de la jornada), qué espacios de la lista oficial (`ESPACIOS`) ya tienen otra jornada **activa o en curso** que se solape con ella; el borde exacto (una termina cuando la otra empieza) no cuenta, y las jornadas canceladas o finalizadas no ocupan el espacio. Se usa en dos lugares:
+  - **Detalle de la jornada** (estudiante, gestor o administrador): si la jornada fue cancelada o su espacio también lo usa otra jornada a esa hora, muestra *"Espacios alternos libres a esa hora"* con los espacios libres.
+  - **Formulario de crear/editar jornada** (gestor y administrador): al elegir fecha y hora, marca con un aviso los espacios ya ocupados a esa hora y, si se elige uno, indica qué jornada lo usa y qué espacios están libres. Solo informa: no impide elegir un espacio ocupado.
+- **Sin conexión.** Se calcula con las jornadas que la app ya guardó en el dispositivo, así que funciona sin red con los datos descargados; la pantalla avisa de que pueden estar desactualizados.
+- **Dónde está en el código.** Lógica: [`src/utils/espaciosLibres.js`](src/utils/espaciosLibres.js) · interfaz: [`src/components/EspaciosAlternos.jsx`](src/components/EspaciosAlternos.jsx), [`JornadaDetailScreen.jsx`](src/screens/app/JornadaDetailScreen.jsx) y [`JornadaFormScreen.jsx`](src/screens/maestro/JornadaFormScreen.jsx) · pruebas: [`tests/unit/espaciosLibres.test.mjs`](tests/unit/espaciosLibres.test.mjs).
 
 ## Roles y permisos
 
@@ -221,10 +233,11 @@ node scripts/admin.js propietario --huerfanas gestor@tdea.edu.co --aplicar   # o
 ### Despliegue de las reglas de Firestore
 
 ```bash
-npx firebase-tools deploy --only firestore:rules --project <id-del-proyecto>
+# Producción (reglas de SOLO LECTURA: la API es la única que escribe)
+npx firebase-tools deploy --only firestore:rules --config firebase.produccion.json --project jornadaviva-476ff
 ```
 
-Hoy está publicado `firestore.rules`. `firestore.api.rules` (solo lectura) **no se publica** hasta cerrar la migración: ver [`docs/migracion-api/05-despliegue-y-recuperacion.md`](docs/migracion-api/05-despliegue-y-recuperacion.md).
+`firebase.json` carga `firestore.rules` (reglas con escritura directa, solo para los emuladores y la lógica local) y **no debe usarse para publicar en producción**: con él, cualquier cliente podría volver a mover `cuposOcupados`. Producción usa `firebase.produccion.json`, que apunta a `firestore.api.rules`. Antes de publicar, el respaldo, el orden y cómo volver atrás están en [`docs/migracion-api/05-despliegue-y-recuperacion.md`](docs/migracion-api/05-despliegue-y-recuperacion.md).
 
 ## Notificaciones
 
@@ -277,10 +290,10 @@ npm start                # http://localhost:8080/v1/salud
 ## Pruebas
 
 ```bash
-npm test                  # lógica pura de la app: roles, estados, formularios, planilla, avisos, cliente HTTP (93)
-npm run test:rules        # reglas de Firestore contra el emulador, actuales y de solo lectura (81)
-npm run test:api          # API real contra los emuladores: auth, inscripciones, jornadas, avisos, cuentas, reportes... (155)
-npm run test:equivalencia # los servicios de la app con la lógica local y con la API deben dar el mismo resultado (23 + 23)
+npm test                  # lógica pura de la app: roles, estados, formularios, planilla, avisos, sincronización, FE-01, plazo de cancelación, cliente HTTP (191)
+npm run test:rules        # reglas de Firestore contra el emulador, actuales y de solo lectura (91)
+npm run test:api          # API real contra los emuladores: auth, inscripciones y plazo de cancelación, jornadas, avisos, cuentas, reportes... (252)
+npm run test:equivalencia # los servicios de la app con la lógica local y con la API deben dar el mismo resultado (25 + 25)
 npm run test:all          # todo lo anterior
 ```
 
