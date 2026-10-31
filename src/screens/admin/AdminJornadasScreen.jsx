@@ -10,6 +10,7 @@ import { estadoParaCard } from "../../components/EstadoJornadaChip";
 import { Boton, Chip, Entrada, Vacio, estilos } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
 import { ESTADOS_JORNADA, ETIQUETA_ESTADO, estadoJornada, ordenarParaMaestro } from "../../utils/estadoJornada";
+import { palabraPlural } from "../../utils/plural";
 import { puedeSerResponsable } from "../../utils/roles";
 import { filtrarJornadas } from "../../utils/usuariosAdmin";
 import { descomponerFecha } from "../../utils/zonaNegocio";
@@ -91,7 +92,7 @@ export default function AdminJornadasScreen({ navigation }) {
             <JornadaCard
               jornada={item}
               estado={estadoParaCard(estadoJornada(item))}
-              extra={`${item.cuposOcupados || 0} de ${item.cuposTotales || 0} cupos · Gestor: ${
+              extra={`${item.cuposOcupados || 0} de ${item.cuposTotales || 0} ${palabraPlural(item.cuposTotales || 0, "cupo", "cupos")} · Gestor: ${
                 item.creadoPor ? nombres.get(item.creadoPor) || "desconocido" : "sin asignar"
               }`}
               onPress={() => navigation.navigate("JornadaAdmin", { jornadaId: item.id })}

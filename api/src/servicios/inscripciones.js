@@ -1,7 +1,8 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { fechaAMillis } from "../dominio/jornadaFecha.js";
 import { instantaneaDeJornada } from "../dominio/instantaneaJornada.js";
-import { negocio, validacion } from "../errores.js";
+import { negocio, sinPermiso, validacion } from "../errores.js";
+import { esEstudiante } from "../dominio/roles.js";
 
 // Inscribirse y cancelar la inscripción. Mismo comportamiento que tenía la app móvil:
 //  - ID determinista `${uid}_${jornadaId}` (más búsqueda por campos para las inscripciones
@@ -9,11 +10,18 @@ import { negocio, validacion } from "../errores.js";
 //  - idempotentes: repetir la acción devuelve "ya-inscrito" / "ya-cancelada" sin tocar cupos
 //  - la inscripción anota en `users/{uid}.jornadasVistas` el estado de la jornada (base de los avisos)
 //  - todo ocurre en una transacción de Firestore
+//  - solo los alumnos se inscriben (quien aún no tiene perfil cuenta como alumno); gestores y
+//    administradores reciben 403. Cancelar no se restringe por rol: quien se inscribió como
+//    alumno y luego pasó a gestor debe poder liberar su cupo
 export const idInscripcion = (uid, jornadaId) => `${uid}_${jornadaId}`;
 
 const texto = (v, max) => String(v ?? "").trim().slice(0, max);
 
 export async function inscribir(ctx, usuario, jornadaId, cuerpo = {}) {
+  if (!esEstudiante(usuario.rol)) {
+    throw sinPermiso("Solo los alumnos pueden inscribirse en una jornada.");
+  }
+
   const { db, ahora } = ctx;
   const jornadaRef = db.collection("jornadas").doc(jornadaId);
   const inscripcionRef = db.collection("inscripciones").doc(idInscripcion(usuario.uid, jornadaId));

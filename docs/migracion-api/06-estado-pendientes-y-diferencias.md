@@ -38,7 +38,7 @@ Inevitables o consecuencia directa de decisiones tomadas con el usuario. Ninguna
 ## 3. Defectos preexistentes (documentados, **no corregidos**)
 
 - El plazo de cancelación de 2 días solo lo valida la app, con la fecha del dispositivo: la API acepta cualquier cancelación (igual que las reglas de antes).
-- La inscripción no se restringe por rol (la limita la pantalla); un gestor o administrador podría inscribirse llamando a la API.
+- ~~La inscripción no se restringe por rol~~ **Corregido (Fase 1, D2, 2026-10-30):** `PUT /jornadas/{id}/inscripcion` responde 403 `SIN_PERMISO` a gestores y administradores. Cancelar sigue sin restringirse por rol.
 - Con las reglas actuales, cualquier cliente puede mover el contador de cupos dentro de sus límites. **Se cierra** al publicar `firestore.api.rules` (M7).
 - Nombre y correo de la planilla vienen de lo que cada alumno envía al inscribirse (la API usa los del perfil solo si faltan).
 - La Cloud Function `functions/index.js` (`onJornadaUpdated`) no está desplegada y duplicaría los avisos si se desplegara junto a la API: eliminarla en M7.

@@ -130,6 +130,31 @@ describe("validación del formulario de jornada", () => {
   it("si hay errores no devuelve datos", () => {
     assert.equal(validarJornada(formulario({ titulo: "" }), { ahora: AHORA }).datos, null);
   });
+
+  describe("banner opcional (enlace https a una imagen)", () => {
+    const datosDe = (extra) => validarJornada(formulario(extra), { ahora: AHORA }).datos;
+
+    it("sin el campo en el formulario no envía nada (el servidor conserva el banner)", () => {
+      assert.equal("bannerUrl" in datosDe({}), false);
+    });
+
+    it("con texto vacío o solo espacios envía '' (el servidor quita el banner)", () => {
+      assert.equal(datosDe({ bannerUrl: "" }).bannerUrl, "");
+      assert.equal(datosDe({ bannerUrl: "   " }).bannerUrl, "");
+    });
+
+    it("con un enlace https lo envía sin espacios sobrantes", () => {
+      assert.equal(datosDe({ bannerUrl: "  https://tdea.edu.co/a.jpg " }).bannerUrl, "https://tdea.edu.co/a.jpg");
+    });
+
+    it("rechaza enlaces no https, con espacios o que no son texto, con el mensaje y sin datos", () => {
+      for (const bannerUrl of ["http://tdea.edu.co/a.jpg", "javascript:alert(1)", "tdea.edu.co/a.jpg", "https://x.co/a b.jpg", 5, ["https://x.co/a.jpg"], null]) {
+        const r = validarJornada(formulario({ bannerUrl }), { ahora: AHORA });
+        assert.match(r.errores.bannerUrl, /https:\/\//, JSON.stringify(bannerUrl));
+        assert.equal(r.datos, null);
+      }
+    });
+  });
 });
 
 describe("reintentar «Crear jornada» sin duplicar", () => {

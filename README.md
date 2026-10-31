@@ -51,20 +51,15 @@ listeners onSnapshot (solo lectura) ◄───────────── t
    npm install
    ```
 
-2. Crea un archivo `.env` en la raíz a partir de `.env.example` y completa tus credenciales de Firebase:
+2. Crea el archivo `.env` en la raíz copiando `.env.example` (`cp .env.example .env`; en Windows PowerShell, `Copy-Item .env.example .env`). El archivo ya trae la dirección de la API y no necesitas cambiar nada:
 
    ```bash
-   EXPO_PUBLIC_FIREBASE_API_KEY=
-   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
-   EXPO_PUBLIC_FIREBASE_PROJECT_ID=
-   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
-   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-   EXPO_PUBLIC_FIREBASE_APP_ID=
-
-   # Opcional: usar la API de negocio (vacío = lógica local)
    EXPO_PUBLIC_API_URL=https://jornada-viva.onrender.com
    EXPO_PUBLIC_API_MODULOS=todos
    ```
+
+   - La configuración de Firebase del proyecto `jornadaviva-476ff` ya está en `firebaseConfig.js`: **la app no lee** las variables `EXPO_PUBLIC_FIREBASE_*` del `.env` (solo las lee `scripts/admin.js`).
+   - **No dejes `EXPO_PUBLIC_API_URL` vacía.** Sin ella la app arranca en su modo local anterior (Firestore directo), que **no incluye la asistencia por QR** ni el resto de reglas de la API.
 
 3. Inicia la app:
 
@@ -105,7 +100,7 @@ listeners onSnapshot (solo lectura) ◄───────────── t
 ## Modelo de datos (Firestore)
 
 - **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante`, `gestor` o `administrador`; sin rol = estudiante; `maestro` = alias antiguo de `gestor`), `activo` (`false` = cuenta desactivada), `creadoEn`, `jornadasVistas` (estado de cada jornada inscrita, base de los avisos), `pushToken`.
-- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del gestor responsable; las jornadas anteriores a los roles no lo tienen) y `creadaEn`.
+- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del gestor responsable; las jornadas anteriores a los roles no lo tienen), `creadaEn` y `bannerUrl` (opcional: enlace `https` a una imagen que se muestra como banner en la tarjeta y el detalle; no se sube ningún archivo, el proyecto no usa Firebase Storage).
 - **`inscripciones/{uid}_{jornadaId}`**: `userId`, `jornadaId`, `nombreUsuario`, `emailUsuario`, `tituloJornada`, `fechaJornada`, `inscritoEn`, `asistio` (las antiguas tienen ID aleatorio y se siguen reconociendo).
 - **`notificaciones/{id}`**: `userId`, `jornadaId`, `tipo`, `titulo`, `mensaje`, `leida`, `creadaEn`, `datosJornada`.
 - **`auditoria/{id}`**: `accion`, `entidad`, `entidadId`, `detalle`, `actorId`, `actorNombre`, `creadaEn` (inmutable).
@@ -178,7 +173,7 @@ La app tiene tres roles. El rol se guarda en `users/{uid}.rol` y decide qué pan
 | Funcionalidad | Usuario/Alumno | Gestor de jornadas | Administrador |
 |---|---|---|---|
 | Consultar información propia | Sí | Sí | Sí |
-| Participar en jornadas (inscribirse, cancelar) | Sí | No (lo limita la pantalla) | No (lo limita la pantalla) |
+| Participar en jornadas (inscribirse, cancelar) | Sí | No (la pantalla lo oculta y la API responde 403 a la inscripción) | No (la pantalla lo oculta y la API responde 403 a la inscripción) |
 | Gestionar jornadas | No | Solo las **asignadas** a él (`creadoPor`) | **Todas**, y puede reasignarlas |
 | Crear jornadas | No | A su nombre | Para cualquier gestor |
 | Ver inscritos y descargar planilla | No | De sus jornadas | De cualquier jornada |

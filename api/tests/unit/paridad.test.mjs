@@ -18,7 +18,7 @@ const leer = (...partes) => readFileSync(join(raiz, ...partes), "utf8");
 
 describe("la API usa las mismas reglas puras que la app", () => {
   // Módulos copiados sin cambios: deben ser idénticos al de la app
-  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia"]) {
+  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia", "bannerJornada"]) {
     it(`${modulo}.js es idéntico en la app y en la API`, () => {
       assert.equal(
         leer("api", "src", "dominio", `${modulo}.js`).replace(/\r\n/g, "\n"),
@@ -48,6 +48,10 @@ describe("la API usa las mismas reglas puras que la app", () => {
       { cuposTotales: "0" }, { cuposTotales: "1001" }, { cuposTotales: "2.5" }, { cuposTotales: "abc" }, { cuposTotales: "" },
       { dia: "2026-05-01" }, { dia: "2026-06-01", hora: "12:00" }, { dia: "2026-06-01", hora: "12:01" },
       { titulo: "  Con espacios  ", responsable: " Ana " },
+      { bannerUrl: "https://tdea.edu.co/banner.jpg" }, { bannerUrl: "" }, { bannerUrl: "   " },
+      { bannerUrl: "  https://tdea.edu.co/banner.jpg  " }, { bannerUrl: "http://tdea.edu.co/banner.jpg" },
+      { bannerUrl: "javascript:alert(1)" }, { bannerUrl: "https://tdea.edu.co/mi banner.jpg" },
+      { bannerUrl: "https://usuario:clave@tdea.edu.co/a.jpg" }, { bannerUrl: `https://tdea.edu.co/${"a".repeat(500)}` },
     ];
     for (const cambio of casos) {
       it(`mismos errores con ${JSON.stringify(cambio).slice(0, 70)}`, () => {

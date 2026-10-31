@@ -15,6 +15,7 @@ import { useJornadas } from "../../context/JornadasContext";
 import { useSync } from "../../context/SyncContext";
 import { colors } from "../../theme/colors";
 import { formatearDiasFaltan, formatearHora } from "../../utils/jornadaFecha";
+import { conteoPlural } from "../../utils/plural";
 
 export default function HomeScreen({ navigation }) {
   const { usuario, cerrarSesion } = useAuth();
@@ -39,7 +40,7 @@ export default function HomeScreen({ navigation }) {
     if (pendientes.length > 0) {
       const n = pendientes.length;
       avisos.push(
-        `Tienes ${n} acción${n !== 1 ? "es" : ""} pendiente${n !== 1 ? "s" : ""} por sincronizar. Si cierras sesión ahora se perderán.`
+        `Tienes ${conteoPlural(n, "acción pendiente", "acciones pendientes")} por sincronizar. Si cierras sesión ahora se perderán.`
       );
     }
     if (!enLinea) {

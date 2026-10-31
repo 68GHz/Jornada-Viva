@@ -28,8 +28,8 @@ Límites: título/entidad/responsable ≤ 120, descripción ≤ 2000, cupos 1–
 
 | Método y ruta | Rol | Notas | Respuesta |
 |---|---|---|---|
-| `POST /v1/jornadas` | gestor, administrador | Fecha futura. `duracionMin` (entero, 10–1440): opcional, por defecto 60, para no romper versiones de la app sin el campo. Gestor: a su nombre (otro `creadoPor` → 403). Administrador: `creadoPor` = gestor/administrador activo (por defecto él) | `201 { id }` · `400 VALIDACION` |
-| `PUT /v1/jornadas/{id}` | gestor (suyas), administrador (todas) | Cupos ≥ inscritos; `duracionMin` (si no llega se conserva la guardada); si está activa, fecha futura; `creadoPor` distinto = reasignar (solo administrador, a un responsable válido). Crea avisos a los inscritos | `204` · `400` · `403` · `404` |
+| `POST /v1/jornadas` | gestor, administrador | Fecha futura. `duracionMin` (entero, 10–1440): opcional, por defecto 60, para no romper versiones de la app sin el campo. `bannerUrl` (opcional): enlace `https` a una imagen, máx. 500 caracteres; vacío = sin banner; otro valor → `400`. Gestor: a su nombre (otro `creadoPor` → 403). Administrador: `creadoPor` = gestor/administrador activo (por defecto él) | `201 { id }` · `400 VALIDACION` |
+| `PUT /v1/jornadas/{id}` | gestor (suyas), administrador (todas) | Cupos ≥ inscritos; `duracionMin` (si no llega se conserva la guardada); `bannerUrl` (si no llega se conserva; `""` lo quita; un enlace `https` lo fija); si está activa, fecha futura; `creadoPor` distinto = reasignar (solo administrador, a un responsable válido). Crea avisos a los inscritos | `204` · `400` · `403` · `404` |
 | `POST /v1/jornadas/{id}/cancelar` | ídem | `activa:false`; avisa a los inscritos | `204` |
 | `POST /v1/jornadas/{id}/reactivar` | ídem | Exige fecha futura; avisa | `204` · `409 FECHA_PASADA` |
 | `DELETE /v1/jornadas/{id}` | ídem | Las inscripciones se conservan; avisa | `204` |

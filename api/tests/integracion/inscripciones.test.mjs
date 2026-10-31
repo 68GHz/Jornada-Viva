@@ -120,8 +120,22 @@ describe("M2 · inscribirse y cancelar la inscripción", () => {
       assert.equal((await coleccion("inscripciones")).length, 0);
     });
 
-    it("no se restringe por rol (igual que antes: lo limita la pantalla, no el servidor)", async () => {
-      assert.equal((await inscribir(api, "gestorB")).cuerpo.resultado, "completada");
+    it("solo los alumnos se inscriben: gestor, alias maestro y administrador reciben 403 SIN_PERMISO y no cambia nada", async () => {
+      for (const uid of ["gestorB", "maestroViejo", "admin1"]) {
+        const r = await inscribir(api, uid);
+        assert.equal(r.estado, 403, uid);
+        assert.equal(r.cuerpo.error.codigo, "SIN_PERMISO", uid);
+      }
+      assert.equal((await coleccion("inscripciones")).length, 0);
+      assert.equal((await leer("jornadas/j1")).cuposOcupados, 0);
+      assert.equal((await leer("users/gestorB")).jornadasVistas, undefined, "tampoco se anota estado visto");
+    });
+
+    it("quien aún no tiene perfil (recién registrado) se trata como alumno y sí se inscribe", async () => {
+      const r = await inscribir(api, "recienRegistrado");
+      assert.equal(r.estado, 200);
+      assert.equal(r.cuerpo.resultado, "completada");
+      assert.equal((await leer("jornadas/j1")).cuposOcupados, 1);
     });
 
     it("rechaza un título de jornada que no sea texto", async () => {
@@ -217,6 +231,14 @@ describe("M2 · inscribirse y cancelar la inscripción", () => {
       await inscribir(api, "est1");
       await sembrar("jornadas/j1", docJornada({ activa: false, cuposOcupados: 1, cuposTotales: 2, fecha: Timestamp.fromMillis(reloj.ahora + 60000) }));
       assert.equal((await cancelar(api, "est1")).cuerpo.resultado, "completada");
+    });
+
+    it("cancelar no se restringe por rol: quien se inscribió como alumno y luego pasó a gestor puede liberar su cupo", async () => {
+      await sembrar("inscripciones/gestorB_j1", { userId: "gestorB", jornadaId: "j1" });
+      await sembrar("jornadas/j1", docJornada({ cuposTotales: 2, cuposOcupados: 1 }));
+      assert.equal((await cancelar(api, "gestorB")).cuerpo.resultado, "completada");
+      assert.equal(await existe("inscripciones/gestorB_j1"), false);
+      assert.equal((await leer("jornadas/j1")).cuposOcupados, 0);
     });
 
     it("requiere sesión", async () => {

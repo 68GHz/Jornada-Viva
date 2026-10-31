@@ -8,6 +8,7 @@ import JornadaCard from "../../components/JornadaCard";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colorEstado, estadoParaCard } from "../../components/EstadoJornadaChip";
 import { colors } from "../../theme/colors";
+import { palabraPlural } from "../../utils/plural";
 import {
   ESTADOS_JORNADA,
   ETIQUETA_ESTADO_PLURAL,
@@ -125,7 +126,7 @@ export default function MaestroHomeScreen({ navigation }) {
         <JornadaCard
           jornada={item}
           estado={estadoParaCard(estadoJornada(item, ahora))}
-          extra={`${item.cuposOcupados || 0} de ${item.cuposTotales || 0} cupos ocupados`}
+          extra={`${item.cuposOcupados || 0} de ${item.cuposTotales || 0} ${palabraPlural(item.cuposTotales || 0, "cupo ocupado", "cupos ocupados")}`}
           onPress={() => navigation.navigate("JornadaAdmin", { jornadaId: item.id })}
         />
       )}

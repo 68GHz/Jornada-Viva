@@ -28,6 +28,8 @@ import {
   esErrorDeConexion,
   mensajeDeError,
 } from "../../services/jornadaAdminService";
+import { usaApi } from "../../config/api";
+import BannerJornada from "../../components/BannerJornada";
 import CalendarioRango from "../../components/CalendarioRango";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colors } from "../../theme/colors";
@@ -87,6 +89,7 @@ export default function JornadaFormScreen({ navigation, route }) {
     hora: "",
     duracionMin: DURACION_SUGERIDA,
     cuposTotales: "",
+    bannerUrl: "",
   });
   const [errores, setErrores] = useState({});
   const [guardando, setGuardando] = useState(false);
@@ -116,6 +119,7 @@ export default function JornadaFormScreen({ navigation, route }) {
       // Las jornadas anteriores al campo salen con la duración por defecto
       duracionMin: String(jornada.duracionMin ?? DURACION_SUGERIDA),
       cuposTotales: String(jornada.cuposTotales ?? ""),
+      bannerUrl: jornada.bannerUrl || "",
     });
   }, [esEdicion, jornada, propia]);
 
@@ -401,6 +405,32 @@ export default function JornadaFormScreen({ navigation, route }) {
             accessibilityLabel="Cupos"
           />
         </Campo>
+
+        {/* Solo con la API: es quien guarda el campo (las reglas del modo local no lo admiten) */}
+        {usaApi("jornadas") && (
+          <Campo etiqueta="Banner (opcional)" error={errores.bannerUrl}>
+            <TextInput
+              style={[styles.input, errores.bannerUrl && styles.inputError]}
+              value={form.bannerUrl}
+              onChangeText={(v) => cambiar("bannerUrl", v)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="https://ejemplo.com/banner.jpg"
+              placeholderTextColor={colors.textDisabled}
+              accessibilityLabel="Enlace del banner"
+            />
+            <Text style={styles.ayuda}>
+              Enlace https de una imagen. Déjalo vacío si la jornada no lleva banner.
+            </Text>
+            <BannerJornada
+              url={form.bannerUrl.trim()}
+              altura={110}
+              mensajeError="No se pudo cargar la imagen de este enlace."
+              style={{ marginTop: 8 }}
+            />
+          </Campo>
+        )}
 
         <TouchableOpacity
           style={[styles.boton, guardando && styles.botonDeshabilitado]}

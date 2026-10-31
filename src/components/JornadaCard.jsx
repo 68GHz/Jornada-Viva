@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { formatearFecha, formatearHora } from "../utils/jornadaFecha";
+import { conteoPlural } from "../utils/plural";
+import BannerJornada from "./BannerJornada";
 
 // `estado` (opcional): { texto, color } reemplaza el badge de cupos,
 // útil cuando se lista la inscripción del usuario (ej. "Inscrito").
@@ -30,6 +32,9 @@ export default function JornadaCard({ jornada, onPress, estado, extra }) {
       />
 
       <View style={styles.contenido}>
+        {/* Banner opcional: si no hay enlace o no carga, no ocupa espacio */}
+        <BannerJornada url={jornada.bannerUrl} altura={110} />
+
         {/* Encabezado */}
         <View style={styles.fila}>
           <Text style={styles.titulo} numberOfLines={2}>
@@ -45,7 +50,7 @@ export default function JornadaCard({ jornada, onPress, estado, extra }) {
             </View>
           ) : pocosCupos ? (
             <View style={[styles.badge, styles.badgePoco]}>
-              <Text style={styles.badgeTexto}>{cuposRestantes} restantes</Text>
+              <Text style={styles.badgeTexto}>{conteoPlural(cuposRestantes, "restante", "restantes")}</Text>
             </View>
           ) : (
             <View style={[styles.badge, styles.badgeDisponible]}>

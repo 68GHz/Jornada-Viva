@@ -25,6 +25,7 @@ const MODULOS = [
   "src/utils/jornadaFecha.js",
   "src/utils/duracion.js",
   "src/utils/jornadaForm.js",
+  "src/utils/bannerJornada.js",
   "src/utils/espacios.js",
   "src/utils/instantaneaJornada.js",
   "src/utils/cambiosJornada.js",

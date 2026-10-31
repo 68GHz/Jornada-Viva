@@ -53,6 +53,10 @@ const camposEditables = (d) => ({
   cuposTotales: d.cuposTotales,
 });
 
+// Banner opcional al editar: sin el campo se conserva el que había; "" lo quita; un enlace lo fija
+const cambiosDeBanner = (d) =>
+  d.bannerUrl === undefined ? {} : { bannerUrl: d.bannerUrl || FieldValue.delete() };
+
 const nombreDe = (perfil, uid) => perfil?.nombre || perfil?.email || uid;
 
 // Clave de idempotencia de «crear jornada»: el cliente genera una por intento y la repite al
@@ -93,6 +97,7 @@ export async function crear(ctx, usuario, cuerpo = {}) {
     : db.collection("jornadas").doc();
   const documento = {
     ...camposEditables(datos),
+    ...(datos.bannerUrl ? { bannerUrl: datos.bannerUrl } : {}),
     cuposOcupados: 0,
     activa: true,
     creadoPor,
@@ -157,7 +162,7 @@ export async function editar(ctx, usuario, jornadaId, cuerpo = {}) {
     if (!datos) throw validacion(errores);
 
     const cambios = { ...camposEditables(datos), ...(reasigna ? { creadoPor: cuerpo.creadoPor } : {}) };
-    tx.update(ref, cambios);
+    tx.update(ref, { ...cambios, ...cambiosDeBanner(datos) });
     if (esAdministrador(usuario.rol)) {
       agregarAuditoria(db, tx, actorDe(usuario), {
         accion: reasigna ? "jornada.reasignar" : "jornada.editar",

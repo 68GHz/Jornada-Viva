@@ -1,5 +1,6 @@
 import { DURACION_POR_DEFECTO, LIMITES_DURACION } from "./duracion.js";
 import { esEspacioValido } from "./espacios.js";
+import { MENSAJE_BANNER, esUrlDeBanner } from "./bannerJornada.js";
 import { combinarFechaHora } from "./zonaNegocio.js";
 
 // Límites que también valida firestore.rules
@@ -90,9 +91,19 @@ export function validarJornada(campos, { ahora = Date.now(), cuposOcupados = 0, 
     errores.cuposTotales = `Ya hay ${cuposOcupados} inscritos: los cupos no pueden ser menos.`;
   }
 
+  // Banner opcional (enlace https a una imagen). Sin el campo en el formulario no se envía nada;
+  // con texto vacío se envía "" y el servidor quita el banner que tuviera la jornada.
+  // Solo se admite texto: un número, un objeto o un arreglo no es un enlace (null = no válido)
+  const bannerUrl =
+    campos.bannerUrl === undefined ? undefined : typeof campos.bannerUrl === "string" ? campos.bannerUrl.trim() : null;
+  if (bannerUrl === null || (bannerUrl && !esUrlDeBanner(bannerUrl))) errores.bannerUrl = MENSAJE_BANNER;
+
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
-    datos: { titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales },
+    datos: {
+      titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales,
+      ...(bannerUrl !== undefined ? { bannerUrl } : {}),
+    },
   };
 }

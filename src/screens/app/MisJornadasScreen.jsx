@@ -17,6 +17,7 @@ import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJorn
 import { colors } from "../../theme/colors";
 import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
 import { coincideFiltroFecha } from "../../utils/jornadaFecha";
+import { conteoPlural } from "../../utils/plural";
 
 
 export default function MisJornadasScreen({ navigation }) {
@@ -134,7 +135,7 @@ export default function MisJornadasScreen({ navigation }) {
       ListHeaderComponent={
         jornadasFiltradas.length > 0 ? (
           <Text style={styles.encabezadoLista}>
-            {jornadasFiltradas.length} inscripción{jornadasFiltradas.length !== 1 ? "es" : ""}
+            {conteoPlural(jornadasFiltradas.length, "inscripción", "inscripciones")}
           </Text>
         ) : null
       }

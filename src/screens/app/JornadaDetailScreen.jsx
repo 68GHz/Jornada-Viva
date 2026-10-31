@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import { useAccionesInscripcion } from "../../hooks/useAccionesInscripcion";
+import BannerJornada from "../../components/BannerJornada";
 import { colors } from "../../theme/colors";
 import {
   puedeCancelarInscripcion,
@@ -23,6 +24,7 @@ import {
 import { jornadaDisponible } from "../../utils/jornadaEstado";
 import { estadoVentanaAsistencia } from "../../utils/asistencia";
 import { formatearDuracion, jornadaTerminada } from "../../utils/duracion";
+import { palabraPlural } from "../../utils/plural";
 
 const TITULO_ERROR = {
   YA_INSCRITO: "Ya inscrito",
@@ -250,6 +252,9 @@ export default function JornadaDetailScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
+      {/* Banner opcional: si no hay enlace o no carga, no ocupa espacio */}
+      <BannerJornada url={jornada.bannerUrl} altura={170} />
+
       {/* Encabezado */}
       <View style={styles.encabezado}>
         <Text style={styles.titulo}>{jornada.titulo}</Text>
@@ -280,10 +285,11 @@ export default function JornadaDetailScreen({ route, navigation }) {
           {sinCupos ? "0" : cuposRestantes}
         </Text>
         <Text style={styles.cuposEtiqueta}>
-          {sinCupos ? "Sin cupos" : "cupos disponibles"}
+          {sinCupos ? "Sin cupos" : palabraPlural(cuposRestantes, "cupo disponible", "cupos disponibles")}
         </Text>
         <Text style={styles.cuposSub}>
-          {jornada.cuposOcupados} de {jornada.cuposTotales} lugares ocupados
+          {jornada.cuposOcupados} de {jornada.cuposTotales}{" "}
+          {palabraPlural(jornada.cuposTotales, "lugar ocupado", "lugares ocupados")}
         </Text>
       </View>
 

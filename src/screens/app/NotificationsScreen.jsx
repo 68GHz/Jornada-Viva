@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNotifications } from "../../context/NotificationContext";
 import NotificationItem from "../../components/NotificationItem";
 import { colors } from "../../theme/colors";
+import { conteoPlural } from "../../utils/plural";
 
 export default function NotificationsScreen({ navigation }) {
   const {
@@ -89,7 +90,7 @@ export default function NotificationsScreen({ navigation }) {
       {notificaciones.length > 0 && (
         <View style={styles.barraHerramientas}>
           <Text style={styles.conteoTexto}>
-            {notificaciones.length} notificación{notificaciones.length !== 1 ? "es" : ""}
+            {conteoPlural(notificaciones.length, "notificación", "notificaciones")}
           </Text>
           {hayNoLeidas && (
             <TouchableOpacity

@@ -141,6 +141,72 @@ describe("M3 · gestión de jornadas (gestor y administrador)", () => {
     });
   });
 
+  describe("banner opcional (enlace https a una imagen)", () => {
+    const BANNER = "https://tdea.edu.co/banners/salud.jpg";
+    const crear = (extra) => api.llamar("gestorA", "POST", "/v1/jornadas", cuerpoJornada(extra));
+    const editar = (extra, id = "jA") => api.llamar("gestorA", "PUT", `/v1/jornadas/${id}`, cuerpoJornada(extra));
+
+    it("sin el campo o con texto vacío la jornada se crea sin banner (no se guarda ni un campo vacío)", async () => {
+      for (const extra of [{}, { bannerUrl: "" }, { bannerUrl: "   " }]) {
+        const r = await crear(extra);
+        assert.equal(r.estado, 201, JSON.stringify(extra));
+        assert.equal("bannerUrl" in (await leer(`jornadas/${r.cuerpo.id}`)), false, JSON.stringify(extra));
+      }
+    });
+
+    it("con un enlace https válido lo guarda (sin espacios sobrantes)", async () => {
+      const r = await crear({ bannerUrl: `  ${BANNER}  ` });
+      assert.equal(r.estado, 201);
+      assert.equal((await leer(`jornadas/${r.cuerpo.id}`)).bannerUrl, BANNER);
+    });
+
+    it("rechaza enlaces no https, con espacios, con credenciales, demasiado largos o que no son texto", async () => {
+      const invalidos = [
+        "http://tdea.edu.co/a.jpg", "javascript:alert(1)", "data:image/png;base64,AAAA", "tdea.edu.co/a.jpg",
+        "https://tdea.edu.co/mi banner.jpg", "https://usuario:clave@tdea.edu.co/a.jpg", "https://localhost/a.jpg",
+        `https://tdea.edu.co/${"a".repeat(500)}`, 123, { url: BANNER }, [BANNER],
+      ];
+      for (const bannerUrl of invalidos) {
+        const r = await crear({ bannerUrl });
+        assert.equal(r.estado, 400, JSON.stringify(bannerUrl)?.slice(0, 60));
+        assert.match(r.cuerpo.error.campos.bannerUrl, /https:\/\//);
+      }
+      assert.equal((await coleccion("jornadas")).length, 3, "no se creó ninguna");
+    });
+
+    it("al editar: un enlace lo fija; sin el campo se conserva; con texto vacío se quita", async () => {
+      assert.equal((await editar({ bannerUrl: BANNER })).estado, 204);
+      assert.equal((await leer("jornadas/jA")).bannerUrl, BANNER);
+
+      // una versión de la app sin el campo no borra el banner
+      assert.equal((await editar({ titulo: "Otro título" })).estado, 204);
+      assert.equal((await leer("jornadas/jA")).bannerUrl, BANNER, "se conserva");
+      assert.equal((await leer("jornadas/jA")).titulo, "Otro título");
+
+      assert.equal((await editar({ bannerUrl: "" })).estado, 204);
+      assert.equal("bannerUrl" in (await leer("jornadas/jA")), false, "se quitó el campo");
+    });
+
+    it("un enlace inválido al editar se rechaza y no cambia nada de la jornada", async () => {
+      await editar({ bannerUrl: BANNER });
+      const r = await editar({ bannerUrl: "http://tdea.edu.co/a.jpg", titulo: "No debe guardarse" });
+      assert.equal(r.estado, 400);
+      assert.ok(r.cuerpo.error.campos.bannerUrl);
+      const j = await leer("jornadas/jA");
+      assert.equal(j.bannerUrl, BANNER);
+      assert.notEqual(j.titulo, "No debe guardarse");
+    });
+
+    it("el administrador también lo edita y editar el banner no altera cupos ni propietario", async () => {
+      await sembrar("jornadas/jB", docJornada({ creadoPor: "gestorB", cuposTotales: 10, cuposOcupados: 3 }));
+      assert.equal((await api.llamar("admin1", "PUT", "/v1/jornadas/jB", cuerpoJornada({ bannerUrl: BANNER }))).estado, 204);
+      const j = await leer("jornadas/jB");
+      assert.equal(j.bannerUrl, BANNER);
+      assert.equal(j.cuposOcupados, 3);
+      assert.equal(j.creadoPor, "gestorB");
+    });
+  });
+
   describe("editar y reasignar", () => {
     it("el gestor edita su propia jornada", async () => {
       const r = await api.llamar("gestorA", "PUT", "/v1/jornadas/jA", cuerpoJornada({ titulo: "Nuevo título", cuposTotales: 20 }));

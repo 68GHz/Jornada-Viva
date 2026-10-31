@@ -1,5 +1,6 @@
 import { DURACION_POR_DEFECTO, LIMITES_DURACION } from "./duracion.js";
 import { esEspacioValido } from "./espacios.js";
+import { MENSAJE_BANNER, esUrlDeBanner } from "./bannerJornada.js";
 
 // Límites que también validaba firestore.rules (se mantienen idénticos)
 export const LIMITES = {
@@ -16,7 +17,9 @@ const texto = (v) => String(v ?? "").trim();
 // formulario de la app (validarJornada) y que firestore.rules. La fecha llega ya combinada, en
 // milisegundos epoch (la app la arma con la hora de negocio UTC-5). `duracionMin` (minutos) es
 // opcional para que sigan funcionando las versiones de la app anteriores a ese campo: si no llega
-// se usa la duración por defecto.
+// se usa la duración por defecto. `bannerUrl` (enlace https a una imagen) también es opcional:
+// sin el campo no se toca el banner que ya tenía la jornada; con texto vacío se quita; con un
+// enlace válido se fija.
 //   - ahora:        reloj del servidor
 //   - cuposOcupados: inscritos actuales (los cupos no pueden quedar por debajo)
 //   - exigirFutura: la fecha debe ser posterior a `ahora` (jornadas activas)
@@ -74,9 +77,17 @@ export function validarDatosJornada(campos, { ahora, cuposOcupados = 0, exigirFu
     errores.cuposTotales = `Ya hay ${cuposOcupados} inscritos: los cupos no pueden ser menos.`;
   }
 
+  // Solo se admite texto: un número, un objeto o un arreglo no es un enlace (null = no válido)
+  const bannerUrl =
+    c.bannerUrl === undefined ? undefined : typeof c.bannerUrl === "string" ? c.bannerUrl.trim() : null;
+  if (bannerUrl === null || (bannerUrl && !esUrlDeBanner(bannerUrl))) errores.bannerUrl = MENSAJE_BANNER;
+
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
-    datos: { titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales },
+    datos: {
+      titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales,
+      ...(bannerUrl !== undefined ? { bannerUrl } : {}),
+    },
   };
 }

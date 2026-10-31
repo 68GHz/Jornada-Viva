@@ -29,6 +29,7 @@ import { colors } from "../../theme/colors";
 import { formatearDuracion } from "../../utils/duracion";
 import { estadoJornada, permisosJornada } from "../../utils/estadoJornada";
 import { formatearFecha, formatearHora } from "../../utils/jornadaFecha";
+import { conteoPlural } from "../../utils/plural";
 import { formatearFechaHoraNegocio } from "../../utils/zonaNegocio";
 
 function Fila({ icono, etiqueta, valor, capitalizar = false }) {
@@ -248,10 +249,11 @@ export default function JornadaAdminScreen({ navigation, route }) {
         <Fila
           icono="people-outline"
           etiqueta="Cupos"
-          valor={`${totalInscritos} ocupados de ${jornada.cuposTotales} (${Math.max(
-            0,
-            (jornada.cuposTotales || 0) - totalInscritos
-          )} disponibles)`}
+          valor={`${conteoPlural(totalInscritos, "ocupado", "ocupados")} de ${jornada.cuposTotales} (${conteoPlural(
+            Math.max(0, (jornada.cuposTotales || 0) - totalInscritos),
+            "disponible",
+            "disponibles"
+          )})`}
         />
         <Text style={styles.descripcion}>{jornada.descripcion}</Text>
       </View>
