@@ -17,7 +17,13 @@ const CODIGOS_DE_NEGOCIO = new Set([
   "JORNADA_NO_DISPONIBLE",
   "SIN_CUPOS",
   "PLAZO_VENCIDO", // cancelar fuera del plazo de 2 días
-  "ACCION_DEMASIADO_ANTIGUA", // cancelación sin conexión demasiado antigua para validarla
+  "ACCION_DEMASIADO_ANTIGUA", // acción sin conexión (cancelación, asistencia) demasiado antigua para validarla
+  // Asistencia: motivos por los que el servidor la rechaza (no se reintentan; se explica el motivo)
+  "CODIGO_INVALIDO",
+  "CODIGO_CADUCADO",
+  "ASISTENCIA_FUERA_DE_VENTANA",
+  "ASISTENCIA_NO_INICIADA",
+  "NO_INSCRITO",
 ]);
 
 export class ErrorApi extends Error {

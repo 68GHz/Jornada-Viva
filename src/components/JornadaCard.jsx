@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { formatearFecha, formatearHora } from "../utils/jornadaFecha";
+import { categoriaDeJornada } from "../utils/categorias";
 import { conteoPlural } from "../utils/plural";
 import BannerJornada from "./BannerJornada";
 
@@ -59,8 +60,11 @@ export default function JornadaCard({ jornada, onPress, estado, extra }) {
           )}
         </View>
 
-        {/* Entidad */}
-        <Text style={styles.entidad}>{jornada.entidad}</Text>
+        {/* Entidad y categoría */}
+        <Text style={styles.entidad}>
+          {jornada.entidad}
+          {categoriaDeJornada(jornada) ? ` · ${categoriaDeJornada(jornada)}` : ""}
+        </Text>
 
         {/* Detalles */}
         <View style={styles.detalles}>

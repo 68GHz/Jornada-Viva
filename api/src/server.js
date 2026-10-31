@@ -14,6 +14,7 @@ const app = crearApp({
   origenesCors: config.origenesCors,
   secretoAsistencia: resolverSecretoAsistencia(config),
   cancelacionAntiguedadMaxMs: config.cancelacionAntiguedadMaxMs,
+  asistenciaAntiguedadMaxMs: config.asistenciaAntiguedadMaxMs,
 });
 
 const servidor = app.listen(config.puerto, () => {

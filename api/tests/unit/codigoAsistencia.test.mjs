@@ -85,3 +85,34 @@ describe("secreto con el que se firma el QR", () => {
     assert.equal(avisos.length, 1);
   });
 });
+
+describe("verificación con la hora del escaneo (asistencia sin conexión)", () => {
+  const TOL = 2 * 60 * 1000;
+  const diferido = (codigo, ahoraMs) => verificar(codigo, { ahoraMs, toleranciaMs: TOL, vigenciaMs: VIGENCIA });
+
+  it("acepta un escaneo dentro de la vigencia más la tolerancia, por los dos lados", () => {
+    const { codigo } = emitir(); // vale de AHORA a AHORA + 60 s
+    assert.equal(diferido(codigo, AHORA + VIGENCIA + TOL).valido, true);
+    assert.equal(diferido(codigo, AHORA - TOL).valido, true);
+    assert.equal(diferido(codigo, AHORA + 30_000).valido, true);
+  });
+
+  it("rechaza un escaneo después de la vigencia + tolerancia (CADUCADO) y antes de la emisión - tolerancia (ANTICIPADO)", () => {
+    const { codigo } = emitir();
+    assert.deepEqual(diferido(codigo, AHORA + VIGENCIA + TOL + 1), { valido: false, motivo: "CADUCADO" });
+    assert.deepEqual(diferido(codigo, AHORA - TOL - 1), { valido: false, motivo: "ANTICIPADO" });
+  });
+
+  it("sin la tolerancia ni la vigencia se comporta como antes (compatibilidad con el escaneo con conexión)", () => {
+    const { codigo } = emitir();
+    assert.equal(verificar(codigo, { ahoraMs: AHORA + VIGENCIA + 1 }).valido, false);
+    assert.equal(verificar(codigo, { ahoraMs: AHORA - 3600_000 }).valido, true, "sin vigenciaMs no hay cota inferior");
+  });
+
+  it("la firma y la jornada se verifican siempre, con cualquier hora", () => {
+    const ajeno = emitir({ secreto: "otro" }).codigo;
+    assert.deepEqual(diferido(ajeno, AHORA), { valido: false, motivo: "FIRMA" });
+    const { codigo } = emitir();
+    assert.deepEqual(verificar(codigo, { jornadaId: "j2", ahoraMs: AHORA, toleranciaMs: TOL, vigenciaMs: VIGENCIA }), { valido: false, motivo: "JORNADA" });
+  });
+});

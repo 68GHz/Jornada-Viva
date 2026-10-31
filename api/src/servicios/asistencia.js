@@ -1,4 +1,4 @@
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   CODIGO_QR_RENOVAR_MS,
   CODIGO_QR_VIGENCIA_MS,
@@ -6,6 +6,11 @@ import {
 } from "../dominio/asistencia.js";
 import { generarCodigo, verificarCodigo } from "../dominio/codigoAsistencia.js";
 import { duracionJornadaMin } from "../dominio/duracion.js";
+import {
+  TOLERANCIA_RELOJ_MS,
+  esHoraDeOrigenValida,
+  resolverInstante,
+} from "../dominio/relojDiferido.js";
 import { fechaAMillis } from "../dominio/jornadaFecha.js";
 import { negocio, noEncontrado, validacion } from "../errores.js";
 import { esAdministrador } from "../dominio/roles.js";
@@ -21,8 +26,15 @@ import { exigirGestor, exigirPropiedad } from "./jornadas.js";
 //  - El gestor o el administrador pueden marcar o corregir la asistencia a mano en cualquier
 //    momento desde que empieza la jornada. Queda anotado quién lo hizo y cuándo; si lo hace un
 //    administrador, también en la auditoría.
+//  - Sin conexión (D5, nivel mínimo): la asistencia se guarda en el teléfono y se envía después con
+//    la hora en que ocurrió (`escaneadoEn` del estudiante, `marcadaEn` del gestor). El servidor la
+//    valida con ESA hora (acotada por la suya y por un máximo de antigüedad, ver relojDiferido.js):
+//    la firma del código se verifica siempre, la hora del escaneo debe caer en la vigencia del código
+//    (con una tolerancia de reloj), y la ventana de los 20 minutos y «desde que empieza» se miden con
+//    esa hora. Se guardan la hora de origen (`asistioEn`) y la de sincronización.
 const MENSAJES_CODIGO = {
   CADUCADO: "El código del QR caducó. Escanea el que se muestra ahora en la pantalla del gestor.",
+  ANTICIPADO: "La hora de tu escaneo no coincide con la del código. Revisa la fecha y la hora de tu teléfono.",
   JORNADA: "Este código QR es de otra jornada. Escanea el de la jornada en la que estás presente.",
 };
 
@@ -56,7 +68,24 @@ export async function registrar(ctx, usuario, jornadaId, cuerpo = {}) {
     throw validacion({ codigo: "Falta el código del QR." });
   }
 
-  const verificacion = verificarCodigo(cuerpo.codigo, { jornadaId, ahoraMs: ahora(), secreto: secretoAsistencia });
+  // Hora del escaneo: la del servidor, o la que informó el teléfono si se escaneó sin conexión
+  if (cuerpo.escaneadoEn != null && !esHoraDeOrigenValida(cuerpo.escaneadoEn)) {
+    throw validacion({ escaneadoEn: "La hora del escaneo no es válida." });
+  }
+  const reloj = resolverInstante({
+    hechaEn: cuerpo.escaneadoEn,
+    ahora: ahora(),
+    antiguedadMaxMs: ctx.asistenciaAntiguedadMaxMs,
+  });
+  if (!reloj.ok) throw negocio(reloj.codigo, reloj.mensaje);
+  const { instante, diferida } = reloj;
+
+  const verificacion = verificarCodigo(cuerpo.codigo, {
+    jornadaId,
+    ahoraMs: instante,
+    secreto: secretoAsistencia,
+    ...(diferida ? { toleranciaMs: TOLERANCIA_RELOJ_MS, vigenciaMs: CODIGO_QR_VIGENCIA_MS } : {}),
+  });
   if (!verificacion.valido) {
     const mensaje = MENSAJES_CODIGO[verificacion.motivo] || "El código QR no es válido.";
     throw negocio(verificacion.motivo === "CADUCADO" ? "CODIGO_CADUCADO" : "CODIGO_INVALIDO", mensaje);
@@ -71,9 +100,14 @@ export async function registrar(ctx, usuario, jornadaId, cuerpo = {}) {
 
     if (!jornada.exists) throw negocio("JORNADA_NO_DISPONIBLE", "La jornada ya no existe.");
     const { datos, fecha, duracionMin } = datosDeJornada(jornada);
-    if (datos.activa !== true) throw negocio("JORNADA_NO_DISPONIBLE", "La jornada fue desactivada.");
+    // Una asistencia hecha sin conexión puede llegar cuando la jornada ya terminó y el mantenimiento
+    // la desactivó: eso no la invalida (la ventana se mide con la hora del escaneo, más abajo)
+    const terminada = fecha != null && fecha + duracionMin * 60000 <= ahora();
+    if (datos.activa !== true && !(diferida && terminada)) {
+      throw negocio("JORNADA_NO_DISPONIBLE", "La jornada fue desactivada.");
+    }
 
-    const ventana = estadoVentanaAsistencia(fecha, ahora(), duracionMin);
+    const ventana = estadoVentanaAsistencia(fecha, instante, duracionMin);
     if (!ventana.disponible) throw negocio("ASISTENCIA_FUERA_DE_VENTANA", ventana.mensaje);
 
     if (inscripciones.empty) throw negocio("NO_INSCRITO", "No estás inscrito en esta jornada.");
@@ -81,8 +115,10 @@ export async function registrar(ctx, usuario, jornadaId, cuerpo = {}) {
 
     tx.update(inscripciones.docs[0].ref, {
       asistio: true,
-      asistioEn: FieldValue.serverTimestamp(),
+      // Con conexión: la hora del servidor. Sin conexión: la hora del escaneo, y además cuándo llegó
+      asistioEn: diferida ? Timestamp.fromMillis(instante) : FieldValue.serverTimestamp(),
       metodoAsistencia: "qr",
+      ...(diferida ? { asistenciaSincronizadaEn: FieldValue.serverTimestamp() } : {}),
     });
     return "registrada";
   });
@@ -96,6 +132,19 @@ export async function marcar(ctx, usuario, jornadaId, inscripcionId, cuerpo = {}
     throw validacion({ asistio: "Indica si asistió (true) o no (false)." });
   }
   const asistio = cuerpo.asistio;
+
+  // Hora de la marca: la del servidor, o la que informó el teléfono si se marcó sin conexión
+  if (cuerpo.marcadaEn != null && !esHoraDeOrigenValida(cuerpo.marcadaEn)) {
+    throw validacion({ marcadaEn: "La hora de la marca no es válida." });
+  }
+  const reloj = resolverInstante({
+    hechaEn: cuerpo.marcadaEn,
+    ahora: ahora(),
+    antiguedadMaxMs: ctx.asistenciaAntiguedadMaxMs,
+  });
+  if (!reloj.ok) throw negocio(reloj.codigo, reloj.mensaje);
+  const { instante, diferida } = reloj;
+  const marca = () => (diferida ? Timestamp.fromMillis(instante) : FieldValue.serverTimestamp());
 
   const jornadaRef = db.collection("jornadas").doc(jornadaId);
   const inscripcionRef = db.collection("inscripciones").doc(inscripcionId);
@@ -111,7 +160,7 @@ export async function marcar(ctx, usuario, jornadaId, inscripcionId, cuerpo = {}
     if (!inscripcion.exists || inscripcion.data().jornadaId !== jornadaId) {
       throw noEncontrado("La inscripción no existe en esta jornada.");
     }
-    if (fecha == null || fecha > ahora()) {
+    if (fecha == null || fecha > instante) {
       throw negocio(
         "ASISTENCIA_NO_INICIADA",
         "La asistencia se puede marcar desde la hora de inicio de la jornada."
@@ -124,10 +173,11 @@ export async function marcar(ctx, usuario, jornadaId, inscripcionId, cuerpo = {}
 
     tx.update(inscripcionRef, {
       asistio,
-      asistioEn: asistio ? FieldValue.serverTimestamp() : null,
+      asistioEn: asistio ? marca() : null,
       metodoAsistencia: "manual",
       asistenciaModificadaPor: usuario.uid,
-      asistenciaModificadaEn: FieldValue.serverTimestamp(),
+      asistenciaModificadaEn: marca(),
+      ...(diferida ? { asistenciaSincronizadaEn: FieldValue.serverTimestamp() } : {}),
     });
     if (esAdministrador(usuario.rol)) {
       agregarAuditoria(db, tx, actorDe(usuario), {

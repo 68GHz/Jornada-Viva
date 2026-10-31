@@ -91,7 +91,6 @@ listeners onSnapshot (solo lectura) ◄───────────── t
 │   ├── utils/                 # Reglas puras: roles, estados, fechas, planilla, avisos, sincronización
 │   └── theme/                 # Colores
 ├── api/                       # API de negocio (Node + Express + Admin SDK) — ver su README
-├── functions/                 # Cloud Function de avisos (NO desplegada; se retira al cerrar la migración)
 ├── scripts/admin.js           # Administración de cuentas fuera de la app (gcloud)
 ├── tests/                     # unit/ · rules/ · equivalencia/
 └── docs/                      # migracion-api/ (diseño y operación de la API) · investigacion/ (trabajo de campo)
@@ -100,7 +99,7 @@ listeners onSnapshot (solo lectura) ◄───────────── t
 ## Modelo de datos (Firestore)
 
 - **`users/{uid}`**: `uid`, `nombre`, `email`, `rol` (`estudiante`, `gestor` o `administrador`; sin rol = estudiante; `maestro` = alias antiguo de `gestor`), `activo` (`false` = cuenta desactivada), `creadoEn`, `jornadasVistas` (estado de cada jornada inscrita, base de los avisos), `pushToken`.
-- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del gestor responsable; las jornadas anteriores a los roles no lo tienen), `creadaEn` y `bannerUrl` (opcional: enlace `https` a una imagen que se muestra como banner en la tarjeta y el detalle; no se sube ningún archivo, el proyecto no usa Firebase Storage).
+- **`jornadas/{id}`**: `titulo`, `entidad`, `descripcion`, `fecha` (Timestamp, hora de negocio UTC-5), `lugar`, `responsable`, `cuposTotales`, `cuposOcupados`, `activa`, `creadoPor` (uid del gestor responsable; las jornadas anteriores a los roles no lo tienen), `creadaEn`, `categoria` (una de *Salud*, *Alfabetización digital*, *Proyección social*, *Talleres*, *Asesorías*; el formulario la exige, y las jornadas anteriores no la tienen hasta que se editen: se muestran sin categoría; aparece en la tarjeta y el detalle y alimenta el filtro por categoría de *Jornadas* y *Mis jornadas*) y `bannerUrl` (opcional: enlace `https` a una imagen que se muestra como banner en la tarjeta y el detalle; no se sube ningún archivo, el proyecto no usa Firebase Storage).
 - **`inscripciones/{uid}_{jornadaId}`**: `userId`, `jornadaId`, `nombreUsuario`, `emailUsuario`, `tituloJornada`, `fechaJornada`, `inscritoEn`, `asistio` (las antiguas tienen ID aleatorio y se siguen reconociendo).
 - **`notificaciones/{id}`**: `userId`, `jornadaId`, `tipo`, `titulo`, `mensaje`, `leida`, `creadaEn`, `datosJornada`.
 - **`auditoria/{id}`**: `accion`, `entidad`, `entidadId`, `detalle`, `actorId`, `actorNombre`, `creadaEn` (inmutable).
@@ -129,7 +128,7 @@ El estado de la red se detecta con **NetInfo**. La persistencia propia de Firest
 1. **Lectura.** `JornadasContext` es la fuente única de datos. Al iniciar carga lo guardado en AsyncStorage y, cuando el servidor responde, se actualiza y se vuelve a guardar. Un snapshot vacío que llega de la caché (sin red) nunca borra lo que ya se muestra, y nunca queda cargando indefinidamente.
 2. **Avisos de estado.** `ConnectionBanner` (parte inferior de todas las pantallas) muestra un solo aviso a la vez: *Sin conexión* es **permanente** mientras no haya red e indica cuántas acciones están pendientes ("Sin conexión · 2 pendientes"); *Conectado* aparece 10 s al recuperar la red; *Sincronizando datos* aparece mientras se envían los cambios (sin límite de tiempo si la sincronización es larga); y, si algo falla, un aviso de error que conserva los datos pendientes y se reintenta solo. Tocar el aviso (sin conexión o con error) abre la pantalla **Sincronización**, que también se abre desde la tarjeta *Sincronización* del inicio, con el número de pendientes, la última sincronización y las acciones (reintentar o descartar cada una).
 3. **Escritura.** Inscribirse y cancelar pasan siempre por la cola (`src/services/syncQueueService.js`). Con conexión se envían al instante; sin conexión quedan como **"Pendiente por sincronizar"** (en la lista, el detalle, Mis jornadas y el inicio) y los cupos mostrados incluyen su efecto. Antes de continuar sin conexión la app informa y pide confirmación.
-4. **Sincronización.** `src/services/syncEngine.js` envía las acciones una a una y en orden cuando vuelve internet, al volver a abrir la app o desde "Sincronizar ahora". Cada envío (`src/services/inscripcionService.js`) llama a la **API** (`PUT/DELETE /v1/jornadas/{id}/inscripcion`) o, sin API configurada, ejecuta la transacción de Firestore equivalente; en ambos casos valida jornada activa y vigente, cupos y duplicados.
+4. **Sincronización.** `src/services/syncEngine.js` envía las acciones una a una y en orden cuando vuelve internet, al volver a abrir la app o desde "Sincronizar ahora". Cada envío llama a la **API** (`src/services/ejecutorAcciones.js` reparte cada tipo de acción: inscribir/cancelar → `PUT/DELETE /v1/jornadas/{id}/inscripcion`; asistencia → ver «Asistencia sin conexión»). La app ya no escribe en Firestore: el servidor valida jornada activa y vigente, cupos y duplicados.
 5. **Cierre de sesión.** Si hay acciones pendientes (o no hay conexión) se avisa de que se perderán y se pide confirmación.
 
 ### Reglas de negocio y conflictos
@@ -144,8 +143,13 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
 | Inscribirse y cancelar sin haber enviado nada | Se anulan entre sí; no se envía nada |
 | Cancelación fuera del plazo de 2 días | Se **rechaza** (`PLAZO_VENCIDO`) con el motivo; la inscripción y el cupo no cambian |
 | Cancelación hecha sin conexión hace más de 7 días | Se **rechaza** (`ACCION_DEMASIADO_ANTIGUA`): hay que descartarla y volver a cancelar si aún se está a tiempo |
+| Asistencia (QR o manual) hecha sin conexión hace más de 24 h | Se **rechaza** (`ACCION_DEMASIADO_ANTIGUA`) |
+| Asistencia por QR sin conexión con código que ya caducó cuando se escaneó (hora del escaneo fuera de la vigencia del código ± 2 min) | Se **rechaza** (`CODIGO_CADUCADO` / `ASISTENCIA_FUERA_DE_VENTANA`) con el motivo |
+| Asistencia por QR del mismo estudiante enviada dos veces | Se da por hecha (`ya-registrada`), sin duplicar |
+| Marcar y quitar la asistencia de un inscrito sin haber enviado nada | Se anulan entre sí; no se envía nada |
 
 - **Fechas y reloj:** la hora del teléfono no es confiable, así que **el servidor decide**. El plazo de cancelación (hasta 2 días calendario antes de la jornada, en hora de Colombia) lo valida el servidor con su propio reloj; la app solo lo comprueba antes para avisar rápido. Una cancelación hecha **sin conexión** viaja con la hora en que el usuario la hizo (`canceladaEn`): el servidor usa la **menor** entre esa hora y la suya (una hora adelantada no sirve), de modo que cancelar a tiempo sin red sigue valiendo aunque se sincronice después del plazo; y la rechaza si es más antigua que `CANCELACION_ANTIGUEDAD_MAX_HORAS` (7 días por defecto), para que atrasar el reloj del teléfono no dé ventaja. Cancelar con conexión no envía hora: cuenta solo la del servidor. El vencimiento de la inscripción ("la jornada ya finalizó") también lo valida el servidor.
+- **Asistencia sin conexión (mismo criterio de reloj).** El estudiante puede escanear el QR sin internet (si ya está inscrito en su copia local): la acción `REGISTRAR_ASISTENCIA` queda en la cola con la hora real del escaneo (`escaneadoEn`) y la jornada muestra «Asistencia guardada, pendiente por sincronizar»; en Mis jornadas aparece como «Asistencia pendiente» hasta confirmarse. El gestor también puede marcar/quitar asistencia sin conexión (`MARCAR_ASISTENCIA` / `QUITAR_ASISTENCIA` con `marcadaEn`) sobre la última lista de inscritos descargada (se avisa de la fecha de la copia). El servidor usa la **menor** entre la hora del cliente y la suya, rechaza lo más antiguo que `ASISTENCIA_ANTIGUEDAD_MAX_HORAS` (24 h por defecto) y exige que la hora del escaneo caiga dentro de la vigencia del código firmado (± 2 min de tolerancia de reloj), así que adelantar o atrasar el reloj del teléfono no sirve para falsear la asistencia. Guarda la hora del escaneo (`asistioEn`) y la de sincronización (`asistenciaSincronizadaEn`).
 - **Duplicados:** la inscripción nueva usa el ID `<uid>_<jornadaId>` y nunca se actualiza, así que un doble toque o un reenvío no la duplican. También se detectan las inscripciones antiguas (ID aleatorio).
 - **Errores de red:** la acción sigue pendiente y se reintenta sola con espera creciente (5 s, 10 s, 20 s... hasta 2 min) o al recuperar la conexión; no se pierde nada aunque se cierre la app (se vuelve a enviar sin duplicar).
 - **Errores permanentes** (sin cupos, sin permiso...): la acción queda **rechazada** con el motivo, sin perder datos, y se avisa al usuario.
@@ -169,6 +173,14 @@ El **servidor manda** sobre cupos y estado de la jornada, y los envíos son **id
   - **Formulario de crear/editar jornada** (gestor y administrador): al elegir fecha y hora, marca con un aviso los espacios ya ocupados a esa hora y, si se elige uno, indica qué jornada lo usa y qué espacios están libres. Solo informa: no impide elegir un espacio ocupado.
 - **Sin conexión.** Se calcula con las jornadas que la app ya guardó en el dispositivo, así que funciona sin red con los datos descargados; la pantalla avisa de que pueden estar desactualizados.
 - **Dónde está en el código.** Lógica: [`src/utils/espaciosLibres.js`](src/utils/espaciosLibres.js) · interfaz: [`src/components/EspaciosAlternos.jsx`](src/components/EspaciosAlternos.jsx), [`JornadaDetailScreen.jsx`](src/screens/app/JornadaDetailScreen.jsx) y [`JornadaFormScreen.jsx`](src/screens/maestro/JornadaFormScreen.jsx) · pruebas: [`tests/unit/espaciosLibres.test.mjs`](tests/unit/espaciosLibres.test.mjs).
+
+## FE-02 · Préstamo y devolución de objetos
+
+- **Problema que resuelve.** Beatriz (Biblioteca) no tiene forma de saber qué libros, equipos o materiales están prestados, a quién y hasta cuándo, ni de avisar de lo vencido.
+- **Qué hace (alcance mínimo).** El gestor o el administrador registra un préstamo (código de inventario, nombre, tipo —libro, equipo o material—, correo del estudiante, plazo de 3/7/15/30 días y nota) y marca la devolución. El estudiante ve **Mis préstamos** con su estado (*Vigente*, *Por vencer* a 2 días o menos, *Vencido*, *Devuelto*) y una alerta en el inicio. El gestor ve los que registró; el administrador, todos, con filtro *Activos / Todos*.
+- **Reglas (servidor).** Un mismo objeto no puede estar prestado dos veces (`OBJETO_YA_PRESTADO`), el estudiante debe existir (`ESTUDIANTE_NO_ENCONTRADO`), el plazo máximo es de 90 días y devolver dos veces es seguro. Las acciones del administrador quedan en la auditoría (`prestamo.crear` / `prestamo.devolver`).
+- **Sin conexión.** Las listas se guardan en el dispositivo y se pueden consultar; registrar y devolver exigen conexión (se avisa), porque dependen de saber si el objeto ya está prestado.
+- **Datos.** Colección `prestamos`, que solo lee y escribe la API (las reglas de Firestore niegan el acceso directo).
 
 ## Roles y permisos
 
@@ -255,7 +267,7 @@ El alumno recibe un aviso (pantalla **Notificaciones** y aviso local del disposi
 
 **Sin API** (`EXPO_PUBLIC_API_URL` vacío), la app detecta los cambios ella misma al abrirse, como antes.
 
-**Limitación.** Aún no hay notificaciones *push* con la app cerrada (el `pushToken` se guarda, pero ningún servidor lo usa todavía). `functions/index.js` tiene una Cloud Function antigua, **no desplegada**, que no debe desplegarse junto a la API porque duplicaría los avisos.
+**Limitación.** Aún no hay notificaciones *push* con la app cerrada (el `pushToken` se guarda, pero ningún servidor lo usa todavía). La Cloud Function antigua (`functions/`) se retiró: los avisos los crea solo la API.
 
 ## API de negocio
 
@@ -266,13 +278,15 @@ Servidor Node.js + Express (`api/`) que concentra las reglas de negocio y escrib
 | Sesión | `GET /me` · `POST /me/perfil` |
 | Inscripciones | `PUT` / `DELETE /jornadas/{id}/inscripcion` |
 | Jornadas | `POST /jornadas` · `PUT` / `DELETE /jornadas/{id}` · `POST /jornadas/{id}/cancelar` · `/reactivar` · `GET /jornadas/{id}/inscritos` · `/planilla.csv` · `POST /mantenimiento/vencidas` |
+| Asistencia | `POST /jornadas/{id}/asistencia/codigo` · `POST /jornadas/{id}/asistencia` (`{ codigo, escaneadoEn? }`) · `PUT /jornadas/{id}/inscritos/{inscripcionId}/asistencia` (`{ asistio, marcadaEn? }`) |
+| Préstamos (FE-02) | `POST /prestamos` · `GET /prestamos[?estado=activos]` · `POST /prestamos/{id}/devolucion` · `GET /me/prestamos` |
 | Notificaciones | `PATCH` / `DELETE /me/notificaciones/{id}` · `POST /me/notificaciones/leer-todas` · `PUT /me/push-token` |
 | Cuentas (administrador) | `POST /usuarios` · `PATCH /usuarios/{id}` |
 | Reportes (administrador) | `GET /admin/estadisticas` · `/admin/reporte-jornadas.csv` |
 
 Todas piden `Authorization: Bearer <ID token de Firebase Auth>` salvo `/salud`. Documentación completa: [`docs/migracion-api/`](docs/migracion-api/).
 
-**Activar en la app.** Define `EXPO_PUBLIC_API_URL` en `.env` (y opcionalmente `EXPO_PUBLIC_API_MODULOS`, por ejemplo `inscripciones,jornadas`, para activar solo algunos módulos: `sesion`, `inscripciones`, `jornadas`, `notificaciones`, `usuarios`, `reportes`). Vaciándola, la app vuelve a su lógica local.
+**Activar en la app.** Define `EXPO_PUBLIC_API_URL` en `.env` (y opcionalmente `EXPO_PUBLIC_API_MODULOS`, por ejemplo `inscripciones,jornadas`, para activar solo algunos módulos: `sesion`, `inscripciones`, `jornadas`, `asistencia`, `prestamos`, `notificaciones`, `usuarios`, `reportes`). Las inscripciones, la asistencia y los préstamos **solo existen con la API**; vaciar la variable deja el resto de módulos en su lógica local anterior.
 
 **Ejecutar la API en local.**
 
@@ -290,10 +304,10 @@ npm start                # http://localhost:8080/v1/salud
 ## Pruebas
 
 ```bash
-npm test                  # lógica pura de la app: roles, estados, formularios, planilla, avisos, sincronización, FE-01, plazo de cancelación, cliente HTTP (191)
+npm test                  # lógica pura de la app: roles, estados, formularios, planilla, avisos, cola de sincronización, historial, FE-01, FE-02, plazo de cancelación, cliente HTTP (246)
 npm run test:rules        # reglas de Firestore contra el emulador, actuales y de solo lectura (91)
-npm run test:api          # API real contra los emuladores: auth, inscripciones y plazo de cancelación, jornadas, avisos, cuentas, reportes... (252)
-npm run test:equivalencia # los servicios de la app con la lógica local y con la API deben dar el mismo resultado (25 + 25)
+npm run test:api          # API real contra los emuladores: auth, inscripciones y plazo, asistencia diferida, préstamos, jornadas, avisos, cuentas, reportes... (304)
+npm run test:equivalencia # los servicios de la app con la lógica local y con la API deben dar el mismo resultado (11 + 25)
 npm run test:all          # todo lo anterior
 ```
 

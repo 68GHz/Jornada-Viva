@@ -28,8 +28,8 @@ Límites: título/entidad/responsable ≤ 120, descripción ≤ 2000, cupos 1–
 
 | Método y ruta | Rol | Notas | Respuesta |
 |---|---|---|---|
-| `POST /v1/jornadas` | gestor, administrador | Fecha futura. `duracionMin` (entero, 10–1440): opcional, por defecto 60, para no romper versiones de la app sin el campo. `bannerUrl` (opcional): enlace `https` a una imagen, máx. 500 caracteres; vacío = sin banner; otro valor → `400`. Gestor: a su nombre (otro `creadoPor` → 403). Administrador: `creadoPor` = gestor/administrador activo (por defecto él) | `201 { id }` · `400 VALIDACION` |
-| `PUT /v1/jornadas/{id}` | gestor (suyas), administrador (todas) | Cupos ≥ inscritos; `duracionMin` (si no llega se conserva la guardada); `bannerUrl` (si no llega se conserva; `""` lo quita; un enlace `https` lo fija); si está activa, fecha futura; `creadoPor` distinto = reasignar (solo administrador, a un responsable válido). Crea avisos a los inscritos | `204` · `400` · `403` · `404` |
+| `POST /v1/jornadas` | gestor, administrador | Fecha futura. `duracionMin` (entero, 10–1440): opcional, por defecto 60, para no romper versiones de la app sin el campo. `categoria` (opcional para versiones anteriores de la app): una de `Salud`, `Alfabetización digital`, `Proyección social`, `Talleres`, `Asesorías`; si llega y no es de la lista (incluido vacío) → `400`. `bannerUrl` (opcional): enlace `https` a una imagen, máx. 500 caracteres; vacío = sin banner; otro valor → `400`. Gestor: a su nombre (otro `creadoPor` → 403). Administrador: `creadoPor` = gestor/administrador activo (por defecto él) | `201 { id }` · `400 VALIDACION` |
+| `PUT /v1/jornadas/{id}` | gestor (suyas), administrador (todas) | Cupos ≥ inscritos; `duracionMin` (si no llega se conserva la guardada); `categoria` (si no llega se conserva; si llega debe ser de la lista); `bannerUrl` (si no llega se conserva; `""` lo quita; un enlace `https` lo fija); si está activa, fecha futura; `creadoPor` distinto = reasignar (solo administrador, a un responsable válido). Crea avisos a los inscritos | `204` · `400` · `403` · `404` |
 | `POST /v1/jornadas/{id}/cancelar` | ídem | `activa:false`; avisa a los inscritos | `204` |
 | `POST /v1/jornadas/{id}/reactivar` | ídem | Exige fecha futura; avisa | `204` · `409 FECHA_PASADA` |
 | `DELETE /v1/jornadas/{id}` | ídem | Las inscripciones se conservan; avisa | `204` |
@@ -55,13 +55,28 @@ La asistencia solo se escribe por la API (las reglas de Firestore no permiten es
 | Método y ruta | Rol | Cuerpo | Respuesta |
 |---|---|---|---|
 | `POST /v1/jornadas/{id}/asistencia/codigo` | gestor (suyas), administrador | — | `200 { codigo, expiraEn (ms), renovarEnMs }`. Código firmado (HMAC-SHA256) y válido 60 s para esa jornada; el modal del QR pide uno nuevo cada 30 s · `403` · `404` |
-| `POST /v1/jornadas/{id}/asistencia` | estudiante inscrito | `{ codigo }` | `200 { resultado: "registrada" \| "ya-registrada" }` (método `qr`) · `400` sin código · `409 CODIGO_INVALIDO` / `CODIGO_CADUCADO` / `JORNADA_NO_DISPONIBLE` (cancelada o inexistente) / `ASISTENCIA_FUERA_DE_VENTANA` / `NO_INSCRITO` |
-| `PUT /v1/jornadas/{id}/inscritos/{inscripcionId}/asistencia` | gestor (suyas), administrador | `{ asistio: boolean }` | `200 { asistio }` · `400` · `403` · `404` · `409 ASISTENCIA_NO_INICIADA` (antes de la hora de inicio) |
+| `POST /v1/jornadas/{id}/asistencia` | estudiante inscrito | `{ codigo, escaneadoEn? (ms) }` | `200 { resultado: "registrada" \| "ya-registrada" }` (método `qr`) · `400` sin código u hora inválida · `409 ACCION_DEMASIADO_ANTIGUA` (más de `ASISTENCIA_ANTIGUEDAD_MAX_HORAS`) / `CODIGO_INVALIDO` / `CODIGO_CADUCADO` / `JORNADA_NO_DISPONIBLE` (cancelada o inexistente) / `ASISTENCIA_FUERA_DE_VENTANA` / `NO_INSCRITO` |
+| `PUT /v1/jornadas/{id}/inscritos/{inscripcionId}/asistencia` | gestor (suyas), administrador | `{ asistio: boolean, marcadaEn? (ms) }` | `200 { asistio }` · `400` · `403` · `404` · `409 ASISTENCIA_NO_INICIADA` (antes de la hora de inicio) |
 
 - **Ventana del estudiante:** desde la hora de inicio, los primeros 20 minutos (o toda la jornada si dura menos de 20).
 - **Corrección manual:** sin límite de tiempo desde que empieza la jornada. Guarda `metodoAsistencia: "manual"`, `asistenciaModificadaPor` y `asistenciaModificadaEn`; si lo hace un administrador queda en la auditoría (`asistencia.marcar` / `asistencia.desmarcar`). Marcar lo que ya está así no cambia nada.
 
+- **Acciones diferidas (hechas sin conexión).** `escaneadoEn` / `marcadaEn` son la hora del teléfono cuando se hizo la acción. El servidor usa la **menor** entre esa hora y la suya, rechaza con `ACCION_DEMASIADO_ANTIGUA` lo que supere `ASISTENCIA_ANTIGUEDAD_MAX_HORAS` (24 por defecto) y, en el QR, exige que la hora del escaneo caiga dentro de la vigencia del código ± 2 min (`CODIGO_CADUCADO` si pasó, `CODIGO_INVALIDO`/anticipado si es anterior). Una jornada desactivada tras terminar sigue aceptando asistencia diferida válida. Se guardan `asistioEn` (hora del escaneo) y `asistenciaSincronizadaEn`. Sin estos campos el comportamiento es el de siempre (hora del servidor).
+
 Cuando actúa un **administrador**, cada operación escribe en `auditoria` (`jornada.crear`, `.editar`, `.reasignar`, `.cancelar`, `.reactivar`, `.eliminar`) en la misma operación atómica.
+
+## Préstamos de objetos (FE-02)
+
+Colección `prestamos`, solo accesible por la API (las reglas de Firestore niegan lectura y escritura directas).
+
+| Método y ruta | Rol | Cuerpo / consulta | Respuesta |
+|---|---|---|---|
+| `POST /v1/prestamos` | gestor, administrador | `{ codigo, nombre, tipo: "libro"\|"equipo"\|"material", correo, vence (ms), nota? }` | `201 { id }` · `400` con `campos` · `403` estudiante · `404 ESTUDIANTE_NO_ENCONTRADO` · `409 OBJETO_YA_PRESTADO` (el mismo código con un préstamo activo). Administrador: auditoría `prestamo.crear` |
+| `GET /v1/prestamos[?estado=activos]` | gestor (los que registró), administrador (todos) | — | `200 { prestamos: [...] }` |
+| `POST /v1/prestamos/{id}/devolucion` | gestor (los suyos), administrador | — | `200 { resultado: "devuelto" \| "ya-devuelto" }` · `403` · `404`. Administrador: auditoría `prestamo.devolver` |
+| `GET /v1/me/prestamos` | estudiante | — | `200 { prestamos: [...] }` (solo los propios) |
+
+El plazo máximo es de 90 días y el código del objeto se normaliza (mayúsculas, espacios) para detectar duplicados.
 
 ## Notificaciones (M4)
 

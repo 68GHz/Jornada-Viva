@@ -2,7 +2,7 @@
 //
 //   EXPO_PUBLIC_API_URL       Dirección base de la API (https://...). Vacía = lógica local anterior.
 //   EXPO_PUBLIC_API_MODULOS   Módulos que usan la API, separados por coma (por defecto "todos"):
-//                             sesion, inscripciones, jornadas, asistencia, notificaciones, usuarios,
+//                             sesion, inscripciones, jornadas, asistencia, prestamos, notificaciones, usuarios,
 //                             reportes
 //
 // Cada módulo se puede apagar por separado: es el interruptor de recuperación de la migración

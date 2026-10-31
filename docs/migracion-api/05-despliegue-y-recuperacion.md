@@ -45,7 +45,7 @@ Debe mostrar `OK` en: salud, rechazo sin token (401) e inicio de sesión + `GET 
    `sesion` → `inscripciones` → `jornadas` → `notificaciones` → `usuarios` → `reportes`. Probar cada etapa con las cuentas de prueba antes de pasar a la siguiente.
 4. **Cuidado con las versiones mezcladas:** con `jornadas` encendido el servidor crea los avisos y la app nueva deja de detectarlos. Una app **vieja** (con lógica local) seguiría detectándolos y podría duplicar un aviso. Publicar la app como actualización obligatoria o aceptar el duplicado ocasional durante la transición.
 5. **Migrar los datos** (idempotente; solo guarda `duracionMin: 60` en las jornadas que no la tienen y renombra el rol `maestro`): `node scripts/admin.js migrar` (simulación) y luego `node scripts/admin.js migrar --aplicar`. Comparar después contra el respaldo.
-6. **Cierre (M7) — solo cuando todo lo anterior esté validado y no queden apps viejas:** publicar las reglas de solo lectura (las apps antiguas dejarán de poder escribir), retirar la lógica local sin uso y eliminar `functions/` (la Cloud Function sin desplegar duplicaría avisos si algún día se desplegara).
+6. **Cierre (M7) — solo cuando todo lo anterior esté validado y no queden apps viejas:** publicar las reglas de solo lectura (las apps antiguas dejarán de poder escribir), retirar la lógica local sin uso y eliminar `functions/` (la Cloud Function sin desplegar duplicaría avisos si algún día se desplegara). *Estado: `functions/` y la escritura local de inscripciones ya se retiraron en la Fase 3 (D6). Variable nueva de la API: `ASISTENCIA_ANTIGUEDAD_MAX_HORAS` (24 por defecto), opcional.*
 
    ```bash
    npx firebase-tools deploy --only firestore:rules --config firebase.produccion.json --project jornadaviva-476ff

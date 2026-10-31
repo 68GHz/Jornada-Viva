@@ -10,6 +10,11 @@ export const ESTADOS = {
 export const TIPOS = {
   INSCRIBIR: "INSCRIBIR",
   CANCELAR: "CANCELAR",
+  // Asistencia hecha sin conexión: el estudiante guarda su escaneo del QR; el gestor o el administrador
+  // marcan o quitan la asistencia de un inscrito (`objetivoId` = id de la inscripción)
+  REGISTRAR_ASISTENCIA: "REGISTRAR_ASISTENCIA",
+  MARCAR_ASISTENCIA: "MARCAR_ASISTENCIA",
+  QUITAR_ASISTENCIA: "QUITAR_ASISTENCIA",
 };
 
 // El aviso "Conectado" (al recuperar la red) se muestra exactamente este tiempo.
@@ -19,6 +24,76 @@ export const DURACION_AVISO_CONEXION_MS = 10000;
 // Acción que todavía debe enviarse al servidor
 export const accionActiva = (accion) =>
   accion.estado === ESTADOS.PENDIENTE || accion.estado === ESTADOS.SINCRONIZANDO;
+
+// ---- Tipos de acción de la cola -------------------------------------------------------------
+// La cola admite varios tipos de acción. Lo que depende del tipo se declara aquí, tipo por tipo,
+// en vez de asumir que "lo que no es INSCRIBIR es CANCELAR":
+//  - efecto en los cupos de la jornada: solo las acciones de inscripción lo tienen
+//  - contrarias: pares que se anulan entre sí si ninguna llegó a enviarse (solo inscribir/cancelar)
+//  - etiqueta para la pantalla de Sincronización
+const EFECTO_EN_CUPOS = { [TIPOS.INSCRIBIR]: 1, [TIPOS.CANCELAR]: -1 };
+const CONTRARIAS = {
+  [TIPOS.INSCRIBIR]: TIPOS.CANCELAR,
+  [TIPOS.CANCELAR]: TIPOS.INSCRIBIR,
+  // Marcar y quitar la asistencia del MISMO inscrito sin haber enviado nada se anulan entre sí
+  [TIPOS.MARCAR_ASISTENCIA]: TIPOS.QUITAR_ASISTENCIA,
+  [TIPOS.QUITAR_ASISTENCIA]: TIPOS.MARCAR_ASISTENCIA,
+};
+const ETIQUETAS = {
+  [TIPOS.INSCRIBIR]: "Inscripción",
+  [TIPOS.CANCELAR]: "Cancelación de inscripción",
+  [TIPOS.REGISTRAR_ASISTENCIA]: "Registro de asistencia",
+  [TIPOS.MARCAR_ASISTENCIA]: "Asistencia marcada",
+  [TIPOS.QUITAR_ASISTENCIA]: "Asistencia retirada",
+};
+const tiene = (objeto, clave) => Object.prototype.hasOwnProperty.call(objeto, clave);
+
+// +1 si ocupa un cupo, -1 si lo libera, 0 si no toca los cupos (o el tipo no se conoce)
+export const efectoEnCupos = (tipo) => (tiene(EFECTO_EN_CUPOS, tipo) ? EFECTO_EN_CUPOS[tipo] : 0);
+// ¿Es una acción sobre la inscripción de una jornada? (inscribir o cancelar)
+export const esAccionDeInscripcion = (tipo) => tiene(EFECTO_EN_CUPOS, tipo);
+// ¿Se anulan entre sí? Solo inscribir/cancelar y marcar/quitar asistencia; cualquier otro par, no.
+// (La cola solo anula acciones sobre la misma jornada y el mismo objetivo.)
+export const esContraria = (a, b) => tiene(CONTRARIAS, a) && CONTRARIAS[a] === b;
+export const etiquetaDeTipo = (tipo) => (tiene(ETIQUETAS, tipo) ? ETIQUETAS[tipo] : "Acción pendiente");
+
+// Decide qué pasa al agregar `datos` a la `cola` (lógica pura; syncQueueService la aplica):
+//  - "anulada":   existe la acción contraria sobre lo mismo y nunca se intentó enviar: se cancelan
+//                 entre sí (si ya se intentó, podría haberse aplicado en el servidor sin saberlo)
+//  - "duplicada": ya hay una acción igual en curso (mismo tipo, jornada y objetivo)
+//  - "encolada":  se agrega
+// `objetivoId` (opcional) distingue acciones del mismo tipo sobre la misma jornada, p. ej. la
+// asistencia de distintos inscritos. Devuelve { valor, resultado }; `valor` es la cola nueva o
+// undefined si no cambia.
+export function planificarEncolado(cola, datos, ahora, id) {
+  const mismoObjetivo = (a) => (a.objetivoId ?? null) === (datos.objetivoId ?? null);
+  const deLaJornada = cola.filter((a) => a.jornadaId === datos.jornadaId && mismoObjetivo(a));
+
+  const contraria = deLaJornada.find(
+    (a) => esContraria(a.tipo, datos.tipo) && a.estado === ESTADOS.PENDIENTE && a.intentos === 0
+  );
+  if (contraria) {
+    return {
+      valor: cola.filter((a) => a.id !== contraria.id),
+      resultado: { resultado: "anulada", accion: contraria },
+    };
+  }
+
+  const igual = deLaJornada.find((a) => a.tipo === datos.tipo && accionActiva(a));
+  if (igual) return { valor: undefined, resultado: { resultado: "duplicada", accion: igual } };
+
+  const accion = {
+    id,
+    ...datos,
+    creadaEn: ahora,
+    estado: ESTADOS.PENDIENTE,
+    intentos: 0,
+    proximoIntento: null,
+    ultimoError: null,
+    codigoError: null,
+  };
+  return { valor: [...cola, accion], resultado: { resultado: "encolada", accion } };
+}
 
 // Espera entre reintentos (red caída): 5 s, 10 s, 20 s... hasta 2 min
 export const esperaReintento = (intentos) =>

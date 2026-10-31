@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +22,8 @@ import {
 } from "../../services/jornadaAdminService";
 import { compartirPlanilla } from "../../services/planillaService";
 import { marcarAsistenciaManual, mensajeDeErrorAsistencia } from "../../services/asistenciaService";
+import { useSync } from "../../context/SyncContext";
+import { TIPOS, accionActiva } from "../../utils/sincronizacion";
 import ModalQrAsistencia from "../../components/ModalQrAsistencia";
 import EstadoJornadaChip from "../../components/EstadoJornadaChip";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -78,8 +80,33 @@ export default function JornadaAdminScreen({ navigation, route }) {
   const permisos = jornada
     ? permisosJornada({ rol, uid: usuario?.uid, jornada, ahora })
     : null;
-  const { inscritos, cargando: cargandoInscritos, error: errorInscritos, recargar } =
+  const { inscritos, cargando: cargandoInscritos, error: errorInscritos, recargar, guardadoEn } =
     useInscritos(jornadaId, !!permisos?.verInscritos);
+  const { cola, encolar } = useSync();
+
+  // Marcas de asistencia hechas sin conexión y aún sin enviar: inscripción -> true (marcar) / false (quitar)
+  const marcasPendientes = useMemo(() => {
+    const mapa = new Map();
+    for (const a of cola) {
+      if (a.jornadaId !== jornadaId || !accionActiva(a)) continue;
+      if (a.tipo === TIPOS.MARCAR_ASISTENCIA) mapa.set(a.objetivoId, true);
+      if (a.tipo === TIPOS.QUITAR_ASISTENCIA) mapa.set(a.objetivoId, false);
+    }
+    return mapa;
+  }, [cola, jornadaId]);
+  // Lo que se ve: la marca pendiente manda sobre lo que dice la lista descargada
+  const asistioEfectivo = (inscrito) =>
+    marcasPendientes.has(inscrito.id) ? marcasPendientes.get(inscrito.id) : !!inscrito.asistio;
+
+  // Al terminar de enviarse las marcas pendientes (con conexión) se vuelve a descargar la lista
+  const habiaMarcas = useRef(false);
+  useEffect(() => {
+    if (marcasPendientes.size > 0) habiaMarcas.current = true;
+    else if (habiaMarcas.current && enLinea) {
+      habiaMarcas.current = false;
+      recargar();
+    }
+  }, [marcasPendientes, enLinea, recargar]);
 
   const [ocupado, setOcupado] = useState(false);
   const [modalQrVisible, setModalQrVisible] = useState(false);
@@ -96,10 +123,33 @@ export default function JornadaAdminScreen({ navigation, route }) {
       return;
     }
 
+    const marcar = !asistioEfectivo(inscrito);
+    // Guarda la marca en el dispositivo para enviarla al reconectar (con la hora en que se hizo)
+    const guardarParaDespues = () =>
+      encolar({
+        tipo: marcar ? TIPOS.MARCAR_ASISTENCIA : TIPOS.QUITAR_ASISTENCIA,
+        jornadaId: jornada.id,
+        objetivoId: inscrito.id,
+        tituloJornada: jornada.titulo,
+        nombreUsuario: inscrito.nombreUsuario || inscrito.emailUsuario || "Inscrito",
+        sinConexion: true,
+      });
+
     setActualizandoAsistenciaId(inscrito.id);
     try {
-      await marcarAsistenciaManual(jornada.id, inscrito.id, !inscrito.asistio);
-      await recargar();
+      if (!enLinea || marcasPendientes.has(inscrito.id)) {
+        // Sin conexión (o ya hay una marca pendiente de este inscrito): todo pasa por la cola, en orden
+        await guardarParaDespues();
+      } else {
+        try {
+          await marcarAsistenciaManual(jornada.id, inscrito.id, marcar);
+          await recargar();
+        } catch (err) {
+          // Se cayó la red justo ahora: la marca no se pierde, queda pendiente
+          if (err?.name === "ErrorRed") await guardarParaDespues();
+          else throw err;
+        }
+      }
     } catch (err) {
       console.warn("Error al registrar asistencia manual:", err);
       Alert.alert("No se pudo actualizar", mensajeDeErrorAsistencia(err));
@@ -306,6 +356,13 @@ export default function JornadaAdminScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
 
+          {guardadoEn != null && !cargandoInscritos && !errorInscritos && (
+            <Text style={styles.avisoCopia}>
+              Sin conexión: lista guardada el {formatearFechaHoraNegocio(guardadoEn)}. Las marcas se enviarán al
+              reconectar.
+            </Text>
+          )}
+
           {cargandoInscritos ? (
             <ActivityIndicator color={colors.primary} />
           ) : errorInscritos ? (
@@ -325,23 +382,26 @@ export default function JornadaAdminScreen({ navigation, route }) {
                     <Text style={styles.inscritoCorreo}>
                       Inscrito el {formatearFechaHoraNegocio(inscrito.inscritoEn)}
                     </Text>
+                    {marcasPendientes.has(inscrito.id) && (
+                      <Text style={styles.pendienteSync}>Pendiente por sincronizar</Text>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={[
                       styles.asistio,
-                      inscrito.asistio && styles.asistioSi,
+                      asistioEfectivo(inscrito) && styles.asistioSi,
                       actualizandoAsistenciaId === inscrito.id && styles.deshabilitado,
                     ]}
                     onPress={() => alternarAsistenciaManual(inscrito)}
                     disabled={actualizandoAsistenciaId === inscrito.id}
                     accessibilityRole="button"
-                    accessibilityLabel={inscrito.asistio ? "Marcar como no asistió" : "Marcar como asistió"}
+                    accessibilityLabel={asistioEfectivo(inscrito) ? "Marcar como no asistió" : "Marcar como asistió"}
                   >
                     {actualizandoAsistenciaId === inscrito.id ? (
                       <ActivityIndicator size="small" color={colors.white} />
                     ) : (
-                      <Text style={[styles.asistioTexto, inscrito.asistio && styles.asistioTextoSi]}>
-                        {inscrito.asistio ? "✓ Asistió" : "Marcar"}
+                      <Text style={[styles.asistioTexto, asistioEfectivo(inscrito) && styles.asistioTextoSi]}>
+                        {asistioEfectivo(inscrito) ? "✓ Asistió" : "Marcar"}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -421,6 +481,8 @@ const styles = StyleSheet.create({
   inscritoDatos: { flex: 1 },
   inscritoNombre: { fontSize: 14, fontWeight: "700", color: colors.textPrimary },
   inscritoCorreo: { fontSize: 12, color: colors.textSecondary },
+  pendienteSync: { fontSize: 11, fontWeight: "700", color: colors.warning, marginTop: 2 },
+  avisoCopia: { fontSize: 12, color: colors.textSecondary, marginBottom: 6 },
   asistio: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: colors.border },
   asistioSi: { backgroundColor: colors.success },
   asistioTexto: { fontSize: 11, fontWeight: "700", color: colors.textSecondary },

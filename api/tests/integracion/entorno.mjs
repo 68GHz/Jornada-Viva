@@ -41,6 +41,7 @@ export async function iniciarApi(opciones = {}) {
     origenesCors: opciones.origenesCors,
     secretoAsistencia: SECRETO_ASISTENCIA,
     cancelacionAntiguedadMaxMs: opciones.cancelacionAntiguedadMaxMs,
+    asistenciaAntiguedadMaxMs: opciones.asistenciaAntiguedadMaxMs,
   });
   const servidor = await new Promise((resolver) => {
     const s = express.listen(0, "127.0.0.1", () => resolver(s));

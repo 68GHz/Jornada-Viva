@@ -18,6 +18,12 @@ import { colors } from "../../theme/colors";
 import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
 import { coincideFiltroFecha } from "../../utils/jornadaFecha";
 import { conteoPlural } from "../../utils/plural";
+import {
+  MODOS_HISTORIAL,
+  contarHistorial,
+  distintivoHistorial,
+  filtrarHistorial,
+} from "../../utils/jornadaEstado";
 
 
 export default function MisJornadasScreen({ navigation }) {
@@ -26,6 +32,9 @@ export default function MisJornadasScreen({ navigation }) {
 
   const [actualizando, setActualizando] = useState(false);
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
+  // Pestaña del historial: todas las inscripciones o solo aquellas a las que se asistió
+  const [modo, setModo] = useState(MODOS_HISTORIAL.INSCRITAS);
+  const conteos = useMemo(() => contarHistorial(jornadas), [jornadas]);
 
   const onRefresh = async () => {
     setActualizando(true);
@@ -38,13 +47,13 @@ export default function MisJornadasScreen({ navigation }) {
 
   const jornadasFiltradas = useMemo(() => {
     const texto = normalizarTexto(filtros.busqueda);
-    return jornadas.filter((j) => {
+    return filtrarHistorial(jornadas, modo).filter((j) => {
       if (texto && !normalizarTexto(j.titulo).includes(texto)) return false;
       if (filtros.categoria && normalizarTexto(j.categoria) !== filtros.categoria) return false;
       if (filtros.lugar && normalizarTexto(j.lugar) !== filtros.lugar) return false;
       return coincideFiltroFecha(j.fecha, filtros.fecha, filtros.desde, filtros.hasta);
     });
-  }, [jornadas, filtros]);
+  }, [jornadas, filtros, modo]);
 
   const hayFiltros =
     filtros.busqueda.trim() !== "" ||
@@ -77,6 +86,29 @@ export default function MisJornadasScreen({ navigation }) {
   return (
     <View style={styles.contenedor}>
     {jornadas.length > 0 && (
+      <View style={styles.pestanas} accessibilityRole="tablist">
+        {[
+          { clave: MODOS_HISTORIAL.INSCRITAS, texto: `Inscritas (${conteos.inscritas})` },
+          { clave: MODOS_HISTORIAL.ASISTIDAS, texto: `Asistidas (${conteos.asistidas})` },
+        ].map((p) => {
+          const activa = modo === p.clave;
+          return (
+            <TouchableOpacity
+              key={p.clave}
+              style={[styles.pestana, activa && styles.pestanaActiva]}
+              onPress={() => setModo(p.clave)}
+              activeOpacity={0.85}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activa }}
+              accessibilityLabel={p.texto}
+            >
+              <Text style={[styles.pestanaTexto, activa && styles.pestanaTextoActiva]}>{p.texto}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    )}
+    {jornadas.length > 0 && (
       <FiltrosJornadas
         filtros={filtros}
         onCambiar={setFiltros}
@@ -91,23 +123,10 @@ export default function MisJornadasScreen({ navigation }) {
       renderItem={({ item }) => (
         <JornadaCard
           jornada={item}
-          estado={
-            item.pendiente
-              ? {
-                  texto:
-                    item.pendiente === "CANCELAR"
-                      ? "Cancelación pendiente"
-                      : "Pendiente por sincronizar",
-                  color: colors.warning,
-                }
-              : item.noDisponible
-              ? { texto: "No disponible", color: colors.textDisabled }
-              : item.finalizada
-              ? { texto: "Finalizada", color: colors.textDisabled }
-              : item.enCurso
-              ? { texto: "En curso", color: colors.accent }
-              : { texto: "Inscrito", color: colors.success }
-          }
+          estado={(() => {
+            const { tipo, texto } = distintivoHistorial(item);
+            return { texto, color: COLOR_DISTINTIVO[tipo] };
+          })()}
           onPress={() => {
             if (item.noDisponible) {
               Alert.alert(
@@ -117,7 +136,7 @@ export default function MisJornadasScreen({ navigation }) {
               return;
             }
             // `finalizada`, `enCurso` y `pendiente` son solo de la lista; el detalle los calcula por su cuenta
-            const { finalizada, enCurso, pendiente, ...jornada } = item;
+            const { finalizada, enCurso, pendiente, asistio, ...jornada } = item;
             navigation.navigate("JornadaDetail", { jornada });
           }}
         />
@@ -135,12 +154,22 @@ export default function MisJornadasScreen({ navigation }) {
       ListHeaderComponent={
         jornadasFiltradas.length > 0 ? (
           <Text style={styles.encabezadoLista}>
-            {conteoPlural(jornadasFiltradas.length, "inscripción", "inscripciones")}
+            {modo === MODOS_HISTORIAL.ASISTIDAS
+              ? conteoPlural(jornadasFiltradas.length, "asistencia", "asistencias")
+              : conteoPlural(jornadasFiltradas.length, "inscripción", "inscripciones")}
           </Text>
         ) : null
       }
       ListEmptyComponent={
-        jornadas.length > 0 ? (
+        jornadas.length > 0 && modo === MODOS_HISTORIAL.ASISTIDAS && !hayFiltros ? (
+          <View style={styles.centrado}>
+            <Ionicons name="checkmark-done-outline" size={44} color={colors.textDisabled} />
+            <Text style={styles.vacioTexto}>
+              Aún no tienes asistencias registradas.{"\n"}
+              Aparecerán aquí cuando registres tu asistencia en una jornada.
+            </Text>
+          </View>
+        ) : jornadas.length > 0 ? (
           <View style={styles.centrado}>
             <Ionicons name="search-outline" size={44} color={colors.textDisabled} />
             <Text style={styles.vacioTexto}>
@@ -173,11 +202,40 @@ export default function MisJornadasScreen({ navigation }) {
   );
 }
 
+// Color del distintivo según su tipo (ver distintivoHistorial)
+const COLOR_DISTINTIVO = {
+  pendiente: colors.warning,
+  noDisponible: colors.textDisabled,
+  asistio: colors.primary,
+  noAsistio: colors.textDisabled,
+  enCurso: colors.accent,
+  inscrito: colors.success,
+};
+
 const styles = StyleSheet.create({
   contenedor: {
     flex: 1,
     backgroundColor: colors.background,
   },
+  pestanas: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  pestana: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  pestanaActiva: { backgroundColor: colors.primary, borderColor: colors.primary },
+  pestanaTexto: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+  pestanaTextoActiva: { color: colors.white },
   lista: {
     paddingVertical: 8,
     paddingBottom: 24,

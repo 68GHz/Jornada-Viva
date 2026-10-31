@@ -68,6 +68,17 @@ export default function MaestroHomeScreen({ navigation }) {
         <Text style={styles.botonCrearTexto}>Crear jornada</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={[styles.botonCrear, styles.botonSecundario]}
+        onPress={() => navigation.navigate("Prestamos")}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Préstamos de objetos"
+      >
+        <Ionicons name="library-outline" size={22} color={colors.primary} />
+        <Text style={[styles.botonCrearTexto, { color: colors.primary }]}>Préstamos de objetos</Text>
+      </TouchableOpacity>
+
       <Text style={styles.seccion}>Mis jornadas asignadas</Text>
       <View style={styles.filtros}>
         {FILTROS.map((f) => {
@@ -174,6 +185,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
+  botonSecundario: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.primary },
   botonCrearTexto: { color: colors.white, fontSize: 16, fontWeight: "700" },
   seccion: { fontSize: 17, fontWeight: "800", color: colors.textPrimary, marginTop: 4 },
   filtros: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

@@ -25,7 +25,9 @@ import {
 import { jornadaDisponible } from "../../utils/jornadaEstado";
 import { estadoVentanaAsistencia } from "../../utils/asistencia";
 import { formatearDuracion, jornadaTerminada } from "../../utils/duracion";
+import { categoriaDeJornada } from "../../utils/categorias";
 import { palabraPlural } from "../../utils/plural";
+import { formatearTiempoRestante } from "../../utils/tiempoRestante";
 
 const TITULO_ERROR = {
   YA_INSCRITO: "Ya inscrito",
@@ -42,6 +44,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
     jornadasPorId,
     inscripciones,
     estadoInscripcion,
+    asistenciaPendiente,
     cargando: cargandoJornadas,
     ahora,
   } = useJornadas();
@@ -262,7 +265,10 @@ export default function JornadaDetailScreen({ route, navigation }) {
       {/* Encabezado */}
       <View style={styles.encabezado}>
         <Text style={styles.titulo}>{jornada.titulo}</Text>
-        <Text style={styles.entidad}>{jornada.entidad}</Text>
+        <Text style={styles.entidad}>
+          {jornada.entidad}
+          {categoriaDeJornada(jornada) ? ` · ${categoriaDeJornada(jornada)}` : ""}
+        </Text>
       </View>
 
       {!disponible && (
@@ -400,6 +406,13 @@ export default function JornadaDetailScreen({ route, navigation }) {
                 ¡Asistencia confirmada para esta jornada!
               </Text>
             </View>
+          ) : asistenciaPendiente(jornada.id) ? (
+            <View style={styles.pendienteCard}>
+              <Ionicons name="sync-outline" size={18} color={colors.textPrimary} />
+              <Text style={styles.pendienteTexto}>
+                Asistencia guardada, pendiente por sincronizar. Se confirmará cuando recuperes la conexión.
+              </Text>
+            </View>
           ) : (
             <View style={styles.bloqueAsistencia}>
               <TouchableOpacity
@@ -423,7 +436,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
                   {ventanaAsistencia.disponible
                     ? "Registrar asistencia (Escanear QR)"
                     : ventanaAsistencia.estado === "ANTES"
-                    ? `Asistencia disponible en ${ventanaAsistencia.minutosRestantes} min`
+                    ? `Asistencia disponible en ${formatearTiempoRestante(ventanaAsistencia.minutosRestantes)}`
                     : "Ventana de asistencia finalizada"}
                 </Text>
               </TouchableOpacity>

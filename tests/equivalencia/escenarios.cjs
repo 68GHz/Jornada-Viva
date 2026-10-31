@@ -1,5 +1,6 @@
 // Pruebas de EQUIVALENCIA: los servicios reales de la app, con los mismos escenarios, en dos modos.
-//   MODO=local  la lógica de antes: SDK de Firestore + firestore.rules (comportamiento de referencia)
+//   MODO=local  la lógica local de antes: SDK de Firestore + firestore.rules (solo lo que aún la usa;
+//               las acciones de inscripción ya no tienen versión local)
 //   MODO=api    la app llamando a la API de negocio (Express + Admin SDK) sobre el mismo emulador
 // Ambos modos deben cumplir las mismas expectativas. Las pocas diferencias aceptadas están
 // marcadas con `MODO === "api"` y documentadas en docs/migracion-api/.
@@ -93,16 +94,19 @@ const sembrar = async () => {
 
 const pruebas = [];
 const prueba = (n, f) => pruebas.push([n, f]);
+// Las acciones de inscripción (inscribirse/cancelar) solo existen por la API: la lógica local de
+// escritura se retiró (D6). Estos escenarios corren solo con MODO=api.
+const pruebaApi = (n, f) => { if (MODO === "api") pruebas.push([n, f]); };
 
 // ---------------- inscripciones (estudiante) ----------------
-prueba("estudiante: inscribirse crea la inscripción (ID <uid>_<jornada>) y suma el cupo", async () => {
+pruebaApi("estudiante: inscribirse crea la inscripción (ID <uid>_<jornada>) y suma el cupo", async () => {
   comoUsuario("est1");
   assert.strictEqual(await ejecutarAccion("est1", accion("INSCRIBIR", "j1")), "completada");
   assert.ok(await existe("inscripciones/est1_j1"));
   assert.strictEqual((await leer("jornadas/j1")).cuposOcupados, 1);
 });
 
-prueba("estudiante: repetir o doble toque no duplica ni suma dos cupos", async () => {
+pruebaApi("estudiante: repetir o doble toque no duplica ni suma dos cupos", async () => {
   comoUsuario("est1");
   const r = await Promise.all([ejecutarAccion("est1", accion("INSCRIBIR", "j1")), ejecutarAccion("est1", accion("INSCRIBIR", "j1"))]);
   assert.deepStrictEqual(r.slice().sort(), ["completada", "ya-inscrito"]);
@@ -110,7 +114,7 @@ prueba("estudiante: repetir o doble toque no duplica ni suma dos cupos", async (
   assert.strictEqual(await ejecutarAccion("est1", accion("INSCRIBIR", "j1")), "ya-inscrito");
 });
 
-prueba("estudiante: varios estudiantes se reparten los cupos sin pasarse del total", async () => {
+pruebaApi("estudiante: varios estudiantes se reparten los cupos sin pasarse del total", async () => {
   await env.withSecurityRulesDisabled(async (c) => fb.updateDoc(fb.doc(c.firestore(), "jornadas/j1"), { cuposTotales: 1 }));
   const resultados = [];
   for (const uid of ["est1", "est2"]) {
@@ -121,7 +125,7 @@ prueba("estudiante: varios estudiantes se reparten los cupos sin pasarse del tot
   assert.strictEqual((await leer("jornadas/j1")).cuposOcupados, 1);
 });
 
-prueba("estudiante: jornada llena, desactivada, vencida o inexistente se rechaza con motivo", async () => {
+pruebaApi("estudiante: jornada llena, desactivada, vencida o inexistente se rechaza con motivo", async () => {
   comoUsuario("est1");
   for (const [id, codigo] of [["llena", "SIN_CUPOS"], ["inactiva", "JORNADA_NO_DISPONIBLE"], ["vencida", "JORNADA_NO_DISPONIBLE"], ["noexiste", "JORNADA_NO_DISPONIBLE"]]) {
     await assert.rejects(ejecutarAccion("est1", accion("INSCRIBIR", id)), (e) => e.name === "ErrorNegocio" && e.codigo === codigo, id);
@@ -135,7 +139,7 @@ prueba("estudiante: jornada llena, desactivada, vencida o inexistente se rechaza
   ]);
 });
 
-prueba("estudiante: cancelar borra su inscripción y libera el cupo; repetir es idempotente", async () => {
+pruebaApi("estudiante: cancelar borra su inscripción y libera el cupo; repetir es idempotente", async () => {
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", "j1"));
   assert.strictEqual(await ejecutarAccion("est1", accion("CANCELAR", "j1")), "completada");
@@ -144,7 +148,7 @@ prueba("estudiante: cancelar borra su inscripción y libera el cupo; repetir es 
   assert.strictEqual(await ejecutarAccion("est1", accion("CANCELAR", "j1")), "ya-cancelada");
 });
 
-prueba("estudiante: una cancelación hecha sin conexión (con su hora de origen) se envía y se completa igual", async () => {
+pruebaApi("estudiante: una cancelación hecha sin conexión (con su hora de origen) se envía y se completa igual", async () => {
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", "j1"));
   // La acción de la cola lleva `sinConexion` y `creadaEn`: con la API viajan como `canceladaEn`
@@ -154,7 +158,7 @@ prueba("estudiante: una cancelación hecha sin conexión (con su hora de origen)
   assert.strictEqual((await leer("jornadas/j1")).cuposOcupados, 0);
 });
 
-prueba("estudiante: cancelar una inscripción antigua (ID aleatorio) funciona", async () => {
+pruebaApi("estudiante: cancelar una inscripción antigua (ID aleatorio) funciona", async () => {
   await env.withSecurityRulesDisabled(async (c) => {
     await fb.setDoc(fb.doc(c.firestore(), "inscripciones/aleatorio"), { userId: "est1", jornadaId: "j1", nombreUsuario: "A", emailUsuario: "a@x.co" });
     await fb.updateDoc(fb.doc(c.firestore(), "jornadas/j1"), { cuposOcupados: 1 });
@@ -164,7 +168,7 @@ prueba("estudiante: cancelar una inscripción antigua (ID aleatorio) funciona", 
   assert.strictEqual((await leer("jornadas/j1")).cuposOcupados, 0);
 });
 
-prueba("la inscripción anota el estado de la jornada y cancelar la inscripción lo quita", async () => {
+pruebaApi("la inscripción anota el estado de la jornada y cancelar la inscripción lo quita", async () => {
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", "j1"));
   assert.ok((await leer("users/est1")).jornadasVistas.j1);
@@ -173,7 +177,7 @@ prueba("la inscripción anota el estado de la jornada y cancelar la inscripción
   assert.strictEqual((await leer("users/est1")).rol, "estudiante", "el perfil no pierde su rol");
 });
 
-prueba("cuenta desactivada: no puede inscribirse (error permanente, sin reintentos)", async () => {
+pruebaApi("cuenta desactivada: no puede inscribirse (error permanente, sin reintentos)", async () => {
   await env.withSecurityRulesDisabled(async (c) => fb.updateDoc(fb.doc(c.firestore(), "users/est1"), { activo: false }));
   comoUsuario("est1");
   await assert.rejects(ejecutarAccion("est1", accion("INSCRIBIR", "j1")), (e) => clasificarError(e).tipo === "permanente");
@@ -271,7 +275,7 @@ prueba("gestor: NO administra jornadas ajenas ni anteriores a los roles", async 
   assert.strictEqual((await leer("jornadas/deB")).activa, true);
 });
 
-prueba("gestor: lee los inscritos de su jornada para la planilla (datos completos)", async () => {
+pruebaApi("gestor: lee los inscritos de su jornada para la planilla (datos completos)", async () => {
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", "j1", { nombreUsuario: "Ana Gómez", emailUsuario: "ana@x.co" }));
   comoUsuario("est2");
@@ -330,7 +334,7 @@ const gestorCreaJornada = async (extra = {}) => {
   return ref.id;
 };
 
-prueba("PUNTA A PUNTA (escenario reportado): el alumno se inscribe, cierra sesión, el gestor cancela y al volver el alumno recibe la cancelación", async () => {
+pruebaApi("PUNTA A PUNTA (escenario reportado): el alumno se inscribe, cierra sesión, el gestor cancela y al volver el alumno recibe la cancelación", async () => {
   const id = await gestorCreaJornada();
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", id, { tituloJornada: "Jornada del maestro" }));
@@ -358,7 +362,7 @@ prueba("PUNTA A PUNTA (escenario reportado): el alumno se inscribe, cierra sesi�
   assert.strictEqual((await leer("users/est1")).jornadasVistas[id].activa, false, "el estado anotado se actualiza");
 });
 
-prueba("PUNTA A PUNTA: reprogramación, actualización, reactivación y eliminación también llegan al alumno", async () => {
+pruebaApi("PUNTA A PUNTA: reprogramación, actualización, reactivación y eliminación también llegan al alumno", async () => {
   const id = await gestorCreaJornada();
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", id, { tituloJornada: "Jornada del maestro" }));
@@ -395,7 +399,7 @@ prueba("PUNTA A PUNTA: reprogramación, actualización, reactivación y eliminac
   assert.ok(tiposFinales.includes("eliminacion"), JSON.stringify(tiposFinales));
 });
 
-prueba("sin inscripción no llega ningún aviso (un alumno ajeno no recibe nada)", async () => {
+pruebaApi("sin inscripción no llega ningún aviso (un alumno ajeno no recibe nada)", async () => {
   const id = await gestorCreaJornada();
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", id));
@@ -494,7 +498,7 @@ prueba("administrador: crea una jornada para un gestor, la edita, la reasigna, l
   }
 });
 
-prueba("administrador: lee todos los inscritos de cualquier jornada", async () => {
+pruebaApi("administrador: lee todos los inscritos de cualquier jornada", async () => {
   comoUsuario("est1");
   await ejecutarAccion("est1", accion("INSCRIBIR", "j1", { nombreUsuario: "Ana", emailUsuario: "ana@x.co" }));
   comoUsuario("admin1");

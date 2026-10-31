@@ -13,12 +13,7 @@ import "dayjs/locale/es";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useSync } from "../../context/SyncContext";
 import { colors } from "../../theme/colors";
-import { ESTADOS, TIPOS, resumenSincronizacion } from "../../utils/sincronizacion";
-
-const ETIQUETA_TIPO = {
-  [TIPOS.INSCRIBIR]: "Inscripción",
-  [TIPOS.CANCELAR]: "Cancelación de inscripción",
-};
+import { ESTADOS, TIPOS, etiquetaDeTipo, resumenSincronizacion } from "../../utils/sincronizacion";
 
 const estadoVisual = (accion) => {
   if (accion.estado === ESTADOS.RECHAZADA) {
@@ -29,6 +24,10 @@ const estadoVisual = (accion) => {
   }
   return { texto: "Pendiente por sincronizar", color: colors.warning };
 };
+
+// La marca de asistencia de un inscrito (gestor/administrador) menciona a quién corresponde
+const esAsistenciaDeOtro = (accion) =>
+  (accion.tipo === TIPOS.MARCAR_ASISTENCIA || accion.tipo === TIPOS.QUITAR_ASISTENCIA) && !!accion.nombreUsuario;
 
 // Acciones realizadas sin conexión que aún no llegan a Firestore
 export default function SincronizacionScreen() {
@@ -50,7 +49,7 @@ export default function SincronizacionScreen() {
   const confirmarDescarte = (accion) => {
     Alert.alert(
       "Descartar acción",
-      `Se eliminará "${ETIQUETA_TIPO[accion.tipo]}" de "${accion.tituloJornada || "la jornada"}" y no se enviará al servidor.\n\n¿Deseas continuar?`,
+      `Se eliminará "${etiquetaDeTipo(accion.tipo)}" de "${accion.tituloJornada || "la jornada"}" y no se enviará al servidor.\n\n¿Deseas continuar?`,
       [
         { text: "Cancelar", style: "cancel" },
         { text: "Descartar", style: "destructive", onPress: () => descartar(accion.id) },
@@ -105,7 +104,8 @@ export default function SincronizacionScreen() {
                 </View>
               </View>
               <Text style={styles.detalle}>
-                {ETIQUETA_TIPO[item.tipo]} · registrada el{" "}
+                {etiquetaDeTipo(item.tipo)}
+                {esAsistenciaDeOtro(item) ? ` de ${item.nombreUsuario}` : ""} · registrada el{" "}
                 {dayjs(item.creadaEn).locale("es").format("D MMM, h:mm A")}
               </Text>
               {!!item.ultimoError && (

@@ -1,7 +1,7 @@
-import { normalizarJornada, jornadaYaPaso } from "./jornadaFecha";
-import { jornadaTerminada } from "./duracion";
-import { ESTADOS_JORNADA, estadoJornada } from "./estadoJornada";
-import { TIPOS, accionActiva } from "./sincronizacion";
+import { normalizarJornada, jornadaYaPaso } from "./jornadaFecha.js";
+import { jornadaTerminada } from "./duracion.js";
+import { ESTADOS_JORNADA, estadoJornada } from "./estadoJornada.js";
+import { TIPOS, accionActiva, efectoEnCupos, esAccionDeInscripcion } from "./sincronizacion.js";
 
 // Una jornada solo cuenta como activa si `activa` es exactamente true
 // (mismo criterio que usaba la consulta del listado).
@@ -54,6 +54,8 @@ export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.
       ...base,
       finalizada,
       enCurso,
+      // Dato de la inscripción (se guarda en el dispositivo): permite distinguir «inscrito» de «asistió»
+      asistio: !!inscripcion.asistio,
       ...(inscripcion.pendiente ? { pendiente: inscripcion.pendiente } : {}),
     });
   }
@@ -69,9 +71,11 @@ export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.
 export function mapaPendientes(cola) {
   const mapa = new Map();
   for (const accion of cola) {
-    if (!accionActiva(accion)) continue;
+    // Solo cuentan las acciones sobre la inscripción: otras (p. ej. la asistencia) no cambian ni los
+    // cupos ni el estado de inscripción de la jornada
+    if (!accionActiva(accion) || !esAccionDeInscripcion(accion.tipo)) continue;
     const previo = mapa.get(accion.jornadaId);
-    const delta = accion.tipo === TIPOS.INSCRIBIR ? 1 : -1;
+    const delta = efectoEnCupos(accion.tipo);
     mapa.set(accion.jornadaId, {
       tipo: accion.tipo,
       delta: (previo?.delta || 0) + delta,
@@ -118,4 +122,46 @@ export function aplicarPendientesAInscripciones(inscripciones, pendientes) {
     });
   }
   return resultado;
+}
+
+// Jornadas en las que el estudiante guardó su asistencia (escaneo del QR) y aún no se envió
+export function jornadasConAsistenciaPendiente(cola) {
+  const ids = new Set();
+  for (const accion of cola) {
+    if (accion.tipo === TIPOS.REGISTRAR_ASISTENCIA && accionActiva(accion)) ids.add(accion.jornadaId);
+  }
+  return ids;
+}
+
+// ---- Historial de participación ---------------------------------------------------------------
+// «Inscrita» y «asistió» son cosas distintas: estar inscrito reserva el lugar; asistir queda
+// registrado cuando el estudiante o el gestor marcan la asistencia.
+export const MODOS_HISTORIAL = { INSCRITAS: "inscritas", ASISTIDAS: "asistidas" };
+
+// Texto y tipo del distintivo de una jornada de «Mis jornadas» (prioridad de arriba hacia abajo).
+// `tipo` lo traduce la pantalla a un color.
+export function distintivoHistorial(item) {
+  if (item.pendiente) {
+    return {
+      tipo: "pendiente",
+      texto: item.pendiente === TIPOS.CANCELAR ? "Cancelación pendiente" : "Pendiente por sincronizar",
+    };
+  }
+  if (item.noDisponible) return { tipo: "noDisponible", texto: "No disponible" };
+  if (item.asistio) return { tipo: "asistio", texto: "Asistió" };
+  if (item.asistenciaPendiente) return { tipo: "pendiente", texto: "Asistencia pendiente" };
+  if (item.finalizada) return { tipo: "noAsistio", texto: "No asistió" };
+  if (item.enCurso) return { tipo: "enCurso", texto: "En curso" };
+  return { tipo: "inscrito", texto: "Inscrito" };
+}
+
+// Las que ve el usuario en cada pestaña: todas sus inscripciones, o solo aquellas a las que asistió
+export function filtrarHistorial(jornadas, modo) {
+  return modo === MODOS_HISTORIAL.ASISTIDAS ? jornadas.filter((j) => j.asistio === true) : jornadas;
+}
+
+// Conteos del historial. Una inscripción cuya cancelación está pendiente ya no cuenta como inscrita.
+export function contarHistorial(jornadas) {
+  const vigentes = jornadas.filter((j) => j.pendiente !== TIPOS.CANCELAR);
+  return { inscritas: vigentes.length, asistidas: vigentes.filter((j) => j.asistio === true).length };
 }

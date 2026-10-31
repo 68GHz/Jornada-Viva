@@ -17,6 +17,9 @@ import { colors } from "../../theme/colors";
 import { formatearDiasFaltan, formatearFecha, formatearHora } from "../../utils/jornadaFecha";
 import { conteoPlural } from "../../utils/plural";
 import { resumenSincronizacion } from "../../utils/sincronizacion";
+import { contarHistorial } from "../../utils/jornadaEstado";
+import { useMisPrestamos } from "../../hooks/usePrestamos";
+import { contarPrestamos } from "../../utils/prestamos";
 
 export default function HomeScreen({ navigation }) {
   const { usuario, cerrarSesion } = useAuth();
@@ -28,10 +31,25 @@ export default function HomeScreen({ navigation }) {
     cargando: cargandoJornadas,
     error: errorJornadas,
   } = useJornadas();
+  // Historial: cuántas jornadas tiene inscritas y a cuántas asistió (también sin conexión)
+  const historial = useMemo(() => contarHistorial(inscritas), [inscritas]);
   const misJornadas = useMemo(
     () => inscritas.filter((j) => !j.finalizada && j.pendiente !== "CANCELAR"),
     [inscritas]
   );
+  // Préstamos de objetos: resumen para la tarjeta de acceso (con copia local si no hay conexión)
+  const { prestamos } = useMisPrestamos();
+  const conteoPrestamos = useMemo(() => contarPrestamos(prestamos, Date.now()), [prestamos]);
+  const avisoPrestamos =
+    conteoPrestamos.vencidos > 0
+      ? { alerta: true, color: colors.error, texto: `${conteoPlural(conteoPrestamos.vencidos, "préstamo vencido", "préstamos vencidos")}` }
+      : conteoPrestamos.porVencer > 0
+      ? { alerta: true, color: colors.warning, texto: `${conteoPlural(conteoPrestamos.porVencer, "préstamo por vencer", "préstamos por vencer")}` }
+      : {
+          alerta: false,
+          color: colors.primary,
+          texto: conteoPrestamos.activos > 0 ? `${conteoPlural(conteoPrestamos.activos, "objeto prestado", "objetos prestados")}` : "Sin objetos prestados",
+        };
   const { enLinea } = useConnectivity();
   const { pendientes, rechazadas, ultimaSync } = useSync();
   const hayPendientes = pendientes.length > 0 || rechazadas.length > 0;
@@ -111,6 +129,26 @@ export default function HomeScreen({ navigation }) {
           <Ionicons name="chevron-forward" size={18} color={colors.primary} />
         </TouchableOpacity>
 
+        {/* FE-02 · Objetos prestados al estudiante, con alerta si hay vencidos o por vencer */}
+        <TouchableOpacity
+          style={styles.tarjetaSecundaria}
+          onPress={() => navigation.navigate("MisPrestamos")}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Mis préstamos. ${avisoPrestamos.texto}`}
+        >
+          <View style={styles.tarjetaSecundariaFila}>
+            <Ionicons name="library-outline" size={22} color={avisoPrestamos.color} />
+            <View style={styles.tarjetaSecundariaTextos}>
+              <Text style={styles.tarjetaSecundariaTitulo}>Mis préstamos</Text>
+              <Text style={[styles.sincronizacionDetalle, avisoPrestamos.alerta && { color: avisoPrestamos.color, fontWeight: "700" }]}>
+                {avisoPrestamos.texto}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+        </TouchableOpacity>
+
         {/* Estado de la sincronización: se puede abrir siempre, aunque no haya errores */}
         <TouchableOpacity
           style={styles.tarjetaSecundaria}
@@ -153,6 +191,12 @@ export default function HomeScreen({ navigation }) {
             <Ionicons name="chevron-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
         </View>
+
+        {!cargandoJornadas && !errorJornadas && historial.inscritas > 0 && (
+          <Text style={styles.historialConteo} accessibilityLabel={`Tienes ${conteoPlural(historial.inscritas, "jornada inscrita", "jornadas inscritas")} y asististe a ${historial.asistidas}`}>
+            {conteoPlural(historial.inscritas, "inscrita", "inscritas")} · {conteoPlural(historial.asistidas, "asistida", "asistidas")}
+          </Text>
+        )}
 
         {cargandoJornadas ? (
           <View style={styles.misJornadasEstado}>
@@ -299,6 +343,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  historialConteo: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    marginTop: -4,
   },
   tarjetaSecundariaTextos: {
     flexShrink: 1,

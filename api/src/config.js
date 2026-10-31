@@ -1,4 +1,5 @@
 import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
+import { ANTIGUEDAD_MAX_ASISTENCIA_MS } from "./dominio/relojDiferido.js";
 
 // Configuración por variables de entorno (nunca hay secretos en el repositorio).
 //
@@ -14,11 +15,19 @@ import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
 //   CANCELACION_ANTIGUEDAD_MAX_HORAS  Antigüedad máxima (en horas) de una cancelación hecha sin
 //                              conexión para que el servidor la valide con la hora en que se hizo
 //                              (por defecto 168 = 7 días; ver dominio/plazoCancelacion.js)
+//   ASISTENCIA_ANTIGUEDAD_MAX_HORAS  Antigüedad máxima (en horas) de una asistencia hecha sin conexión
+//                              para que el servidor la valide con la hora en que se hizo
+//                              (por defecto 24; ver dominio/relojDiferido.js)
 //   FIRESTORE_EMULATOR_HOST    Solo desarrollo/pruebas: usa el emulador en vez de producción
 export function leerConfig(env = process.env) {
   const minutos = Number(env.MANTENIMIENTO_MINUTOS ?? 5);
   const horasCancelacion = Number(env.CANCELACION_ANTIGUEDAD_MAX_HORAS);
+  const horasAsistencia = Number(env.ASISTENCIA_ANTIGUEDAD_MAX_HORAS);
   return {
+    asistenciaAntiguedadMaxMs:
+      Number.isFinite(horasAsistencia) && horasAsistencia > 0
+        ? horasAsistencia * 3600000
+        : ANTIGUEDAD_MAX_ASISTENCIA_MS,
     cancelacionAntiguedadMaxMs:
       Number.isFinite(horasCancelacion) && horasCancelacion > 0
         ? horasCancelacion * 3600000

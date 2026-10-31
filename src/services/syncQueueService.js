@@ -1,5 +1,5 @@
 import { actualizarLocal, leerLocal } from "./localStore";
-import { ESTADOS, accionActiva } from "../utils/sincronizacion";
+import { ESTADOS, planificarEncolado } from "../utils/sincronizacion";
 
 // Cola persistente de acciones realizadas sin conexión (una cola por usuario).
 // Acción: { id, tipo, jornadaId, tituloJornada, fechaJornada, nombreUsuario,
@@ -28,38 +28,7 @@ export const cargarCola = (uid) => leerLocal(uid, CLAVE_COLA, []);
 // - duplicada: ya hay una acción igual en curso (evita registros repetidos)
 // - anulada: la acción contraria aún no se había enviado, así que se cancelan entre sí
 export const encolarAccion = (uid, datos, ahora = Date.now()) =>
-  mutar(uid, (cola) => {
-    const deLaJornada = cola.filter((a) => a.jornadaId === datos.jornadaId);
-
-    // Solo se anula si la contraria nunca se intentó enviar: si ya se intentó,
-    // podría haberse aplicado en el servidor sin que lo supiéramos.
-    const contraria = deLaJornada.find(
-      (a) => a.tipo !== datos.tipo && a.estado === ESTADOS.PENDIENTE && a.intentos === 0
-    );
-    if (contraria) {
-      return {
-        valor: cola.filter((a) => a.id !== contraria.id),
-        resultado: { resultado: "anulada", accion: contraria },
-      };
-    }
-
-    const igual = deLaJornada.find((a) => a.tipo === datos.tipo && accionActiva(a));
-    if (igual) {
-      return { valor: undefined, resultado: { resultado: "duplicada", accion: igual } };
-    }
-
-    const accion = {
-      id: nuevoId(),
-      ...datos,
-      creadaEn: ahora,
-      estado: ESTADOS.PENDIENTE,
-      intentos: 0,
-      proximoIntento: null,
-      ultimoError: null,
-      codigoError: null,
-    };
-    return { valor: [...cola, accion], resultado: { resultado: "encolada", accion } };
-  });
+  mutar(uid, (cola) => planificarEncolado(cola, datos, ahora, nuevoId()));
 
 export const actualizarAccion = (uid, id, cambios) =>
   mutar(uid, (cola) => ({

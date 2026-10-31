@@ -41,7 +41,9 @@ Inevitables o consecuencia directa de decisiones tomadas con el usuario. Ninguna
 - ~~La inscripción no se restringe por rol~~ **Corregido (Fase 1, D2, 2026-10-30):** `PUT /jornadas/{id}/inscripcion` responde 403 `SIN_PERMISO` a gestores y administradores. Cancelar sigue sin restringirse por rol.
 - Con las reglas actuales, cualquier cliente puede mover el contador de cupos dentro de sus límites (comprobado el 2026-10-31 con el token de un alumno y de un administrador: la escritura directa devuelve 200). **Se cierra** al publicar `firestore.api.rules` con `firebase.produccion.json`: los datos ya están migrados y las reglas listas; **falta publicarlas**.
 - Nombre y correo de la planilla vienen de lo que cada alumno envía al inscribirse (la API usa los del perfil solo si faltan).
-- La Cloud Function `functions/index.js` (`onJornadaUpdated`) no está desplegada y duplicaría los avisos si se desplegara junto a la API: eliminarla en M7.
+- ~~La Cloud Function `functions/index.js` (`onJornadaUpdated`)~~ **Retirada (Fase 3, D6):** `functions/` se eliminó del repositorio y de `firebase.json`; los avisos los crea solo la API.
+- **Retirada la escritura local de inscripciones (Fase 3, D6).** `inscripcionService` ya solo llama a la API; sin `EXPO_PUBLIC_API_URL` inscribirse/cancelar no funciona (antes caía en transacciones de Firestore que las reglas de producción ya niegan). Quedan con lógica local de respaldo los demás módulos.
+- **Asistencia y préstamos nuevos (Fase 3, D5 y FE-02).** La asistencia hecha sin conexión se envía con su hora (`escaneadoEn` / `marcadaEn`) y el servidor la acota con su reloj y `ASISTENCIA_ANTIGUEDAD_MAX_HORAS` (24 h); `/v1/prestamos` y `/v1/me/prestamos` son endpoints nuevos (ver [03](03-endpoints.md)). Ambos requieren **redesplegar la API** (Render ejecuta hoy una versión anterior).
 - Un error 500 se trata como temporal en la cola offline y se reintenta con espera creciente (igual que el código `internal` de Firestore).
 - Las 21 jornadas anteriores están asignadas al gestor `brayanprofe@correo.com` (dato, no código).
 
@@ -52,7 +54,7 @@ Inevitables o consecuencia directa de decisiones tomadas con el usuario. Ninguna
 | 1 | **Elegir el hosting concreto** y desplegar la API (Render/Railway/Fly/VPS) | Usuario |
 | 2 | **Generar la clave de cuenta de servicio** y cargarla como secreto del hosting (nunca en el repositorio) | Usuario |
 | 3 | Compilar la app con `EXPO_PUBLIC_API_URL` y validar cada módulo en producción con las cuentas de prueba | Usuario + equipo |
-| 4 | M7: publicar `firestore.api.rules`, retirar la lógica local y `functions/` — solo tras 3 y con apps actualizadas | Equipo |
+| 4 | M7: reglas de solo lectura **publicadas** (2026-10-31) y `functions/` + escritura local de inscripciones **retirados** (Fase 3, D6); queda redesplegar la API con la asistencia diferida y los préstamos | Usuario |
 | 5 | Notificaciones *push* reales desde el servidor (Expo Push con el `pushToken` ya guardado): mejora, no existía | Opcional |
 | 6 | Limitar la tasa de solicitudes y añadir métricas/alertas | Opcional |
 | 7 | Encolar sin conexión «marcar leída/eliminar» notificación (diferencia 5) | Opcional |

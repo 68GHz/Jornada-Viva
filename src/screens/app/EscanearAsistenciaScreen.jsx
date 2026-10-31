@@ -18,12 +18,40 @@ import {
   mensajeDeErrorAsistencia,
   registrarAsistenciaEstudiante,
 } from "../../services/asistenciaService";
+import { useConnectivity } from "../../context/ConnectivityContext";
+import { useJornadas } from "../../context/JornadasContext";
+import { useSync } from "../../context/SyncContext";
+import { TIPOS } from "../../utils/sincronizacion";
 
 export default function EscanearAsistenciaScreen({ navigation, route }) {
   const { jornadaId, jornadaFecha, duracionMin, tituloJornada } = route.params || {};
   const [permission, requestPermission] = useCameraPermissions();
   const [procesando, setProcesando] = useState(false);
   const [escaneado, setEscaneado] = useState(false);
+  const { enLinea } = useConnectivity();
+  const { estadoInscripcion } = useJornadas();
+  const { encolar } = useSync();
+
+  // Sin conexión (o si la red falla al enviar): el escaneo se guarda en el dispositivo y se envía
+  // al reconectar con la hora en que se hizo; el servidor valida el código con esa hora.
+  const guardarParaDespues = async (datos) => {
+    const titulo = datos.titulo || tituloJornada || "la jornada";
+    const { resultado } = await encolar({
+      tipo: TIPOS.REGISTRAR_ASISTENCIA,
+      jornadaId: datos.jornadaId,
+      codigo: datos.codigo,
+      tituloJornada: titulo,
+      fechaJornada: jornadaFecha ?? null,
+      sinConexion: true,
+    });
+    Alert.alert(
+      resultado === "duplicada" ? "Asistencia ya guardada" : "Asistencia guardada",
+      resultado === "duplicada"
+        ? `Ya habías guardado tu asistencia a "${titulo}": está pendiente por sincronizar.`
+        : `Tu asistencia a "${titulo}" quedó guardada en el dispositivo, pendiente por sincronizar. Se confirmará cuando recuperes la conexión.`,
+      [{ text: "Aceptar", onPress: () => navigation.goBack() }]
+    );
+  };
 
   if (!permission) {
     return (
@@ -81,6 +109,28 @@ export default function EscanearAsistenciaScreen({ navigation, route }) {
       return;
     }
 
+    // Sin conexión: se comprueba con lo guardado que estás inscrito y se deja la asistencia pendiente
+    if (!enLinea) {
+      if (!estadoInscripcion(datos.jornadaId).inscrito) {
+        Alert.alert("No estás inscrito", "Solo puedes registrar asistencia en jornadas en las que estás inscrito.", [
+          { text: "Entendido", onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+      setProcesando(true);
+      try {
+        await guardarParaDespues(datos);
+      } catch (err) {
+        console.warn("Error al guardar la asistencia:", err);
+        Alert.alert("No se pudo guardar", "No se pudo guardar la asistencia en el dispositivo. Intenta de nuevo.", [
+          { text: "Reintentar", onPress: () => setEscaneado(false) },
+        ]);
+      } finally {
+        setProcesando(false);
+      }
+      return;
+    }
+
     // El servidor valida el código del QR, la ventana de asistencia y tu inscripción
     setProcesando(true);
     try {
@@ -95,6 +145,15 @@ export default function EscanearAsistenciaScreen({ navigation, route }) {
       );
     } catch (err) {
       console.warn("Error al registrar asistencia:", err);
+      // Se cayó la red al enviar: no se pierde el escaneo, queda guardado para sincronizar
+      if (err?.name === "ErrorRed") {
+        try {
+          await guardarParaDespues(datos);
+          return;
+        } catch (_e) {
+          /* si tampoco se puede guardar, se informa el error original */
+        }
+      }
       Alert.alert("No se pudo registrar", mensajeDeErrorAsistencia(err), [
         { text: "Reintentar", onPress: () => setEscaneado(false) },
       ]);

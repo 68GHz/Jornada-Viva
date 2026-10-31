@@ -1,6 +1,6 @@
 import { usaApi } from "../config/api";
 import { llamarApi } from "./apiClient";
-import { mensajeDeRed } from "../utils/sincronizacion";
+import { TIPOS, mensajeDeRed } from "../utils/sincronizacion";
 
 export * from "../utils/asistencia";
 
@@ -44,6 +44,39 @@ export function marcarAsistenciaManual(jornadaId, inscripcionId, asistio) {
     { cuerpo: { asistio }, espera: ESPERA_MS }
   );
 }
+
+// ---- Acciones de la cola (asistencia sin conexión) ---------------------------------------------
+// Una asistencia hecha sin conexión se guarda en la cola y se envía al reconectar con la HORA EN QUE
+// OCURRIÓ (`creadaEn` de la acción): el servidor la valida con esa hora (ver api/src/dominio/
+// relojDiferido.js) en lugar de la hora de la sincronización. Todas son idempotentes.
+
+// Estudiante: registra su escaneo guardado. Devuelve "registrada" o "ya-registrada".
+async function registrarAsistenciaDeLaCola(accion) {
+  exigirApi();
+  const { resultado } = await llamarApi("POST", `${rutaJornada(accion.jornadaId)}/asistencia`, {
+    cuerpo: { codigo: accion.codigo, escaneadoEn: accion.creadaEn },
+    espera: ESPERA_MS,
+  });
+  return resultado;
+}
+
+// Gestor o administrador: marca (true) o quita (false) la asistencia de un inscrito
+const marcarAsistenciaDeLaCola = (asistio) => async (accion) => {
+  exigirApi();
+  const { asistio: resultado } = await llamarApi(
+    "PUT",
+    `${rutaJornada(accion.jornadaId)}/inscritos/${encodeURIComponent(accion.objetivoId)}/asistencia`,
+    { cuerpo: { asistio, marcadaEn: accion.creadaEn }, espera: ESPERA_MS }
+  );
+  return resultado ? "marcada" : "retirada";
+};
+
+// Manejadores de las acciones de asistencia, por tipo
+export const manejadoresAsistencia = {
+  [TIPOS.REGISTRAR_ASISTENCIA]: registrarAsistenciaDeLaCola,
+  [TIPOS.MARCAR_ASISTENCIA]: marcarAsistenciaDeLaCola(true),
+  [TIPOS.QUITAR_ASISTENCIA]: marcarAsistenciaDeLaCola(false),
+};
 
 // Mensaje para el usuario según el error (los de la API ya vienen redactados para mostrarse)
 export function mensajeDeErrorAsistencia(error) {

@@ -13,6 +13,7 @@ const ACCESOS = [
   { titulo: "Usuarios", ruta: "UsuariosList", params: {} },
   { titulo: "Gestores de jornadas", ruta: "UsuariosList", params: { rol: "gestor" } },
   { titulo: "Jornadas", ruta: "AdminJornadas" },
+  { titulo: "Préstamos de objetos", ruta: "Prestamos" },
   { titulo: "Estadísticas y reportes", ruta: "Reportes" },
   { titulo: "Auditoría", ruta: "Auditoria" },
   { titulo: "Mi perfil", ruta: "AdminPerfil" },

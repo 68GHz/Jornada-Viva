@@ -21,13 +21,13 @@ import {
   suscribirCola,
 } from "../services/syncQueueService";
 import { procesarCola } from "../services/syncEngine";
-import { ejecutarAccion } from "../services/inscripcionService";
+import { ejecutarAccion } from "../services/ejecutorAcciones";
 import {
   DURACION_AVISO_CONEXION_MS,
   ESTADOS,
   accionActiva,
 } from "../utils/sincronizacion";
-import { mapaPendientes } from "../utils/jornadaEstado";
+import { jornadasConAsistenciaPendiente, mapaPendientes } from "../utils/jornadaEstado";
 
 const SyncContext = createContext(null);
 
@@ -229,6 +229,8 @@ export function SyncProvider({ children }) {
   );
 
   const pendientesPorJornada = useMemo(() => mapaPendientes(cola), [cola]);
+  // Jornadas con una asistencia del estudiante guardada sin enviar
+  const asistenciasPendientes = useMemo(() => jornadasConAsistenciaPendiente(cola), [cola]);
   const pendientes = useMemo(() => cola.filter(accionActiva), [cola]);
   const rechazadas = useMemo(
     () => cola.filter((a) => a.estado === ESTADOS.RECHAZADA),
@@ -242,6 +244,7 @@ export function SyncProvider({ children }) {
         pendientes,
         rechazadas,
         pendientesPorJornada,
+        asistenciasPendientes,
         sincronizando,
         ultimaSync,
         avisoConexion,

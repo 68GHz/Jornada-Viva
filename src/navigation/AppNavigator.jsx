@@ -16,6 +16,9 @@ import MisJornadasScreen from "../screens/app/MisJornadasScreen";
 import NotificationsScreen from "../screens/app/NotificationsScreen";
 import SincronizacionScreen from "../screens/app/SincronizacionScreen";
 import EscanearAsistenciaScreen from "../screens/app/EscanearAsistenciaScreen";
+import MisPrestamosScreen from "../screens/app/MisPrestamosScreen";
+import PrestamosScreen from "../screens/maestro/PrestamosScreen";
+import PrestamoFormScreen from "../screens/maestro/PrestamoFormScreen";
 import MaestroHomeScreen from "../screens/maestro/MaestroHomeScreen";
 import JornadaFormScreen from "../screens/maestro/JornadaFormScreen";
 import JornadaAdminScreen from "../screens/maestro/JornadaAdminScreen";
@@ -153,6 +156,11 @@ function AppStack() {
         component={EscanearAsistenciaScreen}
         options={{ title: "Escanear Asistencia" }}
       />
+      <Stack.Screen
+        name="MisPrestamos"
+        component={MisPrestamosScreen}
+        options={{ title: "Mis préstamos" }}
+      />
     </Stack.Navigator>
   );
 }
@@ -178,6 +186,13 @@ function GestorStack() {
         component={JornadaAdminScreen}
         options={{ title: "Administrar jornada" }}
       />
+      <Stack.Screen
+        name="Sincronizacion"
+        component={SincronizacionScreen}
+        options={{ title: "Sincronización" }}
+      />
+      <Stack.Screen name="Prestamos" component={PrestamosScreen} options={{ title: "Préstamos de objetos" }} />
+      <Stack.Screen name="PrestamoForm" component={PrestamoFormScreen} options={{ title: "Registrar préstamo" }} />
     </Stack.Navigator>
   );
 }
@@ -213,6 +228,9 @@ function AdminStack() {
       <Stack.Screen name="Reportes" component={ReportesScreen} options={{ title: "Estadísticas y reportes" }} />
       <Stack.Screen name="Auditoria" component={AuditoriaScreen} options={{ title: "Auditoría" }} />
       <Stack.Screen name="AdminPerfil" component={AdminPerfilScreen} options={{ title: "Mi perfil" }} />
+      <Stack.Screen name="Sincronizacion" component={SincronizacionScreen} options={{ title: "Sincronización" }} />
+      <Stack.Screen name="Prestamos" component={PrestamosScreen} options={{ title: "Préstamos de objetos" }} />
+      <Stack.Screen name="PrestamoForm" component={PrestamoFormScreen} options={{ title: "Registrar préstamo" }} />
     </Stack.Navigator>
   );
 }

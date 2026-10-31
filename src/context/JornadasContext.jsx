@@ -40,7 +40,7 @@ const ESPERA_MAXIMA_MS = 10 * 1000;
 export function JornadasProvider({ children }) {
   const { usuario } = useAuth();
   const { enLinea } = useConnectivity();
-  const { pendientesPorJornada, registrarSync } = useSync();
+  const { pendientesPorJornada, asistenciasPendientes, registrarSync } = useSync();
   const uid = usuario?.uid;
 
   const [jornadas, setJornadas] = useState([]);
@@ -237,8 +237,11 @@ export function JornadasProvider({ children }) {
         aplicarPendientesAInscripciones(inscripciones, pendientesPorJornada),
         jornadasPorId,
         ahora
+      ).map((j) =>
+        // Asistencia guardada en el dispositivo y aún sin enviar (se verá como «Asistencia pendiente»)
+        asistenciasPendientes.has(j.id) && !j.asistio ? { ...j, asistenciaPendiente: true } : j
       ),
-    [inscripciones, pendientesPorJornada, jornadasPorId, ahora]
+    [inscripciones, pendientesPorJornada, asistenciasPendientes, jornadasPorId, ahora]
   );
 
   const inscritasEnServidor = useMemo(
@@ -290,6 +293,7 @@ export function JornadasProvider({ children }) {
         jornadasPorId,
         inscripciones,
         estadoInscripcion,
+        asistenciaPendiente: (jornadaId) => asistenciasPendientes.has(jornadaId),
         cargando,
         error,
         ahora,

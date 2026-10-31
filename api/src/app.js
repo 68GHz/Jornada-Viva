@@ -6,10 +6,12 @@ import * as asistencia from "./servicios/asistencia.js";
 import * as inscripciones from "./servicios/inscripciones.js";
 import * as jornadas from "./servicios/jornadas.js";
 import * as notificaciones from "./servicios/notificaciones.js";
+import * as prestamos from "./servicios/prestamos.js";
 import * as usuarios from "./servicios/usuarios.js";
 import * as estadisticas from "./servicios/estadisticas.js";
 import { desactivarVencidas } from "./servicios/mantenimiento.js";
 import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
+import { ANTIGUEDAD_MAX_ASISTENCIA_MS } from "./dominio/relojDiferido.js";
 
 // Crea la aplicación Express. Todo lo externo se inyecta para poder probarla sin red:
 //   db              Firestore (Admin SDK)
@@ -19,6 +21,7 @@ import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
 //   registro        consola (por defecto console)
 //   secretoAsistencia  secreto con el que se firman los códigos del QR de asistencia
 //   cancelacionAntiguedadMaxMs  antigüedad máxima (ms) de una cancelación hecha sin conexión
+//   asistenciaAntiguedadMaxMs   antigüedad máxima (ms) de una asistencia hecha sin conexión
 export function crearApp({
   db,
   auth,
@@ -28,9 +31,18 @@ export function crearApp({
   origenesCors = [],
   secretoAsistencia,
   cancelacionAntiguedadMaxMs = ANTIGUEDAD_MAX_CANCELACION_MS,
+  asistenciaAntiguedadMaxMs = ANTIGUEDAD_MAX_ASISTENCIA_MS,
 }) {
   if (!secretoAsistencia) throw new Error("crearApp necesita el secreto de asistencia (secretoAsistencia).");
-  const ctx = { db, auth, ahora, registro, secretoAsistencia, cancelacionAntiguedadMaxMs };
+  const ctx = {
+    db,
+    auth,
+    ahora,
+    registro,
+    secretoAsistencia,
+    cancelacionAntiguedadMaxMs,
+    asistenciaAntiguedadMaxMs,
+  };
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "100kb" }));
@@ -68,6 +80,20 @@ export function crearApp({
   });
   v1.delete("/jornadas/:id/inscripcion", async (req, res) => {
     res.json({ resultado: await inscripciones.cancelar(ctx, req.usuario, req.params.id, req.body ?? {}) });
+  });
+
+  // ---- Préstamo y devolución de objetos (FE-02) ----
+  v1.post("/prestamos", async (req, res) => {
+    res.status(201).json(await prestamos.crear(ctx, req.usuario, req.body));
+  });
+  v1.get("/prestamos", async (req, res) => {
+    res.json(await prestamos.listar(ctx, req.usuario, { soloActivos: req.query.estado === "activos" }));
+  });
+  v1.post("/prestamos/:id/devolucion", async (req, res) => {
+    res.json({ resultado: await prestamos.devolver(ctx, req.usuario, req.params.id) });
+  });
+  v1.get("/me/prestamos", async (req, res) => {
+    res.json(await prestamos.mios(ctx, req.usuario));
   });
 
   // ---- Gestión de jornadas (M3) ----

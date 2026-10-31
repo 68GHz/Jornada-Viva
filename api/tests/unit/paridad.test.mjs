@@ -10,6 +10,7 @@ import { validarJornada } from "../../../src/utils/jornadaForm.js";
 import { validarDatosJornada } from "../../src/dominio/jornada.js";
 import { combinarFechaHora } from "../../src/dominio/zonaNegocio.js";
 import { ESPACIOS } from "../../src/dominio/espacios.js";
+import { CATEGORIAS } from "../../src/dominio/categorias.js";
 import { fechaAMillis as fechaApi } from "../../src/dominio/jornadaFecha.js";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -18,7 +19,7 @@ const leer = (...partes) => readFileSync(join(raiz, ...partes), "utf8");
 
 describe("la API usa las mismas reglas puras que la app", () => {
   // Módulos copiados sin cambios: deben ser idénticos al de la app
-  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia", "bannerJornada", "plazoCancelacion"]) {
+  for (const modulo of ["roles", "espacios", "zonaNegocio", "cambiosJornada", "instantaneaJornada", "planilla", "usuariosAdmin", "estadoJornada", "duracion", "asistencia", "bannerJornada", "plazoCancelacion", "prestamos", "categorias"]) {
     it(`${modulo}.js es idéntico en la app y en la API`, () => {
       assert.equal(
         leer("api", "src", "dominio", `${modulo}.js`).replace(/\r\n/g, "\n"),
@@ -32,6 +33,13 @@ describe("la API usa las mismas reglas puras que la app", () => {
     const bloque = /d\.lugar in \[([\s\S]*?)\]/.exec(reglas)[1];
     const enReglas = [...bloque.matchAll(/'([^']+)'/g)].map((m) => m[1]);
     assert.deepEqual(enReglas, ESPACIOS);
+  });
+
+  it("la lista de categorías de la API es la que valida firestore.rules", () => {
+    const reglas = leer("firestore.rules");
+    const bloque = /d\.categoria in \[([\s\S]*?)\]/.exec(reglas)[1];
+    const enReglas = [...bloque.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    assert.deepEqual(enReglas, CATEGORIAS);
   });
 
   describe("validarDatosJornada (API) = validarJornada (formulario de la app)", () => {
@@ -52,6 +60,9 @@ describe("la API usa las mismas reglas puras que la app", () => {
       { bannerUrl: "  https://tdea.edu.co/banner.jpg  " }, { bannerUrl: "http://tdea.edu.co/banner.jpg" },
       { bannerUrl: "javascript:alert(1)" }, { bannerUrl: "https://tdea.edu.co/mi banner.jpg" },
       { bannerUrl: "https://usuario:clave@tdea.edu.co/a.jpg" }, { bannerUrl: `https://tdea.edu.co/${"a".repeat(500)}` },
+      { categoria: "Salud" }, { categoria: "Alfabetización digital" }, { categoria: "  Talleres  " },
+      { categoria: "" }, { categoria: "   " }, { categoria: "salud" }, { categoria: "Deportes" }, { categoria: 5 },
+      { categoria: null }, { categoria: ["Salud"] },
     ];
     for (const cambio of casos) {
       it(`mismos errores con ${JSON.stringify(cambio).slice(0, 70)}`, () => {
