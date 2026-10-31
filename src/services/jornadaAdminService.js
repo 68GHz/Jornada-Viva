@@ -23,7 +23,7 @@ import { conTiempoLimite, mensajeDeRed } from "../utils/sincronizacion";
 // eliminar, leer inscritos); el administrador, cualquiera.
 const ESPERA_MS = 15000;
 
-const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales }) => ({
+const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales, categoria }) => ({
   titulo,
   descripcion,
   entidad,
@@ -32,6 +32,7 @@ const camposEditables = ({ titulo, descripcion, entidad, responsable, lugar, fec
   fecha: Timestamp.fromMillis(fecha),
   duracionMin,
   cuposTotales,
+  ...(categoria ? { categoria } : {}),
 });
 
 const rutaJornada = (id) => `/v1/jornadas/${encodeURIComponent(id)}`;

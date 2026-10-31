@@ -34,6 +34,7 @@ import BannerJornada from "../../components/BannerJornada";
 import CalendarioRango from "../../components/CalendarioRango";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { colors } from "../../theme/colors";
+import { CATEGORIAS, categoriaDeJornada } from "../../utils/categorias";
 import { ESPACIOS } from "../../utils/espacios";
 import { espaciosOcupados, listaCorta } from "../../utils/espaciosLibres";
 import { permisosJornada } from "../../utils/estadoJornada";
@@ -93,6 +94,7 @@ export default function JornadaFormScreen({ navigation, route }) {
     hora: "",
     duracionMin: DURACION_SUGERIDA,
     cuposTotales: "",
+    categoria: "",
     bannerUrl: "",
   });
   const [errores, setErrores] = useState({});
@@ -123,6 +125,8 @@ export default function JornadaFormScreen({ navigation, route }) {
       // Las jornadas anteriores al campo salen con la duración por defecto
       duracionMin: String(jornada.duracionMin ?? DURACION_SUGERIDA),
       cuposTotales: String(jornada.cuposTotales ?? ""),
+      // Las jornadas anteriores a la categoría salen sin elegir: se pide al guardar
+      categoria: categoriaDeJornada(jornada) || "",
       bannerUrl: jornada.bannerUrl || "",
     });
   }, [esEdicion, jornada, propia]);
@@ -321,6 +325,14 @@ export default function JornadaFormScreen({ navigation, route }) {
             </View>
           </Campo>
         )}
+
+        <Campo etiqueta="Categoría" error={errores.categoria}>
+          <View style={styles.espacios}>
+            {CATEGORIAS.map((c) => (
+              <Chip key={c} etiqueta={c} activo={form.categoria === c} onPress={() => cambiar("categoria", c)} />
+            ))}
+          </View>
+        </Campo>
 
         <Campo etiqueta="Espacio" error={errores.lugar}>
           <View style={styles.espacios}>

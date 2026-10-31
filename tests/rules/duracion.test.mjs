@@ -93,6 +93,34 @@ describe("el campo de duración de una jornada", () => {
   });
 });
 
+describe("la categoría de una jornada (solo valores de la lista; opcional)", () => {
+  const crear = (uid, extra) => addDoc(collection(db(uid), "jornadas"), jornadaBase({ creadoPor: uid, ...extra }));
+  const editar = (uid, id, cambios) => updateDoc(doc(db(uid), `jornadas/${id}`), cambios);
+
+  it("acepta cada categoría de la lista, al crear y al editar", async () => {
+    for (const categoria of ["Salud", "Alfabetización digital", "Proyección social", "Talleres", "Asesorías"]) {
+      await assertSucceeds(crear("gestorA", { categoria }));
+    }
+    await assertSucceeds(editar("gestorA", "futura", { categoria: "Talleres" }));
+  });
+
+  it("rechaza una fuera de la lista o que no es texto", async () => {
+    for (const categoria of ["Deportes", "salud", "", 5, null]) {
+      await assertFails(crear("gestorA", { categoria }));
+    }
+    await assertFails(editar("gestorA", "futura", { categoria: "Deportes" }));
+  });
+
+  it("es opcional: las jornadas anteriores se siguen creando y editando sin ella", async () => {
+    await assertSucceeds(crear("gestorA", {}));
+    await assertSucceeds(editar("gestorA", "futuraSinDuracion", { titulo: "Nuevo título" }));
+  });
+
+  it("un gestor ajeno no puede cambiarla", async () => {
+    await assertFails(editar("gestorB", "futura", { categoria: "Salud" }));
+  });
+});
+
 describe("vencimiento: se desactiva al terminar, no al empezar", () => {
   const desactivar = (uid, id) => updateDoc(doc(db(uid), `jornadas/${id}`), { activa: false });
 

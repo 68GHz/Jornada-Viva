@@ -103,7 +103,7 @@ service cloud.firestore {
     function jornadaValida(d) {
       return d.keys().hasOnly([
           'titulo', 'descripcion', 'entidad', 'responsable', 'lugar', 'fecha', 'duracionMin',
-          'cuposTotales', 'cuposOcupados', 'activa', 'creadoPor', 'creadaEn'
+          'categoria', 'cuposTotales', 'cuposOcupados', 'activa', 'creadoPor', 'creadaEn'
         ])
         && d.keys().hasAll([
           'titulo', 'descripcion', 'entidad', 'responsable', 'lugar', 'fecha',
@@ -123,6 +123,9 @@ service cloud.firestore {
         // tratan como de 60 minutos hasta correr `node scripts/admin.js migrar --aplicar`.
         && (!('duracionMin' in d)
             || (d.duracionMin is int && d.duracionMin >= 10 && d.duracionMin <= 1440))
+        // Categoría opcional (las jornadas anteriores no la tienen)
+        && (!('categoria' in d)
+            || d.categoria in ['Salud', 'Alfabetización digital', 'Proyección social', 'Talleres', 'Asesorías'])
         && d.cuposTotales is int && d.cuposTotales >= 1 && d.cuposTotales <= 1000
         && d.cuposOcupados is int
         && d.activa is bool;

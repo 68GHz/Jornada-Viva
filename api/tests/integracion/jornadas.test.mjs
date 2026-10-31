@@ -141,6 +141,58 @@ describe("M3 · gestión de jornadas (gestor y administrador)", () => {
     });
   });
 
+  describe("categoría (Salud, Alfabetización digital, Proyección social, Talleres, Asesorías)", () => {
+    const crear = (extra) => api.llamar("gestorA", "POST", "/v1/jornadas", cuerpoJornada(extra));
+    const editar = (extra, id = "jA") => api.llamar("gestorA", "PUT", `/v1/jornadas/${id}`, cuerpoJornada(extra));
+    const CATEGORIAS = ["Salud", "Alfabetización digital", "Proyección social", "Talleres", "Asesorías"];
+
+    it("guarda cada categoría de la lista (sin espacios sobrantes)", async () => {
+      for (const categoria of CATEGORIAS) {
+        const r = await crear({ categoria: `  ${categoria} ` });
+        assert.equal(r.estado, 201, categoria);
+        assert.equal((await leer(`jornadas/${r.cuerpo.id}`)).categoria, categoria);
+      }
+    });
+
+    it("sin el campo (app anterior) la jornada se crea sin categoría", async () => {
+      const r = await crear({});
+      assert.equal(r.estado, 201);
+      assert.equal("categoria" in (await leer(`jornadas/${r.cuerpo.id}`)), false);
+    });
+
+    it("rechaza una categoría fuera de la lista, vacía o que no es texto, sin crear nada", async () => {
+      for (const categoria of ["Deportes", "salud", "", "   ", 5, null, ["Salud"], { n: "Salud" }]) {
+        const r = await crear({ categoria });
+        assert.equal(r.estado, 400, JSON.stringify(categoria));
+        assert.match(r.cuerpo.error.campos.categoria, /Elige una categoría/);
+      }
+      assert.equal((await coleccion("jornadas")).length, 3, "no se creó ninguna");
+    });
+
+    it("al editar: la cambia; sin el campo conserva la que tenía; una inválida no cambia nada", async () => {
+      assert.equal((await editar({ categoria: "Talleres" })).estado, 204);
+      assert.equal((await leer("jornadas/jA")).categoria, "Talleres");
+
+      assert.equal((await editar({ titulo: "Otro título" })).estado, 204);
+      assert.equal((await leer("jornadas/jA")).categoria, "Talleres", "se conserva");
+
+      const r = await editar({ categoria: "Deportes", titulo: "No debe guardarse" });
+      assert.equal(r.estado, 400);
+      assert.ok(r.cuerpo.error.campos.categoria);
+      const j = await leer("jornadas/jA");
+      assert.equal(j.categoria, "Talleres");
+      assert.notEqual(j.titulo, "No debe guardarse");
+    });
+
+    it("el administrador también la edita en jornadas ajenas", async () => {
+      await sembrar("jornadas/jB", docJornada({ creadoPor: "gestorB", cuposTotales: 10, cuposOcupados: 3 }));
+      assert.equal((await api.llamar("admin1", "PUT", "/v1/jornadas/jB", cuerpoJornada({ categoria: "Salud" }))).estado, 204);
+      const j = await leer("jornadas/jB");
+      assert.equal(j.categoria, "Salud");
+      assert.equal(j.cuposOcupados, 3);
+    });
+  });
+
   describe("banner opcional (enlace https a una imagen)", () => {
     const BANNER = "https://tdea.edu.co/banners/salud.jpg";
     const crear = (extra) => api.llamar("gestorA", "POST", "/v1/jornadas", cuerpoJornada(extra));

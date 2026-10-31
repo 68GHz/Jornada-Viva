@@ -1,6 +1,7 @@
 import { DURACION_POR_DEFECTO, LIMITES_DURACION } from "./duracion.js";
 import { esEspacioValido } from "./espacios.js";
 import { MENSAJE_BANNER, esUrlDeBanner } from "./bannerJornada.js";
+import { MENSAJE_CATEGORIA, esCategoriaValida } from "./categorias.js";
 import { combinarFechaHora } from "./zonaNegocio.js";
 
 // Límites que también valida firestore.rules
@@ -98,11 +99,17 @@ export function validarJornada(campos, { ahora = Date.now(), cuposOcupados = 0, 
     campos.bannerUrl === undefined ? undefined : typeof campos.bannerUrl === "string" ? campos.bannerUrl.trim() : null;
   if (bannerUrl === null || (bannerUrl && !esUrlDeBanner(bannerUrl))) errores.bannerUrl = MENSAJE_BANNER;
 
+  // Categoría: el formulario siempre la envía (vacía = aún sin elegir, error). Si el campo no se
+  // pasa, no se valida ni se envía (igual que el servidor con las versiones anteriores).
+  const categoria = typeof campos.categoria === "string" ? campos.categoria.trim() : campos.categoria;
+  if (categoria !== undefined && !esCategoriaValida(categoria)) errores.categoria = MENSAJE_CATEGORIA;
+
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
     datos: {
       titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales,
+      ...(categoria !== undefined ? { categoria } : {}),
       ...(bannerUrl !== undefined ? { bannerUrl } : {}),
     },
   };

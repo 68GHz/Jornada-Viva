@@ -51,6 +51,8 @@ const camposEditables = (d) => ({
   fecha: Timestamp.fromMillis(d.fecha),
   duracionMin: d.duracionMin,
   cuposTotales: d.cuposTotales,
+  // Sin categoría en la petición (app anterior al campo) no se toca la que ya tenía
+  ...(d.categoria ? { categoria: d.categoria } : {}),
 });
 
 // Banner opcional al editar: sin el campo se conserva el que había; "" lo quita; un enlace lo fija

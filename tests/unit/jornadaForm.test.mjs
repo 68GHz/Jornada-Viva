@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { CATEGORIAS, MENSAJE_CATEGORIA, categoriaDeJornada } from "../../src/utils/categorias.js";
 import { LIMITES_DURACION } from "../../src/utils/duracion.js";
 import {
   DURACION_SUGERIDA,
@@ -129,6 +130,35 @@ describe("validación del formulario de jornada", () => {
 
   it("si hay errores no devuelve datos", () => {
     assert.equal(validarJornada(formulario({ titulo: "" }), { ahora: AHORA }).datos, null);
+  });
+
+  describe("categoría (una de las cinco del enunciado)", () => {
+    const datosDe = (extra) => validarJornada(formulario(extra), { ahora: AHORA }).datos;
+
+    it("la lista es la del enunciado", () => {
+      assert.deepEqual(CATEGORIAS, ["Salud", "Alfabetización digital", "Proyección social", "Talleres", "Asesorías"]);
+    });
+
+    it("acepta cada una y la envía sin espacios sobrantes", () => {
+      for (const categoria of CATEGORIAS) assert.equal(datosDe({ categoria: `  ${categoria} ` }).categoria, categoria);
+    });
+
+    it("sin el campo no valida ni envía nada (el servidor conserva la que tenía)", () => {
+      assert.equal("categoria" in datosDe({}), false);
+    });
+
+    it("el formulario con la categoría sin elegir (vacía) o fuera de la lista no se envía", () => {
+      for (const categoria of ["", "   ", "salud", "Deportes", 5, null, ["Salud"]]) {
+        const r = validarJornada(formulario({ categoria }), { ahora: AHORA });
+        assert.equal(r.errores.categoria, MENSAJE_CATEGORIA, JSON.stringify(categoria));
+        assert.equal(r.datos, null);
+      }
+    });
+
+    it("categoriaDeJornada ignora valores que no son de la lista (jornadas anteriores)", () => {
+      assert.equal(categoriaDeJornada({ categoria: "Talleres" }), "Talleres");
+      for (const j of [{}, { categoria: "" }, { categoria: "Otra" }, null, undefined]) assert.equal(categoriaDeJornada(j), null);
+    });
   });
 
   describe("banner opcional (enlace https a una imagen)", () => {
