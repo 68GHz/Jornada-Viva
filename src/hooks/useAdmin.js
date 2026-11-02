@@ -13,6 +13,9 @@ function useColeccion(construirConsulta, convertir, clave, habilitado = true) {
   const [datos, setDatos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
+  // Cambiar este contador vuelve a abrir la escucha (reintentar tras un error)
+  const [intento, setIntento] = useState(0);
+  const reintentar = useCallback(() => setIntento((n) => n + 1), []);
 
   useEffect(() => {
     if (!habilitado) {
@@ -34,13 +37,13 @@ function useColeccion(construirConsulta, convertir, clave, habilitado = true) {
       }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clave, habilitado]);
+  }, [clave, habilitado, intento]);
 
   useEffect(() => {
     if (!enLinea) setCargando(false);
   }, [enLinea]);
 
-  return { datos, cargando, error, enLinea };
+  return { datos, cargando, error, enLinea, reintentar };
 }
 
 // Todos los usuarios (solo el administrador puede listarlos)
@@ -54,7 +57,7 @@ export function useUsuarios(habilitado = true) {
     "users",
     habilitado
   );
-  return { usuarios: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea };
+  return { usuarios: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea, reintentar: r.reintentar };
 }
 
 // Todas las jornadas de la plataforma; `gestorId` limita a las asignadas a un gestor
@@ -68,7 +71,7 @@ export function useTodasJornadas(gestorId = null, habilitado = true) {
     `jornadas:${gestorId || "todas"}`,
     habilitado
   );
-  return { jornadas: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea };
+  return { jornadas: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea, reintentar: r.reintentar };
 }
 
 // Últimos registros de auditoría

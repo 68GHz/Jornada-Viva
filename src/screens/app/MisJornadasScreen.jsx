@@ -187,7 +187,7 @@ export default function MisJornadasScreen({ navigation }) {
             </Text>
             <TouchableOpacity
               style={styles.botonReintentar}
-              onPress={() => navigation.navigate("JornadasList")}
+              onPress={() => navigation.navigate("Inicio")}
               activeOpacity={0.85}
               accessibilityRole="button"
               accessibilityLabel="Ver jornadas disponibles"

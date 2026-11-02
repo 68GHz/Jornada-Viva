@@ -1,16 +1,17 @@
-import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
+import React, { useCallback, useState } from "react";
+import { NavigationContainer, useFocusEffect } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View, Text, Image, ActivityIndicator } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
 
 import LoginScreen from "../screens/auth/LoginScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import AjustesScreen from "../screens/app/AjustesScreen";
 import HomeScreen from "../screens/app/HomeScreen";
-import JornadasListScreen from "../screens/app/JornadasListScreen";
 import JornadaDetailScreen from "../screens/app/JornadaDetailScreen";
 import MisJornadasScreen from "../screens/app/MisJornadasScreen";
 import NotificationsScreen from "../screens/app/NotificationsScreen";
@@ -23,6 +24,7 @@ import MaestroHomeScreen from "../screens/maestro/MaestroHomeScreen";
 import JornadaFormScreen from "../screens/maestro/JornadaFormScreen";
 import JornadaAdminScreen from "../screens/maestro/JornadaAdminScreen";
 import AdminDashboardScreen from "../screens/admin/AdminDashboardScreen";
+import AdminAdministrarScreen from "../screens/admin/AdminAdministrarScreen";
 import UsuariosListScreen from "../screens/admin/UsuariosListScreen";
 import UsuarioDetalleScreen from "../screens/admin/UsuarioDetalleScreen";
 import UsuarioFormScreen from "../screens/admin/UsuarioFormScreen";
@@ -37,36 +39,34 @@ import { TouchableOpacity } from "react-native";
 import { useNotifications } from "../context/NotificationContext";
 
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
 
 const opcionesDeCabecera = {
   headerStyle: { backgroundColor: colors.primary },
   headerTintColor: colors.white,
   headerTitleStyle: { fontWeight: "700", fontSize: 17 },
+  headerTitleAlign: "center",
+  headerBackButtonDisplayMode: "minimal",
 };
 
-function TituloMarca() {
+function LogoInstitucional() {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-      <View
-        style={{
-          backgroundColor: colors.white,
-          borderRadius: 6,
-          paddingHorizontal: 6,
-          paddingVertical: 4,
-        }}
-      >
-        <Image
-          source={require("../../assets/Horizontal-tdea.png")}
-          style={{ width: 62, height: 16 }}
-          resizeMode="contain"
-        />
-      </View>
-      <Text style={{ fontWeight: "700", fontSize: 17, color: colors.white }}>
-        Jornada Viva
-      </Text>
+    <View style={{ backgroundColor: colors.white, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 4 }}>
+      <Image
+        source={require("../../assets/Horizontal-tdea.png")}
+        style={{ width: 62, height: 16 }}
+        resizeMode="contain"
+        accessibilityLabel="Logo institucional"
+      />
     </View>
   );
 }
+
+// Pantallas raíz de cada rol: logo institucional a la izquierda y nombre del aplicativo al centro
+const opcionesRaiz = {
+  headerTitle: "Jornada Viva",
+  headerLeft: () => <LogoInstitucional />,
+};
 
 function AuthStack() {
   return (
@@ -77,91 +77,103 @@ function AuthStack() {
   );
 }
 
-function AppStack() {
-  const { cerrarSesion } = useAuth();
-  const { noLeidasCount } = useNotifications();
+const ICONOS_TAB = {
+  Inicio: ["home", "home-outline"],
+  MisJornadas: ["calendar", "calendar-outline"],
+  MisPrestamos: ["library", "library-outline"],
+  Notifications: ["notifications", "notifications-outline"],
+  Ajustes: ["settings", "settings-outline"],
+};
 
+// Opciones de la barra inferior (mismo diseño para estudiante y gestor)
+function opcionesBarraInferior(iconos, route, insets) {
+  return {
+    headerShown: false,
+    tabBarActiveTintColor: colors.primary,
+    tabBarInactiveTintColor: colors.textDisabled,
+    tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+    tabBarStyle: {
+      backgroundColor: colors.surface,
+      borderTopColor: colors.border,
+      height: 58 + insets.bottom,
+      paddingBottom: insets.bottom + 4,
+      paddingTop: 6,
+    },
+    tabBarIcon: ({ focused, color }) => (
+      <Ionicons name={iconos[route.name][focused ? 0 : 1]} size={23} color={color} />
+    ),
+  };
+}
+
+// Barra inferior del estudiante
+function TabsEstudiante() {
+  const { noLeidasCount } = useNotifications();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Tab.Navigator
+      initialRouteName="Inicio"
+      screenOptions={({ route }) => opcionesBarraInferior(ICONOS_TAB, route, insets)}
+    >
+      <Tab.Screen name="Inicio" component={HomeScreen} />
+      <Tab.Screen name="MisPrestamos" component={MisPrestamosScreen} options={{ tabBarLabel: "Préstamos" }} />
+      <Tab.Screen name="MisJornadas" component={MisJornadasScreen} options={{ tabBarLabel: "Jornadas" }} />
+      <Tab.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{
+          tabBarLabel: "Avisos",
+          tabBarBadge: noLeidasCount > 0 ? (noLeidasCount > 9 ? "9+" : noLeidasCount) : undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.error, color: colors.white, fontSize: 10 },
+        }}
+      />
+      <Tab.Screen name="Ajustes" component={AjustesScreen} />
+    </Tab.Navigator>
+  );
+}
+
+function AppStack() {
   return (
     <Stack.Navigator screenOptions={opcionesDeCabecera}>
       <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={({ navigation }) => ({
-          headerTitle: () => <TituloMarca />,
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Notifications")}
-              style={{ padding: 4, position: "relative" }}
-              accessibilityRole="button"
-              accessibilityLabel="Notificaciones"
-            >
-              <Ionicons name="notifications-outline" size={24} color={colors.white} />
-              {noLeidasCount > 0 && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 2,
-                    right: 2,
-                    backgroundColor: colors.error,
-                    borderRadius: 9,
-                    minWidth: 18,
-                    height: 18,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingHorizontal: 4,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: colors.white,
-                      fontSize: 10,
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {noLeidasCount > 9 ? "9+" : noLeidasCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ),
-        })}
+        name="Tabs"
+        component={TabsEstudiante}
+        options={opcionesRaiz}
       />
-      <Stack.Screen
-        name="JornadasList"
-        component={JornadasListScreen}
-        options={{ title: "Jornadas Disponibles" }}
-      />
-      <Stack.Screen
-        name="MisJornadas"
-        component={MisJornadasScreen}
-        options={{ title: "Mis jornadas" }}
-      />
-      <Stack.Screen
-        name="JornadaDetail"
-        component={JornadaDetailScreen}
-        options={{ title: "Detalle de Jornada" }}
-      />
-      <Stack.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={{ title: "Notificaciones" }}
-      />
-      <Stack.Screen
-        name="Sincronizacion"
-        component={SincronizacionScreen}
-        options={{ title: "Sincronización" }}
-      />
-      <Stack.Screen
-        name="EscanearAsistencia"
-        component={EscanearAsistenciaScreen}
-        options={{ title: "Escanear Asistencia" }}
-      />
-      <Stack.Screen
-        name="MisPrestamos"
-        component={MisPrestamosScreen}
-        options={{ title: "Mis préstamos" }}
-      />
+      <Stack.Screen name="JornadaDetail" component={JornadaDetailScreen} options={{ title: "Detalle de Jornada" }} />
+      <Stack.Screen name="Sincronizacion" component={SincronizacionScreen} options={{ title: "Sincronización" }} />
+      <Stack.Screen name="EscanearAsistencia" component={EscanearAsistenciaScreen} options={{ title: "Escanear Asistencia" }} />
     </Stack.Navigator>
+  );
+}
+
+// Crear jornada como pestaña: se reinicia al salir para que el formulario vuelva a estar vacío
+function CrearJornadaTab(props) {
+  const [clave, setClave] = useState(0);
+  useFocusEffect(useCallback(() => () => setClave((k) => k + 1), []));
+  return <JornadaFormScreen key={clave} {...props} />;
+}
+
+const ICONOS_TAB_GESTOR = {
+  Inicio: ["home", "home-outline"],
+  CrearJornada: ["add-circle", "add-circle-outline"],
+  Prestamos: ["library", "library-outline"],
+  Ajustes: ["settings", "settings-outline"],
+};
+
+// Barra inferior del gestor: mismo diseño que la del estudiante
+function TabsGestor() {
+  const insets = useSafeAreaInsets();
+  return (
+    <Tab.Navigator
+      initialRouteName="Inicio"
+      screenOptions={({ route }) => opcionesBarraInferior(ICONOS_TAB_GESTOR, route, insets)}
+    >
+      <Tab.Screen name="Inicio" component={MaestroHomeScreen} />
+      <Tab.Screen name="CrearJornada" component={CrearJornadaTab} options={{ tabBarLabel: "Crear" }} />
+      <Tab.Screen name="Prestamos" component={PrestamosScreen} options={{ tabBarLabel: "Préstamos" }} />
+      <Tab.Screen name="Ajustes" component={AjustesScreen} />
+    </Tab.Navigator>
   );
 }
 
@@ -169,11 +181,7 @@ function AppStack() {
 function GestorStack() {
   return (
     <Stack.Navigator screenOptions={opcionesDeCabecera}>
-      <Stack.Screen
-        name="MaestroHome"
-        component={MaestroHomeScreen}
-        options={{ headerTitle: () => <TituloMarca /> }}
-      />
+      <Stack.Screen name="Tabs" component={TabsGestor} options={opcionesRaiz} />
       <Stack.Screen
         name="JornadaForm"
         component={JornadaFormScreen}
@@ -191,9 +199,29 @@ function GestorStack() {
         component={SincronizacionScreen}
         options={{ title: "Sincronización" }}
       />
-      <Stack.Screen name="Prestamos" component={PrestamosScreen} options={{ title: "Préstamos de objetos" }} />
       <Stack.Screen name="PrestamoForm" component={PrestamoFormScreen} options={{ title: "Registrar préstamo" }} />
     </Stack.Navigator>
+  );
+}
+
+const ICONOS_TAB_ADMIN = {
+  Inicio: ["home", "home-outline"],
+  Administrar: ["grid", "grid-outline"],
+  Ajustes: ["settings", "settings-outline"],
+};
+
+// Barra inferior del administrador: mismo diseño que las de los demás roles
+function TabsAdmin() {
+  const insets = useSafeAreaInsets();
+  return (
+    <Tab.Navigator
+      initialRouteName="Inicio"
+      screenOptions={({ route }) => opcionesBarraInferior(ICONOS_TAB_ADMIN, route, insets)}
+    >
+      <Tab.Screen name="Inicio" component={AdminDashboardScreen} />
+      <Tab.Screen name="Administrar" component={AdminAdministrarScreen} />
+      <Tab.Screen name="Ajustes" component={AjustesScreen} />
+    </Tab.Navigator>
   );
 }
 
@@ -202,11 +230,7 @@ function GestorStack() {
 function AdminStack() {
   return (
     <Stack.Navigator screenOptions={opcionesDeCabecera}>
-      <Stack.Screen
-        name="AdminDashboard"
-        component={AdminDashboardScreen}
-        options={{ headerTitle: () => <TituloMarca /> }}
-      />
+      <Stack.Screen name="Tabs" component={TabsAdmin} options={opcionesRaiz} />
       <Stack.Screen
         name="UsuariosList"
         component={UsuariosListScreen}

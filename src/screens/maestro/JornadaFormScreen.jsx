@@ -20,7 +20,8 @@ import { useJornadas } from "../../context/JornadasContext";
 import { useJornadaMaestro } from "../../hooks/useJornadasMaestro";
 import { useUsuarios } from "../../hooks/useAdmin";
 import { auditar } from "../../services/adminService";
-import { Chip } from "../../components/AdminUi";
+import SelectDesplegable from "../../components/SelectDesplegable";
+import RelojHora from "../../components/RelojHora";
 import { puedeSerResponsable } from "../../utils/roles";
 import {
   buscarJornadaIgual,
@@ -51,6 +52,13 @@ import { combinarFechaHora, descomponerFecha } from "../../utils/zonaNegocio";
 
 // Duraciones habituales para elegir con un toque (en minutos)
 const DURACIONES_RAPIDAS = [30, 60, 90, 120, 180];
+const OTRA = "__otra__";
+
+const OPCIONES_DURACION = [
+  ...DURACIONES_RAPIDAS.map((min) => ({ valor: String(min), etiqueta: formatearDuracion(min) })),
+  { valor: OTRA, etiqueta: "Otra duración…" },
+];
+const OPCIONES_CATEGORIA = CATEGORIAS.map((c) => ({ valor: c, etiqueta: c }));
 
 function Campo({ etiqueta, error, children }) {
   return (
@@ -100,6 +108,7 @@ export default function JornadaFormScreen({ navigation, route }) {
   const [errores, setErrores] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [calendario, setCalendario] = useState(false);
+  const [duracionOtra, setDuracionOtra] = useState(false);
   const inicializado = useRef(false);
   // Evita jornadas duplicadas al reintentar «Crear» tras un error de conexión:
   //  - claveCreacion: clave de idempotencia del intento; se renueva en cuanto se cambia algo
@@ -248,6 +257,10 @@ export default function JornadaFormScreen({ navigation, route }) {
   const ocupadosElegido = form.lugar ? ocupados.get(form.lugar) : undefined;
   const libres = ESPACIOS.filter((espacio) => !ocupados.has(espacio));
 
+  // «Otra duración»: se escribe a mano cuando el valor no está entre las opciones
+  const duracionPersonalizada =
+    duracionOtra || (form.duracionMin !== "" && !DURACIONES_RAPIDAS.map(String).includes(form.duracionMin));
+
   const etiquetaDia = form.dia
     ? dayjs(form.dia).locale("es").format("dddd D [de] MMMM [de] YYYY")
     : "Elegir fecha";
@@ -309,67 +322,48 @@ export default function JornadaFormScreen({ navigation, route }) {
 
         {esAdministrador && (
           <Campo etiqueta="Gestor responsable">
-            <View style={styles.espacios}>
-              {responsables.map((g) => (
-                <Chip
-                  key={g.id}
-                  etiqueta={g.nombre || g.email}
-                  activo={(gestorId || usuario.uid) === g.id}
-                  onPress={() => {
-                    claveCreacion.current = null;
-                    falloPorConexion.current = false;
-                    setGestorId(g.id);
-                  }}
-                />
-              ))}
-            </View>
+            <SelectDesplegable
+              titulo="Gestor responsable"
+              icono="person-outline"
+              placeholder="Elegir gestor"
+              valor={gestorId || usuario.uid}
+              opciones={responsables.map((g) => ({ valor: g.id, etiqueta: g.nombre || g.email }))}
+              onChange={(id) => {
+                claveCreacion.current = null;
+                falloPorConexion.current = false;
+                setGestorId(id);
+              }}
+            />
           </Campo>
         )}
 
         <Campo etiqueta="Categoría" error={errores.categoria}>
-          <View style={styles.espacios}>
-            {CATEGORIAS.map((c) => (
-              <Chip key={c} etiqueta={c} activo={form.categoria === c} onPress={() => cambiar("categoria", c)} />
-            ))}
-          </View>
+          <SelectDesplegable
+            titulo="Categoría"
+            icono="pricetag-outline"
+            placeholder="Elegir categoría"
+            valor={form.categoria}
+            opciones={OPCIONES_CATEGORIA}
+            onChange={(v) => cambiar("categoria", v)}
+            error={!!errores.categoria}
+          />
         </Campo>
 
         <Campo etiqueta="Espacio" error={errores.lugar}>
-          <View style={styles.espacios}>
-            {ESPACIOS.map((espacio) => {
-              const activo = form.lugar === espacio;
+          <SelectDesplegable
+            titulo="Espacio"
+            icono="location-outline"
+            placeholder="Elegir espacio"
+            valor={form.lugar}
+            opciones={ESPACIOS.map((espacio) => ({
+              valor: espacio,
+              etiqueta: espacio,
               // FE-01: ya tiene una jornada a la fecha y hora elegidas (solo informa; se puede elegir)
-              const ocupado = ocupados.has(espacio);
-              return (
-                <TouchableOpacity
-                  key={espacio}
-                  style={[
-                    styles.espacio,
-                    ocupado && styles.espacioOcupado,
-                    activo && styles.espacioActivo,
-                  ]}
-                  onPress={() => cambiar("lugar", espacio)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: activo }}
-                  accessibilityLabel={ocupado ? `${espacio}, ocupado a esa hora` : espacio}
-                >
-                  {ocupado && !activo && (
-                    <Ionicons name="alert-circle" size={13} color={colors.warning} />
-                  )}
-                  <Text
-                    style={[
-                      styles.espacioTexto,
-                      ocupado && styles.espacioTextoOcupado,
-                      activo && styles.espacioTextoActivo,
-                    ]}
-                  >
-                    {espacio}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+              aviso: ocupados.has(espacio) ? "Ocupado a esa hora" : undefined,
+            }))}
+            onChange={(v) => cambiar("lugar", v)}
+            error={!!errores.lugar}
+          />
           {ocupados.size > 0 && (
             <Text style={styles.ayuda}>
               Los espacios con el aviso ya tienen una jornada a esa fecha y hora. Puedes elegirlos
@@ -406,50 +400,41 @@ export default function JornadaFormScreen({ navigation, route }) {
           </TouchableOpacity>
         </Campo>
 
-        <Campo etiqueta="Hora (formato 24 h, HH:mm)" error={errores.hora}>
-          <TextInput
-            style={[styles.input, errores.hora && styles.inputError]}
-            value={form.hora}
-            onChangeText={(v) => cambiar("hora", v)}
-            maxLength={5}
-            keyboardType="numbers-and-punctuation"
-            placeholder="14:30"
-            placeholderTextColor={colors.textDisabled}
-            accessibilityLabel="Hora"
-          />
+        <Campo etiqueta="Hora de inicio" error={errores.hora}>
+          <RelojHora valor={form.hora} onChange={(v) => cambiar("hora", v)} error={!!errores.hora} />
         </Campo>
 
-        <Campo etiqueta="Duración (minutos)" error={errores.duracionMin}>
-          <TextInput
-            style={[styles.input, errores.duracionMin && styles.inputError]}
-            value={form.duracionMin}
-            onChangeText={(v) => cambiar("duracionMin", v.replace(/[^0-9]/g, ""))}
-            maxLength={4}
-            keyboardType="number-pad"
-            placeholder="Ej. 60"
-            placeholderTextColor={colors.textDisabled}
-            accessibilityLabel="Duración en minutos"
+        <Campo etiqueta="Duración" error={errores.duracionMin}>
+          <SelectDesplegable
+            titulo="Duración"
+            icono="hourglass-outline"
+            placeholder="Elegir duración"
+            valor={duracionPersonalizada ? OTRA : form.duracionMin}
+            textoValor={form.duracionMin ? `${form.duracionMin} min` : undefined}
+            opciones={OPCIONES_DURACION}
+            onChange={(v) => {
+              if (v === OTRA) {
+                setDuracionOtra(true);
+                if (DURACIONES_RAPIDAS.map(String).includes(form.duracionMin)) cambiar("duracionMin", "");
+              } else {
+                setDuracionOtra(false);
+                cambiar("duracionMin", v);
+              }
+            }}
+            error={!!errores.duracionMin}
           />
-          <View style={[styles.espacios, styles.duraciones]}>
-            {DURACIONES_RAPIDAS.map((min) => {
-              const activo = form.duracionMin === String(min);
-              return (
-                <TouchableOpacity
-                  key={min}
-                  style={[styles.espacio, activo && styles.espacioActivo]}
-                  onPress={() => cambiar("duracionMin", String(min))}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: activo }}
-                  accessibilityLabel={`Duración ${formatearDuracion(min)}`}
-                >
-                  <Text style={[styles.espacioTexto, activo && styles.espacioTextoActivo]}>
-                    {formatearDuracion(min)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {duracionPersonalizada && (
+            <TextInput
+              style={[styles.input, styles.inputOtra, errores.duracionMin && styles.inputError]}
+              value={form.duracionMin}
+              onChangeText={(v) => cambiar("duracionMin", v.replace(/[^0-9]/g, ""))}
+              maxLength={4}
+              keyboardType="number-pad"
+              placeholder="Minutos (ej. 75)"
+              placeholderTextColor={colors.textDisabled}
+              accessibilityLabel="Duración en minutos"
+            />
+          )}
           <Text style={styles.ayuda}>{textoFin}</Text>
         </Campo>
 
@@ -542,8 +527,7 @@ const styles = StyleSheet.create({
   inputMultilinea: { minHeight: 110 },
   inputError: { borderColor: colors.error },
   error: { color: colors.error, fontSize: 12, marginTop: 4 },
-  espacios: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  duraciones: { marginTop: 8 },
+  inputOtra: { marginTop: 8 },
   ayuda: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
   espacio: {
     borderRadius: 20,

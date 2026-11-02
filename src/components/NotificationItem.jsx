@@ -50,127 +50,130 @@ export default function NotificationItem({
     : "Recientemente";
 
   return (
-    <TouchableOpacity
-      style={[styles.contenedor, !leida && styles.noLeida]}
-      onPress={() => onPress && onPress(notificacion)}
-      activeOpacity={0.7}
-      accessibilityRole="button"
-      accessibilityLabel={`${titulo}, ${mensaje}`}
-    >
-      <View style={[styles.iconoContenedor, { backgroundColor: `${iconColor}15` }]}>
-        <Ionicons name={iconName} size={24} color={iconColor} />
-      </View>
-
-      <View style={styles.contenido}>
-        <View style={styles.cabecera}>
-          <View style={[styles.badge, { backgroundColor: `${tipoColor}20` }]}>
-            <Text style={[styles.badgeTexto, { color: tipoColor }]}>{tipoLabel}</Text>
-          </View>
-          <Text style={styles.tiempo}>{tiempoRelativo}</Text>
+    <View style={[styles.contenedor, !leida && styles.noLeida]}>
+      <TouchableOpacity
+        style={styles.principal}
+        onPress={() => onPress && onPress(notificacion)}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel={`${leida ? "" : "No leída. "}${titulo}, ${mensaje}`}
+      >
+        <View style={[styles.iconoContenedor, { backgroundColor: `${iconColor}1A` }]}>
+          <Ionicons name={iconName} size={24} color={iconColor} />
+          {!leida && <View style={styles.punto} />}
         </View>
 
-        <Text style={[styles.titulo, !leida && styles.tituloNoLeido]}>
-          {titulo}
-        </Text>
-        <Text style={styles.mensaje} numberOfLines={3}>
-          {mensaje}
-        </Text>
-      </View>
+        <View style={styles.contenido}>
+          <View style={styles.cabecera}>
+            <View style={[styles.badge, { backgroundColor: `${tipoColor}1A` }]}>
+              <Text style={[styles.badgeTexto, { color: tipoColor }]}>{tipoLabel}</Text>
+            </View>
+            <Text style={styles.tiempo}>{tiempoRelativo}</Text>
+          </View>
+
+          <Text style={[styles.titulo, !leida && styles.tituloNoLeido]} numberOfLines={2}>
+            {titulo}
+          </Text>
+          <Text style={styles.mensaje} numberOfLines={3}>
+            {mensaje}
+          </Text>
+        </View>
+      </TouchableOpacity>
 
       <View style={styles.acciones}>
         {!leida && (
           <TouchableOpacity
-            style={styles.botonIcono}
+            style={styles.accion}
             onPress={() => onMarcarLeida && onMarcarLeida(notificacion.id)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
             accessibilityLabel="Marcar como leída"
           >
-            <Ionicons name="checkmark-done" size={20} color={colors.primary} />
+            <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+            <Text style={[styles.accionTexto, { color: colors.primary }]}>Marcar como leída</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={styles.botonIcono}
+          style={[styles.accion, styles.accionEliminar]}
           onPress={() => onEliminar && onEliminar(notificacion.id)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
           accessibilityLabel="Eliminar notificación"
         >
-          <Ionicons name="trash-outline" size={18} color={colors.textDisabled} />
+          <Ionicons name="trash-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.accionTexto}>Eliminar</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   contenedor: {
-    flexDirection: "row",
     backgroundColor: colors.surface,
-    padding: 14,
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
-    alignItems: "flex-start",
-    gap: 12,
+    marginBottom: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   noLeida: {
-    backgroundColor: colors.primaryPale,
     borderColor: colors.primaryLight,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
+    backgroundColor: "#F3FAF6",
+  },
+  principal: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 14,
   },
   iconoContenedor: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  contenido: {
-    flex: 1,
-    gap: 4,
+  punto: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.error,
+    borderWidth: 2,
+    borderColor: colors.surface,
   },
+  contenido: { flex: 1, gap: 4 },
   cabecera: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 2,
-  },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  badgeTexto: {
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  tiempo: {
-    fontSize: 11,
-    color: colors.textDisabled,
-  },
-  titulo: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textPrimary,
-  },
-  tituloNoLeido: {
-    fontWeight: "800",
-    color: colors.textPrimary,
-  },
-  mensaje: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  acciones: {
-    flexDirection: "column",
     gap: 8,
+  },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  badgeTexto: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.4 },
+  tiempo: { fontSize: 11, color: colors.textSecondary },
+  titulo: { fontSize: 15, fontWeight: "600", color: colors.textPrimary, lineHeight: 20 },
+  tituloNoLeido: { fontWeight: "800" },
+  mensaje: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
+  acciones: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  accion: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 16,
   },
-  botonIcono: {
-    padding: 4,
-  },
+  accionEliminar: { marginLeft: 4 },
+  accionTexto: { fontSize: 12, fontWeight: "700", color: colors.textSecondary },
 });
-

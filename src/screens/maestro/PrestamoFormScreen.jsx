@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Boton, Campo, Chip, Entrada } from "../../components/AdminUi";
+import { Boton, Campo, Entrada } from "../../components/AdminUi";
+import SelectDesplegable from "../../components/SelectDesplegable";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { mensajeDeErrorPrestamo, registrarPrestamo } from "../../services/prestamoService";
 import { colors } from "../../theme/colors";
@@ -14,6 +15,9 @@ import {
 // Plazos que se pueden elegir con un toque (días a partir de hoy)
 const PLAZOS_DIAS = [3, 7, 15, 30];
 const DIA_MS = 24 * 60 * 60 * 1000;
+
+const OPCIONES_TIPO = TIPOS_OBJETO.map((t) => ({ valor: t, etiqueta: ETIQUETA_TIPO_OBJETO[t] }));
+const OPCIONES_PLAZO = PLAZOS_DIAS.map((d) => ({ valor: d, etiqueta: `${d} días` }));
 
 // FE-02 · Registrar el préstamo de un objeto (libro, equipo o material) a un estudiante. Solo con conexión.
 export default function PrestamoFormScreen({ navigation }) {
@@ -79,11 +83,15 @@ export default function PrestamoFormScreen({ navigation }) {
         </Campo>
 
         <Campo etiqueta="Tipo" error={errores.tipo}>
-          <View style={styles.chips}>
-            {TIPOS_OBJETO.map((t) => (
-              <Chip key={t} etiqueta={ETIQUETA_TIPO_OBJETO[t]} activo={form.tipo === t} onPress={() => cambiar("tipo", t)} />
-            ))}
-          </View>
+          <SelectDesplegable
+            titulo="Tipo de objeto"
+            icono="shapes-outline"
+            placeholder="Elegir tipo"
+            valor={form.tipo}
+            opciones={OPCIONES_TIPO}
+            onChange={(v) => cambiar("tipo", v)}
+            error={!!errores.tipo}
+          />
         </Campo>
 
         <Campo etiqueta="Correo del estudiante" error={errores.correo}>
@@ -100,11 +108,15 @@ export default function PrestamoFormScreen({ navigation }) {
         </Campo>
 
         <Campo etiqueta="Devolver en" error={errores.vence}>
-          <View style={styles.chips}>
-            {PLAZOS_DIAS.map((d) => (
-              <Chip key={d} etiqueta={`${d} días`} activo={form.dias === d} onPress={() => cambiar("dias", d)} />
-            ))}
-          </View>
+          <SelectDesplegable
+            titulo="Devolver en"
+            icono="calendar-outline"
+            placeholder="Elegir plazo"
+            valor={form.dias}
+            opciones={OPCIONES_PLAZO}
+            onChange={(v) => cambiar("dias", v)}
+            error={!!errores.vence}
+          />
         </Campo>
 
         <Campo etiqueta="Nota (opcional)" error={errores.nota}>
@@ -128,6 +140,5 @@ export default function PrestamoFormScreen({ navigation }) {
 const styles = StyleSheet.create({
   contenedor: { flex: 1, backgroundColor: colors.background },
   contenido: { padding: 20, gap: 4, paddingBottom: 40 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   aviso: { fontSize: 12, color: colors.textSecondary, marginBottom: 8 },
 });

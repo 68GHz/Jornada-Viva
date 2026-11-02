@@ -39,7 +39,10 @@ export default function BannerJornada({ url, altura = 120, mensajeError, style }
 const styles = StyleSheet.create({
   imagen: {
     width: "100%",
-    borderRadius: 8,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     backgroundColor: colors.border,
   },
   fallo: {
