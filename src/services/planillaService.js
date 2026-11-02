@@ -35,7 +35,7 @@ export async function compartirXlsx(nombreArchivo, bytes, titulo = "Compartir ar
   }
   const archivo = new File(Paths.cache, nombreArchivo);
   archivo.create({ overwrite: true });
-  await archivo.writeBytes(bytes);
+  await archivo.write(bytes); // File.write acepta texto o bytes (writeBytes es de FileHandle, no de File)
   await Sharing.shareAsync(archivo.uri, { mimeType: MIME_XLSX, dialogTitle: titulo, UTI: UTI_XLSX });
 }
 
