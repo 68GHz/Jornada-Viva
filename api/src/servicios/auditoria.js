@@ -15,3 +15,26 @@ export function agregarAuditoria(db, escritor, actor, { accion, entidad, entidad
 }
 
 export const actorDe = (usuario) => ({ uid: usuario.uid, nombre: usuario.nombre || usuario.email || "" });
+
+const LIMITE_MAXIMO = 200;
+
+// Últimos registros de auditoría (más recientes primero). Solo los lee el administrador.
+export async function listar(ctx, limite) {
+  const n = Math.min(Math.max(parseInt(limite, 10) || 100, 1), LIMITE_MAXIMO);
+  const snap = await ctx.db.collection("auditoria").orderBy("creadaEn", "desc").limit(n).get();
+  return {
+    registros: snap.docs.map((d) => {
+      const x = d.data();
+      return {
+        id: d.id,
+        accion: x.accion,
+        entidad: x.entidad,
+        entidadId: x.entidadId,
+        detalle: x.detalle || "",
+        actorId: x.actorId,
+        actorNombre: x.actorNombre || "",
+        creadaEn: typeof x.creadaEn?.toMillis === "function" ? x.creadaEn.toMillis() : null,
+      };
+    }),
+  };
+}

@@ -1,16 +1,23 @@
-import React, { useMemo, useState } from "react";
-import { Alert, ScrollView, Text, View } from "react-native";
-import { useAuth } from "../../context/AuthContext";
-import { useEstadisticasApi, useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
+import React, { useState } from "react";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEstadisticasApi } from "../../hooks/useAdmin";
 import { usaApi } from "../../config/api";
 import { llamarApi } from "../../services/apiClient";
-import { auditar } from "../../services/adminService";
 import { compartirCsv } from "../../services/planillaService";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { Boton, Indicador, estilos } from "../../components/AdminUi";
+import {
+  BarraSegmentada,
+  BarrasRanking,
+  COLOR_GRAFICA_ESTADO,
+  Cifra,
+  ColumnasMes,
+  Medidor,
+  TarjetaGrafica,
+} from "../../components/Graficas";
+import { descomponerFecha } from "../../utils/zonaNegocio";
 import { colors } from "../../theme/colors";
-import { ETIQUETA_ESTADO, estadoJornada } from "../../utils/estadoJornada";
-import { generarReporteJornadasCsv } from "../../utils/planilla";
+import { ETIQUETA_ESTADO } from "../../utils/estadoJornada";
 import { calcularEstadisticas } from "../../utils/usuariosAdmin";
 
 function Tabla({ titulo, filas }) {
@@ -33,51 +40,32 @@ function Tabla({ titulo, filas }) {
 
 // Estadísticas globales de la plataforma y reporte de jornadas descargable
 export default function ReportesScreen() {
-  const { usuario } = useAuth();
   // Con la API (módulo "reportes") el servidor calcula las estadísticas y genera el reporte
   const conApi = usaApi("reportes");
-  const u = useUsuarios(!conApi);
-  const j = useTodasJornadas(null, !conApi);
   const remoto = useEstadisticasApi(conApi);
   const [exportando, setExportando] = useState(false);
+  // Gráficas (por defecto) o tablas con las mismas cifras
+  const [vista, setVista] = useState("graficas");
+  const [actualizando, setActualizando] = useState(false);
   const ahora = Date.now();
 
-  const local = useMemo(
-    () => (conApi ? null : calcularEstadisticas(u.usuarios, j.jornadas, ahora)),
-    [conApi, u.usuarios, j.jornadas] // eslint-disable-line react-hooks/exhaustive-deps
-  );
-  const nombres = useMemo(() => new Map(u.usuarios.map((x) => [x.id, x.nombre || x.email])), [u.usuarios]);
-
-  if (conApi ? remoto.cargando && !remoto.estadisticas : u.cargando || j.cargando) {
+  if (conApi && remoto.cargando && !remoto.estadisticas) {
     return <LoadingSpinner mensaje="Calculando estadísticas..." />;
   }
 
-  const stats = (conApi ? remoto.estadisticas : local) ?? calcularEstadisticas([], []);
+  const stats = remoto.estadisticas ?? calcularEstadisticas([], []);
   const ordenar = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
-  const porGestor = conApi
-    ? (remoto.estadisticas?.porGestorNombre ?? []).map((g) => [g.nombre, g.jornadas]).sort((a, b) => b[1] - a[1])
-    : ordenar(stats.porGestor).map(([id, n]) => [id === "sin-gestor" ? "Sin gestor asignado" : nombres.get(id) || "Gestor desconocido", n]);
+  const porGestor = (remoto.estadisticas?.porGestorNombre ?? [])
+    .map((g) => [g.nombre, g.jornadas])
+    .sort((a, b) => b[1] - a[1]);
 
   const exportar = async () => {
     setExportando(true);
     try {
-      if (conApi) {
-        // El servidor genera el reporte (y deja constancia en la auditoría)
-        const csv = await llamarApi("GET", "/v1/admin/reporte-jornadas.csv", { texto: true });
-        await compartirCsv("reporte-jornadas.csv", csv, "Reporte de jornadas");
-        return;
-      }
-      const filas = j.jornadas.map((x) => ({
-        titulo: x.titulo,
-        fecha: x.fecha,
-        lugar: x.lugar,
-        estado: ETIQUETA_ESTADO[estadoJornada(x, ahora)],
-        gestor: x.creadoPor ? nombres.get(x.creadoPor) || "Gestor desconocido" : "Sin gestor asignado",
-        cuposTotales: x.cuposTotales || 0,
-        cuposOcupados: x.cuposOcupados || 0,
-      }));
-      await compartirCsv("reporte-jornadas.csv", generarReporteJornadasCsv(filas), "Reporte de jornadas");
-      auditar({ uid: usuario.uid, nombre: usuario.displayName || usuario.email }, { accion: "reporte.exportar", entidad: "reporte", entidadId: "jornadas", detalle: `${filas.length} jornadas` });
+      if (!conApi) throw new Error("El servidor de Jornada Viva no está configurado en esta versión de la app.");
+      // El servidor genera el reporte (y deja constancia en la auditoría)
+      const csv = await llamarApi("GET", "/v1/admin/reporte-jornadas.csv", { texto: true });
+      await compartirCsv("reporte-jornadas.csv", csv, "Reporte de jornadas");
     } catch (e) {
       Alert.alert("No se pudo generar el reporte", e?.message || "Intenta de nuevo.");
     } finally {
@@ -85,21 +73,129 @@ export default function ReportesScreen() {
     }
   };
 
+  const alDeslizar = async () => {
+    setActualizando(true);
+    try {
+      await remoto.recargar();
+    } finally {
+      setActualizando(false);
+    }
+  };
+
+  const filasEstado = Object.entries(stats.porEstado);
+  const filasRol = [
+    ["Alumnos", stats.estudiantes],
+    ["Gestores", stats.gestores],
+    ["Administradores", stats.administradores],
+  ];
+
   return (
-    <ScrollView style={estilos.pantalla} contentContainerStyle={estilos.contenido}>
-      <View style={estilos.fila}>
-        <Indicador valor={stats.totalJornadas} etiqueta="Jornadas" />
-        <Indicador valor={`${stats.ocupacion}%`} etiqueta="Ocupación de cupos" />
-        <Indicador valor={stats.cuposOcupados} etiqueta="Inscripciones (cupos usados)" color={colors.primaryLight} />
+    <ScrollView
+      style={estilos.pantalla}
+      contentContainerStyle={estilos.contenido}
+      refreshControl={
+        <RefreshControl
+          refreshing={actualizando}
+          onRefresh={alDeslizar}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+    >
+      <View style={styles.selector} accessibilityRole="tablist">
+        {[
+          ["graficas", "Gráficas"],
+          ["tablas", "Tablas"],
+        ].map(([valor, etiqueta]) => (
+          <TouchableOpacity
+            key={valor}
+            style={[styles.opcion, vista === valor && styles.opcionActiva]}
+            onPress={() => setVista(valor)}
+            activeOpacity={0.85}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: vista === valor }}
+          >
+            <Text style={[styles.opcionTexto, vista === valor && styles.opcionTextoActiva]}>{etiqueta}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      <Tabla titulo="Jornadas por estado" filas={Object.entries(stats.porEstado).map(([e, n]) => [ETIQUETA_ESTADO[e], n])} />
-      <Tabla titulo="Jornadas por espacio" filas={ordenar(stats.porEspacio)} />
-      <Tabla titulo="Jornadas por gestor" filas={porGestor} />
-      <Tabla
-        titulo="Usuarios por rol"
-        filas={[["Alumnos", stats.estudiantes], ["Gestores", stats.gestores], ["Administradores", stats.administradores], ["Cuentas inactivas", stats.cuentasInactivas]]}
-      />
+
+      {vista === "graficas" ? (
+        <>
+          <View style={styles.cifras}>
+            <Cifra valor={stats.totalJornadas} etiqueta="Jornadas" />
+            <Cifra valor={`${stats.ocupacion}%`} etiqueta="Ocupación de cupos" />
+            <Cifra valor={stats.cuposOcupados} etiqueta="Inscripciones" color={colors.primaryLight} />
+          </View>
+
+          <TarjetaGrafica titulo="Ocupación de cupos" subtitulo="Cupos usados frente al total ofrecido">
+            <Medidor valor={stats.cuposOcupados} total={stats.cuposTotales} etiqueta="cupos" />
+          </TarjetaGrafica>
+
+          {/* Solo si el cálculo trae el dato por mes (una API desactualizada no lo envía) */}
+          {!!stats.porMes && (
+            <TarjetaGrafica titulo="Jornadas por mes" subtitulo="Evolución de las jornadas programadas">
+              <ColumnasMes porMes={stats.porMes} mesActual={descomponerFecha(ahora).dia.slice(0, 7)} />
+            </TarjetaGrafica>
+          )}
+
+          <TarjetaGrafica titulo="Jornadas por estado" subtitulo="Cómo se reparte el total de jornadas">
+            <BarraSegmentada
+              segmentos={filasEstado.map(([estado, n]) => ({
+                etiqueta: ETIQUETA_ESTADO[estado],
+                valor: n,
+                color: COLOR_GRAFICA_ESTADO[estado],
+              }))}
+            />
+          </TarjetaGrafica>
+
+          <TarjetaGrafica titulo="Jornadas por espacio" subtitulo="Espacios con más jornadas">
+            <BarrasRanking filas={ordenar(stats.porEspacio)} tope={8} />
+          </TarjetaGrafica>
+
+          <TarjetaGrafica titulo="Jornadas por gestor" subtitulo="Quién organiza más jornadas">
+            <BarrasRanking filas={porGestor} tope={6} color={colors.primaryLight} />
+          </TarjetaGrafica>
+
+          <TarjetaGrafica titulo="Usuarios por rol" subtitulo={`${stats.totalUsuarios} usuarios registrados`}>
+            <BarrasRanking filas={filasRol} tope={6} unidad="usuarios" />
+            {stats.cuentasInactivas > 0 && (
+              <Text style={styles.nota}>
+                {stats.cuentasInactivas} {stats.cuentasInactivas === 1 ? "cuenta inactiva" : "cuentas inactivas"}
+              </Text>
+            )}
+          </TarjetaGrafica>
+        </>
+      ) : (
+        <>
+          <View style={estilos.fila}>
+            <Indicador valor={stats.totalJornadas} etiqueta="Jornadas" />
+            <Indicador valor={`${stats.ocupacion}%`} etiqueta="Ocupación de cupos" />
+            <Indicador valor={stats.cuposOcupados} etiqueta="Inscripciones (cupos usados)" color={colors.primaryLight} />
+          </View>
+          <Tabla titulo="Jornadas por estado" filas={filasEstado.map(([e, n]) => [ETIQUETA_ESTADO[e], n])} />
+          <Tabla titulo="Jornadas por espacio" filas={ordenar(stats.porEspacio)} />
+          <Tabla titulo="Jornadas por gestor" filas={porGestor} />
+          <Tabla titulo="Usuarios por rol" filas={[...filasRol, ["Cuentas inactivas", stats.cuentasInactivas]]} />
+        </>
+      )}
+
       <Boton texto="Descargar reporte de jornadas (Excel)" onPress={exportar} cargando={exportando} deshabilitado={stats.totalJornadas === 0} />
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  selector: {
+    flexDirection: "row",
+    backgroundColor: colors.border,
+    borderRadius: 14,
+    padding: 3,
+  },
+  opcion: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: 11 },
+  opcionActiva: { backgroundColor: colors.surface },
+  opcionTexto: { fontSize: 14, fontWeight: "700", color: colors.textSecondary },
+  opcionTextoActiva: { color: colors.primary },
+  cifras: { flexDirection: "row", gap: 10 },
+  nota: { fontSize: 12, fontWeight: "700", color: colors.error },
+});

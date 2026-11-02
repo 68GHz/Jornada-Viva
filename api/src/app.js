@@ -9,6 +9,8 @@ import * as notificaciones from "./servicios/notificaciones.js";
 import * as prestamos from "./servicios/prestamos.js";
 import * as usuarios from "./servicios/usuarios.js";
 import * as estadisticas from "./servicios/estadisticas.js";
+import * as auditoria from "./servicios/auditoria.js";
+import * as espacios from "./servicios/espacios.js";
 import { desactivarVencidas } from "./servicios/mantenimiento.js";
 import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
 import { ANTIGUEDAD_MAX_ASISTENCIA_MS } from "./dominio/relojDiferido.js";
@@ -127,6 +129,14 @@ export function crearApp({
     res.type("text/csv; charset=utf-8").set("Content-Disposition", `attachment; filename="${nombre}"`).send(csv);
   });
 
+  // ---- Disponibilidad de espacios (FE-01): la calcula el servidor con todas las jornadas ----
+  v1.get("/espacios/disponibilidad", async (req, res) => {
+    res.json(await espacios.disponibilidad(ctx, req.usuario, req.query));
+  });
+  v1.get("/jornadas/:id/espacios-alternos", async (req, res) => {
+    res.json(await espacios.alternos(ctx, req.usuario, req.params.id));
+  });
+
   // ---- Asistencia (QR firmado y marcado manual) ----
   v1.post("/jornadas/:id/asistencia/codigo", async (req, res) => {
     res.json(await asistencia.emitirCodigo(ctx, req.usuario, req.params.id));
@@ -171,6 +181,14 @@ export function crearApp({
   });
   v1.patch("/usuarios/:id", soloAdministrador, async (req, res) => {
     res.json(await usuarios.actualizar(ctx, req.usuario, req.params.id, req.body));
+  });
+
+  // ---- Lecturas del administrador: las cuentas y la auditoría ya no se leen directo de Firestore ----
+  v1.get("/admin/usuarios", soloAdministrador, async (_req, res) => {
+    res.json(await usuarios.listar(ctx));
+  });
+  v1.get("/admin/auditoria", soloAdministrador, async (req, res) => {
+    res.json(await auditoria.listar(ctx, req.query.limite));
   });
 
   // ---- Estadísticas y reportes (M6) ----

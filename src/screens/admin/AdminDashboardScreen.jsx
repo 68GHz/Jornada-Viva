@@ -1,8 +1,8 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import { useEstadisticasApi, useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
+import { useEstadisticasApi } from "../../hooks/useAdmin";
 import { usaApi } from "../../config/api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SaludoHeader from "../../components/SaludoHeader";
@@ -38,41 +38,27 @@ function Mosaico({ icono, color, valor, etiqueta }) {
 // Panel de control del administrador: saludo e indicadores globales de usuarios y jornadas
 export default function AdminDashboardScreen() {
   const { usuario } = useAuth();
-  // Con la API (módulo "reportes") el servidor calcula los indicadores
+  // Los indicadores los calcula siempre el servidor (módulo "reportes"); la app ya no los calcula
   const conApi = usaApi("reportes");
-  const u = useUsuarios(!conApi);
-  const j = useTodasJornadas(null, !conApi);
   const remoto = useEstadisticasApi(conApi);
-  const local = useMemo(
-    () => (conApi ? null : calcularEstadisticas(u.usuarios, j.jornadas)),
-    [conApi, u.usuarios, j.jornadas]
-  );
-  // Sin datos (p. ej. sin conexión) se muestran los indicadores en cero, igual que antes
-  const stats = (conApi ? remoto.estadisticas : local) ?? calcularEstadisticas([], []);
+  // Sin datos (p. ej. sin conexión) se muestran los indicadores en cero
+  const stats = remoto.estadisticas ?? calcularEstadisticas([], []);
 
   const [actualizando, setActualizando] = useState(false);
-  const reintentar = useCallback(async () => {
-    if (conApi) {
-      await remoto.recargar();
-    } else {
-      // Datos locales: se vuelve a abrir la escucha (se actualiza sola al llegar los datos)
-      u.reintentar();
-      j.reintentar();
-    }
-  }, [conApi, remoto.recargar, u.reintentar, j.reintentar]);
+  const reintentar = useCallback(() => remoto.recargar(), [remoto.recargar]);
   const alDeslizar = async () => {
     setActualizando(true);
     await reintentar();
     setActualizando(false);
   };
 
-  if (conApi ? remoto.cargando && !remoto.estadisticas : u.cargando || j.cargando) {
+  if (conApi && remoto.cargando && !remoto.estadisticas) {
     return <LoadingSpinner mensaje="Cargando el panel..." />;
   }
 
-  const error = conApi ? remoto.error : u.error || j.error;
-  const sinDatos = conApi ? !remoto.estadisticas : u.usuarios.length === 0;
-  const enLinea = conApi ? remoto.enLinea : u.enLinea;
+  const error = conApi ? remoto.error : "El servidor de Jornada Viva no está configurado en esta versión de la app.";
+  const sinDatos = !remoto.estadisticas;
+  const enLinea = remoto.enLinea;
   const nombre = (usuario?.displayName || "Administrador").trim().split(" ")[0];
 
   const total = stats.totalUsuarios || 0;

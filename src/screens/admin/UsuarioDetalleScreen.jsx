@@ -18,7 +18,7 @@ export default function UsuarioDetalleScreen({ navigation, route }) {
   const { usuarioId } = route.params;
   const { usuario: actorAuth } = useAuth();
   const { enLinea } = useConnectivity();
-  const { usuarios, cargando } = useUsuarios();
+  const { usuarios, cargando, reintentar } = useUsuarios();
   const usuario = usuarios.find((u) => u.id === usuarioId);
   const gestor = usuario && esGestor(usuario.rol);
   const asignadas = useTodasJornadas(gestor ? usuarioId : "__ninguno__");
@@ -56,6 +56,7 @@ export default function UsuarioDetalleScreen({ navigation, route }) {
     setGuardando(true);
     try {
       await actualizarUsuario(actor, usuario, cambios);
+      reintentar(); // ya no hay actualización en vivo: se vuelven a pedir las cuentas
       if (textoExito) Alert.alert("Listo", textoExito);
     } catch (e) {
       Alert.alert("No se pudo guardar", mensajeErrorAdmin(e));

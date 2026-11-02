@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { useConnectivity } from "../context/ConnectivityContext";
-import { fechaAMillis, normalizarJornada } from "../utils/jornadaFecha";
+import { normalizarJornada } from "../utils/jornadaFecha";
 import { normalizarRol } from "../utils/roles";
 import { mensajeErrorAdmin } from "../services/adminService";
 import { llamarApi } from "../services/apiClient";
@@ -46,15 +47,56 @@ function useColeccion(construirConsulta, convertir, clave, habilitado = true) {
   return { datos, cargando, error, enLinea, reintentar };
 }
 
+// Lectura de una lista del administrador por la API. Las cuentas y la auditoría ya no se leen
+// directo de Firestore: el servidor las entrega solo a un administrador activo. Se piden al abrir la
+// pantalla, cada vez que vuelve a primer plano y cada 30 s mientras está a la vista (ya no hay
+// actualización en vivo). `reintentar` vuelve a pedirlas. Sin conexión no se queda cargando.
+const REFRESCO_MS = 30000;
+function useListaApi(ruta, extraer, habilitado = true) {
+  const { enLinea } = useConnectivity();
+  const [datos, setDatos] = useState([]);
+  const [cargando, setCargando] = useState(!!habilitado);
+  const [error, setError] = useState(null);
+  const extraerRef = useRef(extraer);
+  extraerRef.current = extraer;
+
+  const cargar = useCallback(
+    async (silencioso = false) => {
+      if (!habilitado) return;
+      if (!silencioso) setCargando(true);
+      try {
+        setDatos(extraerRef.current(await llamarApi("GET", ruta)));
+        setError(null);
+      } catch (err) {
+        console.warn(`No se pudo leer ${ruta}:`, err);
+        setError(mensajeErrorAdmin(err));
+      } finally {
+        setCargando(false);
+      }
+    },
+    [habilitado, ruta]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!habilitado || !enLinea) {
+        setCargando(false);
+        return undefined;
+      }
+      cargar();
+      const temporizador = setInterval(() => cargar(true), REFRESCO_MS);
+      return () => clearInterval(temporizador);
+    }, [habilitado, enLinea, cargar])
+  );
+
+  return { datos, cargando, error, enLinea, reintentar: () => cargar(true) };
+}
+
 // Todos los usuarios (solo el administrador puede listarlos)
 export function useUsuarios(habilitado = true) {
-  const r = useColeccion(
-    () => collection(db, "users"),
-    (d) => {
-      const x = d.data();
-      return { id: d.id, ...x, rol: normalizarRol(x.rol), creadoEn: fechaAMillis(x.creadoEn) };
-    },
-    "users",
+  const r = useListaApi(
+    "/v1/admin/usuarios",
+    (resp) => resp.usuarios.map((u) => ({ ...u, rol: normalizarRol(u.rol) })),
     habilitado
   );
   return { usuarios: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea, reintentar: r.reintentar };
@@ -76,12 +118,8 @@ export function useTodasJornadas(gestorId = null, habilitado = true) {
 
 // Últimos registros de auditoría
 export function useAuditoria(maximo = 100) {
-  const r = useColeccion(
-    () => query(collection(db, "auditoria"), orderBy("creadaEn", "desc"), limit(maximo)),
-    (d) => ({ id: d.id, ...d.data(), creadaEn: fechaAMillis(d.data().creadaEn) }),
-    `auditoria:${maximo}`
-  );
-  return { registros: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea };
+  const r = useListaApi(`/v1/admin/auditoria?limite=${maximo}`, (resp) => resp.registros);
+  return { registros: r.datos, cargando: r.cargando, error: r.error, enLinea: r.enLinea, reintentar: r.reintentar };
 }
 
 // Estadísticas globales calculadas por la API (módulo "reportes"): se piden al abrir la pantalla

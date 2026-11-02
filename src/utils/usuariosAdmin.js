@@ -1,5 +1,6 @@
 import { ROLES, normalizarRol } from "./roles.js";
 import { estadoJornada, ESTADOS_JORNADA } from "./estadoJornada.js";
+import { descomponerFecha } from "./zonaNegocio.js";
 
 // Lógica pura del módulo de administración (usuarios, filtros, estadísticas, reportes)
 
@@ -84,11 +85,15 @@ export function calcularEstadisticas(usuarios, jornadas, ahora = Date.now()) {
   };
   const porEspacio = {};
   const porGestor = {};
+  // Jornadas por mes ("YYYY-MM", según la fecha de la jornada en la zona de negocio)
+  const porMes = {};
   let cuposTotales = 0;
   let cuposOcupados = 0;
   for (const j of jornadas) {
     porEstado[estadoJornada(j, ahora)] += 1;
     if (j.lugar) porEspacio[j.lugar] = (porEspacio[j.lugar] || 0) + 1;
+    const mes = descomponerFecha(j.fecha).dia.slice(0, 7);
+    if (mes) porMes[mes] = (porMes[mes] || 0) + 1;
     const g = j.creadoPor || "sin-gestor";
     porGestor[g] = (porGestor[g] || 0) + 1;
     cuposTotales += j.cuposTotales || 0;
@@ -104,6 +109,7 @@ export function calcularEstadisticas(usuarios, jornadas, ahora = Date.now()) {
     porEstado,
     porEspacio,
     porGestor,
+    porMes,
     cuposTotales,
     cuposOcupados,
     ocupacion: cuposTotales > 0 ? Math.round((cuposOcupados / cuposTotales) * 100) : 0,

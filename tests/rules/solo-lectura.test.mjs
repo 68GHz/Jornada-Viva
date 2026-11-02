@@ -82,11 +82,12 @@ describe("reglas posteriores a la migración: la app solo lee, la API escribe", 
       await assertFails(getDoc(doc(db(null), "users/est1")));
     });
 
-    it("el administrador activo lista los usuarios; el desactivado y el resto no", async () => {
-      await assertSucceeds(getDocs(collection(db("admin1"), "users")));
-      await assertFails(getDocs(collection(db("adminInactivo"), "users")));
-      await assertFails(getDocs(collection(db("est1"), "users")));
-      await assertFails(getDocs(collection(db("gestorA"), "users")));
+    it("nadie lista los usuarios directo de Firestore, ni un administrador: lo entrega la API", async () => {
+      for (const uid of ["admin1", "adminInactivo", "est1", "gestorA", null]) {
+        await assertFails(getDocs(collection(db(uid), "users")));
+      }
+      await assertFails(getDoc(doc(db("admin1"), "users/est1")), "el administrador tampoco lee perfiles ajenos");
+      await assertSucceeds(getDoc(doc(db("admin1"), "users/admin1")));
     });
 
     it("cualquier usuario con sesión lee las jornadas; sin sesión no", async () => {
@@ -107,11 +108,11 @@ describe("reglas posteriores a la migración: la app solo lee, la API escribe", 
       await assertFails(getDoc(doc(db("est1"), "notificaciones/n2")));
     });
 
-    it("solo el administrador activo lee la auditoría", async () => {
-      await assertSucceeds(getDocs(query(collection(db("admin1"), "auditoria"), orderBy("accion"), limit(5))));
-      await assertFails(getDocs(collection(db("adminInactivo"), "auditoria")));
-      await assertFails(getDocs(collection(db("gestorA"), "auditoria")));
-      await assertFails(getDocs(collection(db("est1"), "auditoria")));
+    it("la auditoría no se lee directo de Firestore: la entrega la API solo a un administrador", async () => {
+      for (const uid of ["admin1", "adminInactivo", "gestorA", "est1", null]) {
+        await assertFails(getDocs(query(collection(db(uid), "auditoria"), orderBy("accion"), limit(5))));
+      }
+      await assertFails(getDoc(doc(db("admin1"), "auditoria/a1")));
     });
   });
 });

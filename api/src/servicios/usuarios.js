@@ -114,3 +114,24 @@ export async function actualizar(ctx, admin, usuarioId, cambios = {}) {
     return { cambiado: true };
   });
 }
+
+const aMillis = (valor) => (typeof valor?.toMillis === "function" ? valor.toMillis() : (valor ?? null));
+
+// Lista de cuentas para el administrador. Solo los campos que usan las pantallas de administración:
+// nunca el token de notificaciones ni otros datos privados de cada cuenta.
+export async function listar(ctx) {
+  const snap = await ctx.db.collection("users").get();
+  return {
+    usuarios: snap.docs.map((d) => {
+      const x = d.data();
+      return {
+        id: d.id,
+        nombre: x.nombre || "",
+        email: x.email || "",
+        rol: normalizarRol(x.rol),
+        activo: x.activo !== false,
+        creadoEn: aMillis(x.creadoEn),
+      };
+    }),
+  };
+}

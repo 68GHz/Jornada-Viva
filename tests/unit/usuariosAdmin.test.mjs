@@ -144,6 +144,11 @@ describe("panel de control: estadísticas", () => {
     assert.deepEqual(s.porGestor, { g1: 2, g2: 1, "sin-gestor": 1 });
   });
 
+  it("cuenta las jornadas por mes (suman el total)", () => {
+    assert.ok(Object.keys(s.porMes).every((m) => /^\d{4}-\d{2}$/.test(m)));
+    assert.equal(Object.values(s.porMes).reduce((a, b) => a + b, 0), s.totalJornadas);
+  });
+
   it("calcula la ocupación de cupos", () => {
     assert.equal(s.cuposTotales, 70);
     assert.equal(s.cuposOcupados, 30);

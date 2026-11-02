@@ -4,24 +4,19 @@ rules_version = '2';
 //
 // La API (Admin SDK) es la única que escribe: ya no se aplican las reglas de negocio aquí, porque
 // el Admin SDK las ignora y las valida la propia API. La app móvil solo LEE (listeners en tiempo
-// real y caché sin conexión) y únicamente lo suyo; toda escritura directa del cliente se deniega.
+// real y caché sin conexión) y únicamente lo suyo o lo público (las jornadas); las cuentas ajenas y la
+// auditoría solo las entrega la API; toda escritura directa del cliente se deniega.
 //
 // NO publicar hasta que la API esté desplegada y todas las instalaciones usen la versión de la
 // app que llama a la API. Ver docs/migracion-api/05-despliegue-y-recuperacion.md.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function esAdmin() {
-      let perfil = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return request.auth != null
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && perfil.data.get('activo', true) != false
-        && perfil.data.get('rol', 'estudiante') == 'administrador';
-    }
-
-    // Perfil: cada quien lee el suyo (rol y estado en vivo); el administrador lista todos
+    // Perfil: cada quien lee solo el suyo (rol y estado en vivo). La lista de cuentas del
+    // administrador la entrega la API (GET /v1/admin/usuarios): ni siquiera un administrador
+    // puede leer los perfiles ajenos directo de Firestore.
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || esAdmin());
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if false;
     }
 
@@ -43,9 +38,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Auditoría: la escribe la API; solo la lee un administrador
+    // Auditoría: la escribe y la lee solo la API (GET /v1/admin/auditoria)
     match /auditoria/{registroId} {
-      allow read: if esAdmin();
+      allow read: if false;
       allow write: if false;
     }
 

@@ -4,16 +4,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { palabraPlural } from "../utils/plural";
 import { sugerirEspaciosAlternos } from "../utils/espaciosLibres";
+import { useAlternosServidor } from "../hooks/useEspaciosServidor";
 
 // FE-01 · Espacios alternos. Aparece en el detalle de una jornada que aún no empieza cuando fue
 // cancelada o cuando su espacio también lo usa otra jornada a esa hora, y propone los espacios
-// que están libres. Se calcula con las jornadas guardadas en el dispositivo: sin conexión sigue
-// funcionando con los datos ya descargados (y avisa de que pueden estar desactualizados).
+// que están libres. Lo calcula el servidor; sin conexión se usan las jornadas guardadas en el
+// dispositivo (y se avisa de que pueden estar desactualizadas).
 export default function EspaciosAlternos({ jornada, jornadas, ahora, enLinea = true }) {
-  const sugerencia = useMemo(
+  // El servidor lo calcula con todas las jornadas; sin respuesta se usa el cálculo local de respaldo
+  const delServidor = useAlternosServidor(jornada?.id);
+  const local = useMemo(
     () => sugerirEspaciosAlternos(jornada, jornadas, ahora),
     [jornada, jornadas, ahora]
   );
+  const sugerencia = delServidor === undefined ? local : delServidor;
   if (!sugerencia) return null;
 
   const { motivo, ocupantes, libres } = sugerencia;

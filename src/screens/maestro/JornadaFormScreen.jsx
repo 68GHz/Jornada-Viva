@@ -38,6 +38,7 @@ import { colors } from "../../theme/colors";
 import { CATEGORIAS, categoriaDeJornada } from "../../utils/categorias";
 import { ESPACIOS } from "../../utils/espacios";
 import { espaciosOcupados, listaCorta } from "../../utils/espaciosLibres";
+import { useOcupadosServidor } from "../../hooks/useEspaciosServidor";
 import { permisosJornada } from "../../utils/estadoJornada";
 import { esDuracionValida, formatearDuracion } from "../../utils/duracion";
 import { aDayjsNegocio, formatearHora } from "../../utils/jornadaFecha";
@@ -109,6 +110,13 @@ export default function JornadaFormScreen({ navigation, route }) {
   const [guardando, setGuardando] = useState(false);
   const [calendario, setCalendario] = useState(false);
   const [duracionOtra, setDuracionOtra] = useState(false);
+  // FE-01: espacios ocupados según el servidor (con todas las jornadas); null = usar el cálculo local
+  const franjaInicio = combinarFechaHora(form.dia, form.hora);
+  const franjaFin =
+    franjaInicio != null && /^\d+$/.test(form.duracionMin) && esDuracionValida(Number(form.duracionMin))
+      ? franjaInicio + Number(form.duracionMin) * 60000
+      : null;
+  const ocupadosServidor = useOcupadosServidor(franjaInicio, franjaFin, jornadaId ?? null);
   const inicializado = useRef(false);
   // Evita jornadas duplicadas al reintentar «Crear» tras un error de conexión:
   //  - claveCreacion: clave de idempotencia del intento; se renueva en cuanto se cambia algo
@@ -248,12 +256,15 @@ export default function JornadaFormScreen({ navigation, route }) {
       }.`
     : "La jornada aparece «En curso» hasta que termina su duración.";
 
-  // FE-01: espacios que ya tienen una jornada en esa franja. Se calcula con las jornadas guardadas
-  // en el dispositivo (funciona sin conexión) y al editar no cuenta la propia jornada.
-  const ocupados = espaciosOcupados(Array.from(jornadasPorId.values()), inicioMs, finMs, {
-    excluirId: jornadaId ?? null,
-    ahora: Date.now(),
-  });
+  // FE-01: espacios que ya tienen una jornada en esa franja. Los calcula el servidor; si no responde
+  // (sin conexión o cargando) se calcula con las jornadas guardadas en el dispositivo. Al editar no
+  // cuenta la propia jornada.
+  const ocupados =
+    ocupadosServidor ??
+    espaciosOcupados(Array.from(jornadasPorId.values()), inicioMs, finMs, {
+      excluirId: jornadaId ?? null,
+      ahora: Date.now(),
+    });
   const ocupadosElegido = form.lugar ? ocupados.get(form.lugar) : undefined;
   const libres = ESPACIOS.filter((espacio) => !ocupados.has(espacio));
 
