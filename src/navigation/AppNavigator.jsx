@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from "react";
 import { NavigationContainer, useFocusEffect } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { View, Text, Image, ActivityIndicator } from "react-native";
+import { View, Text, Image } from "react-native";
+import { SkeletonArranque } from "../components/Skeleton";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/AuthContext";
@@ -263,11 +264,7 @@ export default function AppNavigator() {
   const { usuario, cargando, esGestor, esAdministrador } = useAuth();
 
   if (cargando) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <SkeletonArranque />;
   }
 
   return (

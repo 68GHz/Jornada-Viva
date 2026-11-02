@@ -22,25 +22,60 @@ export async function compartirCsv(nombreArchivo, contenido, titulo = "Compartir
   });
 }
 
-// Genera la planilla de inscritos (CSV compatible con Excel) y abre el menú de
-// compartir del dispositivo para guardarla o abrirla en Excel / Hojas de cálculo.
-export async function compartirPlanilla(jornada, inscritos) {
+const MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const UTI_XLSX = "org.openxmlformats.spreadsheetml.sheet";
+
+// ¿La API respondió que no conoce la ruta? (servidor aún sin la versión que genera .xlsx)
+const servidorSinXlsx = (e) => e?.codigoApi === "RUTA_NO_ENCONTRADA";
+
+// Escribe un archivo binario (.xlsx) en la caché y abre el menú de compartir del dispositivo
+export async function compartirXlsx(nombreArchivo, bytes, titulo = "Compartir archivo") {
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error("Compartir archivos no está disponible en este dispositivo.");
   }
-
-  // Con la API, la planilla la genera el servidor (mismo formato, solo para quien administra la jornada)
-  const csv = usaApi("jornadas")
-    ? await llamarApi("GET", `/v1/jornadas/${encodeURIComponent(jornada.id)}/planilla.csv`, { texto: true })
-    : generarPlanillaCsv(jornada, inscritos);
-
-  const archivo = new File(Paths.cache, nombreArchivoPlanilla(jornada));
+  const archivo = new File(Paths.cache, nombreArchivo);
   archivo.create({ overwrite: true });
-  await archivo.write(csv.startsWith(BOM) ? csv : BOM + csv);
+  await archivo.writeBytes(bytes);
+  await Sharing.shareAsync(archivo.uri, { mimeType: MIME_XLSX, dialogTitle: titulo, UTI: UTI_XLSX });
+}
 
-  await Sharing.shareAsync(archivo.uri, {
-    mimeType: "text/csv",
-    dialogTitle: "Planilla de inscritos",
-    UTI: "public.comma-separated-values-text",
+// Descarga un archivo de la API en Excel (.xlsx). Si el servidor todavía no lo ofrece, usa el CSV de siempre.
+export async function descargarYCompartir({ rutaXlsx, rutaCsv, nombreXlsx, nombreCsv, titulo }) {
+  try {
+    const bytes = await llamarApi("GET", rutaXlsx, { binario: true });
+    await compartirXlsx(nombreXlsx, bytes, titulo);
+  } catch (e) {
+    if (!servidorSinXlsx(e)) throw e;
+    const csv = await llamarApi("GET", rutaCsv, { texto: true });
+    await compartirCsv(nombreCsv, csv, titulo);
+  }
+}
+
+// Planilla de inscritos. Con la API se descarga en Excel (.xlsx, con formato legible); sin API se genera
+// el CSV compatible con Excel en el dispositivo. Abre el menú de compartir para guardarla o abrirla.
+export async function compartirPlanilla(jornada, inscritos) {
+  if (usaApi("jornadas")) {
+    const id = encodeURIComponent(jornada.id);
+    const csvNombre = nombreArchivoPlanilla(jornada);
+    await descargarYCompartir({
+      rutaXlsx: `/v1/jornadas/${id}/planilla.xlsx`,
+      rutaCsv: `/v1/jornadas/${id}/planilla.csv`,
+      nombreXlsx: csvNombre.replace(/\.csv$/i, ".xlsx"),
+      nombreCsv: csvNombre,
+      titulo: "Planilla de inscritos",
+    });
+    return;
+  }
+  await compartirCsv(nombreArchivoPlanilla(jornada), generarPlanillaCsv(jornada, inscritos), "Planilla de inscritos");
+}
+
+// Reporte de jornadas del administrador (solo con la API)
+export function compartirReporteJornadas() {
+  return descargarYCompartir({
+    rutaXlsx: "/v1/admin/reporte-jornadas.xlsx",
+    rutaCsv: "/v1/admin/reporte-jornadas.csv",
+    nombreXlsx: "reporte-jornadas.xlsx",
+    nombreCsv: "reporte-jornadas.csv",
+    titulo: "Reporte de jornadas",
   });
 }

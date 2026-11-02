@@ -354,7 +354,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
         <View style={styles.filaInfo}>
           <Ionicons name="person-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
-            <Text style={styles.filaEtiqueta}>Responsable</Text>
+            <Text style={styles.filaEtiqueta}>{(jornada.responsable || "").includes(",") ? "Responsables" : "Responsable"}</Text>
             <Text style={styles.filaValor}>{jornada.responsable}</Text>
           </View>
         </View>

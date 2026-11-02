@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import JornadaCard from "../../components/JornadaCard";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonJornadasDisponibles } from "../../components/Skeleton";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
 import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
@@ -52,7 +52,7 @@ export default function JornadasListScreen({ navigation }) {
   }, [jornadas, filtros]);
 
   if (cargando) {
-    return <LoadingSpinner mensaje="Buscando jornadas disponibles..." />;
+    return <SkeletonJornadasDisponibles />;
   }
 
   if (error) {

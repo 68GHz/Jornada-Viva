@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Boton, Chip } from "../../components/AdminUi";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonPrestamosGestor } from "../../components/Skeleton";
 import PrestamoItem from "../../components/PrestamoItem";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { usePrestamosGestionados } from "../../hooks/usePrestamos";
@@ -56,7 +56,7 @@ export default function PrestamosScreen({ navigation }) {
     );
   };
 
-  if (cargando && prestamos.length === 0) return <LoadingSpinner mensaje="Cargando los préstamos..." />;
+  if (cargando && prestamos.length === 0) return <SkeletonPrestamosGestor />;
 
   const encabezado = (
     <View style={styles.encabezado}>

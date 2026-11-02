@@ -9,6 +9,7 @@ const respuesta = (estado, cuerpo, texto) => ({
   ok: estado >= 200 && estado < 300,
   status: estado,
   text: async () => (texto !== undefined ? texto : cuerpo === undefined ? "" : JSON.stringify(cuerpo)),
+  arrayBuffer: async () => new Uint8Array([0x50, 0x4b, 3, 4]).buffer,
 });
 const cliente = (fetchFn, extra = {}) =>
   crearClienteApi({ url: "https://api.test", obtenerToken: async () => "TOKEN", fetchFn, ...extra });
@@ -50,6 +51,16 @@ describe("cliente HTTP de la API", () => {
     assert.equal(pedido.headers.Authorization, "Bearer TOKEN");
     assert.equal(pedido.headers["Content-Type"], "application/json");
     assert.deepEqual(JSON.parse(pedido.body), { nombreUsuario: "Ana" });
+  });
+
+  it("modo binario devuelve los bytes del archivo (xlsx) y los errores siguen siendo errores", async () => {
+    const bytes = await cliente(async () => respuesta(200)).llamar("GET", "/v1/x.xlsx", { binario: true });
+    assert.ok(bytes instanceof Uint8Array);
+    assert.deepEqual([...bytes], [0x50, 0x4b, 3, 4]);
+    await assert.rejects(
+      cliente(async () => respuesta(403, { error: { codigo: "SIN_PERMISO", mensaje: "No." } })).llamar("GET", "/v1/x.xlsx", { binario: true }),
+      (e) => e.code === "permission-denied"
+    );
   });
 
   it("sin cuerpo no envía Content-Type; 204 devuelve null; modo texto devuelve el CSV tal cual", async () => {

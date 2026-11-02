@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonMisPrestamos } from "../../components/Skeleton";
 import PrestamoItem from "../../components/PrestamoItem";
 import { useMisPrestamos } from "../../hooks/usePrestamos";
 import { colors } from "../../theme/colors";
@@ -18,7 +18,7 @@ export default function MisPrestamosScreen() {
   const conteo = useMemo(() => contarPrestamos(prestamos, ahora), [prestamos, ahora]);
   const ordenados = useMemo(() => ordenarPrestamos(prestamos, ahora), [prestamos, ahora]);
 
-  if (cargando && prestamos.length === 0) return <LoadingSpinner mensaje="Cargando tus préstamos..." />;
+  if (cargando && prestamos.length === 0) return <SkeletonMisPrestamos />;
 
   const alerta =
     conteo.vencidos > 0

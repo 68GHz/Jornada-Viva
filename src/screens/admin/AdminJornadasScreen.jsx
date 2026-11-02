@@ -5,7 +5,7 @@ import "dayjs/locale/es";
 import { useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
 import JornadaCard from "../../components/JornadaCard";
 import CalendarioRango from "../../components/CalendarioRango";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonJornadasAdmin } from "../../components/Skeleton";
 import { estadoParaCard } from "../../components/EstadoJornadaChip";
 import { Boton, Chip, Entrada, Vacio, estilos } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
@@ -41,7 +41,7 @@ export default function AdminJornadasScreen({ navigation }) {
     [jornadas, texto, estado, gestor, rango]
   );
 
-  if (cargando) return <LoadingSpinner mensaje="Cargando jornadas..." />;
+  if (cargando) return <SkeletonJornadasAdmin />;
 
   return (
     <>

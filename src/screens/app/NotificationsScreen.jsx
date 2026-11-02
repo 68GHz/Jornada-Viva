@@ -5,10 +5,10 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { SkeletonAvisos } from "../../components/Skeleton";
 import { useNotifications } from "../../context/NotificationContext";
 import NotificationItem from "../../components/NotificationItem";
 import { colors } from "../../theme/colors";
@@ -76,14 +76,7 @@ export default function NotificationsScreen({ navigation }) {
 
   const hayNoLeidas = notificaciones.some((n) => !n.leida);
 
-  if (cargando) {
-    return (
-      <View style={styles.centrado}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.cargandoTexto}>Cargando notificaciones...</Text>
-      </View>
-    );
-  }
+  if (cargando) return <SkeletonAvisos />;
 
   return (
     <View style={styles.contenedor}>
@@ -176,11 +169,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 32,
     gap: 12,
-  },
-  cargandoTexto: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 8,
   },
   tituloVacio: {
     fontSize: 18,

@@ -26,7 +26,7 @@ import { useSync } from "../../context/SyncContext";
 import { TIPOS, accionActiva } from "../../utils/sincronizacion";
 import ModalQrAsistencia from "../../components/ModalQrAsistencia";
 import EstadoJornadaChip from "../../components/EstadoJornadaChip";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonAdministrarJornada, SkeletonInscritos } from "../../components/Skeleton";
 import { colors } from "../../theme/colors";
 import { formatearDuracion } from "../../utils/duracion";
 import { estadoJornada, permisosJornada } from "../../utils/estadoJornada";
@@ -158,7 +158,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
     }
   };
 
-  if (cargando) return <LoadingSpinner mensaje="Cargando jornada..." />;
+  if (cargando) return <SkeletonAdministrarJornada />;
 
   // Defensa en la interfaz: una jornada ajena (o anterior a los roles) no se administra.
   // El servidor también lo impide, aunque se manipulen los parámetros de navegación.
@@ -284,7 +284,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
         <Fila icono="time-outline" etiqueta="Hora" valor={formatearHora(jornada.fecha)} />
         <Fila icono="hourglass-outline" etiqueta="Duración" valor={formatearDuracion(jornada.duracionMin)} />
         <Fila icono="location-outline" etiqueta="Espacio" valor={jornada.lugar} />
-        <Fila icono="person-outline" etiqueta="Responsable" valor={jornada.responsable} />
+        <Fila icono="person-outline" etiqueta={(jornada.responsable || "").includes(",") ? "Responsables" : "Responsable"} valor={jornada.responsable} />
         {esAdministrador && (
           <Fila
             icono="briefcase-outline"
@@ -364,7 +364,7 @@ export default function JornadaAdminScreen({ navigation, route }) {
           )}
 
           {cargandoInscritos ? (
-            <ActivityIndicator color={colors.primary} />
+            <SkeletonInscritos />
           ) : errorInscritos ? (
             <Text style={styles.errorTexto}>{errorInscritos}</Text>
           ) : inscritos.length === 0 ? (

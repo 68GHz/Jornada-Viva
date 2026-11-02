@@ -6,7 +6,7 @@ import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadasMaestro } from "../../hooks/useJornadasMaestro";
 import JornadaCard from "../../components/JornadaCard";
 import SaludoHeader from "../../components/SaludoHeader";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonInicioGestor } from "../../components/Skeleton";
 import { colorEstado, estadoParaCard } from "../../components/EstadoJornadaChip";
 import { colors } from "../../theme/colors";
 import { conteoPlural, palabraPlural } from "../../utils/plural";
@@ -40,7 +40,7 @@ export default function MaestroHomeScreen({ navigation }) {
     [jornadas, filtro, ahora]
   );
 
-  if (cargando) return <LoadingSpinner mensaje="Cargando tus jornadas..." />;
+  if (cargando) return <SkeletonInicioGestor />;
 
   const encabezado = (
     <View>

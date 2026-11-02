@@ -12,6 +12,7 @@ import QRCode from "react-native-qrcode-svg";
 import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { File, Paths } from "expo-file-system";
+import { SkeletonCodigoQr } from "./Skeleton";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import {
@@ -203,7 +204,7 @@ export default function ModalQrAsistencia({ visible, jornada, alCerrar, ahora = 
                     </>
                   ) : (
                     <>
-                      <ActivityIndicator color={colors.primary} />
+                      <SkeletonCodigoQr />
                       <Text style={styles.sinQrTexto}>Generando código…</Text>
                     </>
                   )}

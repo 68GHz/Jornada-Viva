@@ -159,12 +159,15 @@ export function BarrasRanking({ filas, tope = 8, color = colors.primary, unidad 
             {nombre}
           </Text>
           <View style={styles.filaBarra}>
-            <View
-              style={[
-                styles.barra,
-                { width: `${(valor / max) * 100}%`, backgroundColor: esOtros ? colors.textDisabled : color },
-              ]}
-            />
+            {/* La barra ocupa como máximo el espacio que deja la cifra: nunca se sale de la tarjeta */}
+            <View style={styles.filaPista}>
+              <View
+                style={[
+                  styles.barra,
+                  { width: `${(valor / max) * 100}%`, backgroundColor: esOtros ? colors.textDisabled : color },
+                ]}
+              />
+            </View>
             <Text style={styles.filaValor}>{valor}</Text>
           </View>
         </TouchableOpacity>
@@ -304,8 +307,9 @@ const styles = StyleSheet.create({
   fila: { gap: 4, minHeight: 36, justifyContent: "center" },
   filaNombre: { fontSize: 13, color: colors.textPrimary },
   filaBarra: { flexDirection: "row", alignItems: "center", gap: 8 },
+  filaPista: { flex: 1, minWidth: 0 },
   barra: { height: 14, borderTopRightRadius: 4, borderBottomRightRadius: 4, minWidth: 2 },
-  filaValor: { fontSize: 13, fontWeight: "800", color: colors.textPrimary },
+  filaValor: { fontSize: 13, fontWeight: "800", color: colors.textPrimary, minWidth: 28, textAlign: "right" },
   enlace: { alignSelf: "flex-start", minHeight: 36, justifyContent: "center" },
   enlaceTexto: { fontSize: 13, fontWeight: "800", color: colors.primary },
 

@@ -2,9 +2,8 @@ import React, { useState } from "react";
 import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useEstadisticasApi } from "../../hooks/useAdmin";
 import { usaApi } from "../../config/api";
-import { llamarApi } from "../../services/apiClient";
-import { compartirCsv } from "../../services/planillaService";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { compartirReporteJornadas } from "../../services/planillaService";
+import { SkeletonReportes } from "../../components/Skeleton";
 import { Boton, Indicador, estilos } from "../../components/AdminUi";
 import {
   BarraSegmentada,
@@ -50,7 +49,7 @@ export default function ReportesScreen() {
   const ahora = Date.now();
 
   if (conApi && remoto.cargando && !remoto.estadisticas) {
-    return <LoadingSpinner mensaje="Calculando estadísticas..." />;
+    return <SkeletonReportes />;
   }
 
   const stats = remoto.estadisticas ?? calcularEstadisticas([], []);
@@ -63,9 +62,8 @@ export default function ReportesScreen() {
     setExportando(true);
     try {
       if (!conApi) throw new Error("El servidor de Jornada Viva no está configurado en esta versión de la app.");
-      // El servidor genera el reporte (y deja constancia en la auditoría)
-      const csv = await llamarApi("GET", "/v1/admin/reporte-jornadas.csv", { texto: true });
-      await compartirCsv("reporte-jornadas.csv", csv, "Reporte de jornadas");
+      // El servidor genera el reporte en Excel (y deja constancia en la auditoría)
+      await compartirReporteJornadas();
     } catch (e) {
       Alert.alert("No se pudo generar el reporte", e?.message || "Intenta de nuevo.");
     } finally {

@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useConnectivity } from "../../context/ConnectivityContext";
 import { useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
 import { actualizarUsuario, mensajeErrorAdmin } from "../../services/adminService";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonDetalleUsuario } from "../../components/Skeleton";
 import EstadoJornadaChip from "../../components/EstadoJornadaChip";
 import { Boton, Campo, Chip, Entrada, estilos } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
@@ -34,7 +34,7 @@ export default function UsuarioDetalleScreen({ navigation, route }) {
     }
   }, [usuario?.id, usuario?.nombre, usuario?.rol]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (cargando) return <LoadingSpinner mensaje="Cargando usuario..." />;
+  if (cargando) return <SkeletonDetalleUsuario />;
   if (!usuario) {
     return (
       <View style={estilos.vacio}>

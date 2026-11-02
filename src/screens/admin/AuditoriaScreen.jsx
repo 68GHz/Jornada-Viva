@@ -1,7 +1,7 @@
 import React from "react";
 import { FlatList, Text } from "react-native";
 import { useAuditoria } from "../../hooks/useAdmin";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonAuditoria } from "../../components/Skeleton";
 import { Vacio, estilos } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
 import { formatearFechaHoraNegocio } from "../../utils/zonaNegocio";
@@ -23,7 +23,7 @@ const ETIQUETA_ACCION = {
 // Historial de acciones administrativas (solo lectura, no se puede modificar)
 export default function AuditoriaScreen() {
   const { registros, cargando, error, enLinea } = useAuditoria(100);
-  if (cargando) return <LoadingSpinner mensaje="Cargando auditoría..." />;
+  if (cargando) return <SkeletonAuditoria />;
 
   return (
     <FlatList

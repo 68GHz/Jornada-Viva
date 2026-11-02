@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import { useEstadisticasApi } from "../../hooks/useAdmin";
 import { usaApi } from "../../config/api";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonPanelAdmin } from "../../components/Skeleton";
 import SaludoHeader from "../../components/SaludoHeader";
 import { colors } from "../../theme/colors";
 import { calcularEstadisticas } from "../../utils/usuariosAdmin";
@@ -53,7 +53,7 @@ export default function AdminDashboardScreen() {
   };
 
   if (conApi && remoto.cargando && !remoto.estadisticas) {
-    return <LoadingSpinner mensaje="Cargando el panel..." />;
+    return <SkeletonPanelAdmin />;
   }
 
   const error = conApi ? remoto.error : "El servidor de Jornada Viva no está configurado en esta versión de la app.";

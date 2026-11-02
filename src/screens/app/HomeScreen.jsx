@@ -6,7 +6,7 @@ import { useConnectivity } from "../../context/ConnectivityContext";
 import { useJornadas } from "../../context/JornadasContext";
 import SaludoHeader from "../../components/SaludoHeader";
 import JornadaCard from "../../components/JornadaCard";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonInicioEstudiante } from "../../components/Skeleton";
 import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
 import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
@@ -107,7 +107,7 @@ export default function HomeScreen({ navigation }) {
         }
         ListEmptyComponent={
           cargando ? (
-            <LoadingSpinner mensaje="Buscando jornadas disponibles..." />
+            <SkeletonInicioEstudiante />
           ) : error ? (
             <View style={styles.centrado}>
               <Ionicons name="warning-outline" size={44} color={colors.error} />

@@ -8,6 +8,7 @@ import {
   Alert,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { SkeletonCamara } from "../../components/Skeleton";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../theme/colors";
 import {
@@ -55,10 +56,7 @@ export default function EscanearAsistenciaScreen({ navigation, route }) {
 
   if (!permission) {
     return (
-      <View style={styles.centrado}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.texto}>Verificando permisos de cámara...</Text>
-      </View>
+      <SkeletonCamara />
     );
   }
 

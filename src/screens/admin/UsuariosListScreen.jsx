@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { useUsuarios } from "../../hooks/useAdmin";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonUsuarios } from "../../components/Skeleton";
 import { Boton, Chip, Entrada, Vacio, estilos } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
 import { ETIQUETA_ROL, ROLES } from "../../utils/roles";
@@ -23,7 +23,7 @@ export default function UsuariosListScreen({ navigation, route }) {
   const [estado, setEstado] = useState("todos");
 
   const lista = useMemo(() => filtrarUsuarios(usuarios, { texto, rol, estado }), [usuarios, texto, rol, estado]);
-  if (cargando) return <LoadingSpinner mensaje="Cargando usuarios..." />;
+  if (cargando) return <SkeletonUsuarios />;
 
   return (
     <FlatList

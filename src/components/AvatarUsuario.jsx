@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MorphingBlobatar } from "@blobatar/react-native";
 import { happy, idle } from "blobatar/expression";
 import { colors } from "../theme/colors";
@@ -30,14 +30,11 @@ function Inicial({ nombre, size }) {
 }
 
 // Avatar determinista del usuario (Blobatar), calculado en el dispositivo: funciona sin conexión.
-// - Respiración suave con Animated (sin librerías nativas); se apaga con "reducir movimiento".
-// - Al tocarlo reacciona con una expresión y vuelve a la normal.
-// - `editable`: permite cambiar de diseño; la elección se guarda por usuario en el dispositivo.
+// Es ESTÁTICO: no se mueve por sí solo. Solo cambia cuando el usuario toca «Cambiar avatar» (`editable`),
+// que genera otro diseño con una breve expresión de alegría; la elección se guarda por usuario.
 export default function AvatarUsuario({ uid, nombre, size = 96, editable = false }) {
   const [variante, setVariante] = useState(0);
   const [expresion, setExpresion] = useState(idle);
-  const [reducir, setReducir] = useState(false);
-  const respiro = useRef(new Animated.Value(0)).current;
   const temporizador = useRef(null);
 
   useEffect(() => {
@@ -47,29 +44,11 @@ export default function AvatarUsuario({ uid, nombre, size = 96, editable = false
         if (vivo && Number.isInteger(g?.variante)) setVariante(g.variante);
       });
     }
-    AccessibilityInfo.isReduceMotionEnabled().then((v) => vivo && setReducir(!!v)).catch(() => {});
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReducir);
     return () => {
       vivo = false;
-      sub?.remove?.();
       clearTimeout(temporizador.current);
     };
   }, [uid]);
-
-  useEffect(() => {
-    if (reducir) {
-      respiro.setValue(0);
-      return;
-    }
-    const lazo = Animated.loop(
-      Animated.sequence([
-        Animated.timing(respiro, { toValue: 1, duration: 2600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(respiro, { toValue: 0, duration: 2600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    );
-    lazo.start();
-    return () => lazo.stop();
-  }, [reducir, respiro]);
 
   const reaccionar = useCallback(() => {
     setExpresion(happy);
@@ -88,30 +67,17 @@ export default function AvatarUsuario({ uid, nombre, size = 96, editable = false
 
   return (
     <View style={styles.contenedor}>
-      <Pressable
-        onPress={reaccionar}
-        accessibilityRole="image"
-        accessibilityLabel={`Avatar de ${nombre || "estudiante"}`}
-      >
-        <Animated.View
-          style={{
-            transform: [
-              { translateY: respiro.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) },
-              { scale: respiro.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) },
-            ],
-          }}
-        >
-          <LimiteError respaldo={<Inicial nombre={nombre} size={size} />}>
-            <MorphingBlobatar
-              name={semilla}
-              size={size}
-              hue={HUE_INSTITUCIONAL}
-              expression={expresion}
-              title={`Avatar de ${nombre || "estudiante"}`}
-            />
-          </LimiteError>
-        </Animated.View>
-      </Pressable>
+      <View accessibilityRole="image" accessibilityLabel={`Avatar de ${nombre || "estudiante"}`}>
+        <LimiteError respaldo={<Inicial nombre={nombre} size={size} />}>
+          <MorphingBlobatar
+            name={semilla}
+            size={size}
+            hue={HUE_INSTITUCIONAL}
+            expression={expresion}
+            title={`Avatar de ${nombre || "estudiante"}`}
+          />
+        </LimiteError>
+      </View>
 
       {editable && (
         <Pressable

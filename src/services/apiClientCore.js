@@ -64,7 +64,7 @@ export function errorDeRespuesta(estado, cuerpo) {
 
 // `url`: base de la API. `obtenerToken`: () => Promise<string> (ID token de Firebase Auth).
 export function crearClienteApi({ url, obtenerToken, fetchFn = (...a) => fetch(...a), espera = 20000 }) {
-  async function llamar(metodo, ruta, { cuerpo, texto = false, espera: esperaPropia } = {}) {
+  async function llamar(metodo, ruta, { cuerpo, texto = false, binario = false, espera: esperaPropia } = {}) {
     if (!url) throw new Error("La API no está configurada (EXPO_PUBLIC_API_URL).");
 
     let token;
@@ -93,6 +93,9 @@ export function crearClienteApi({ url, obtenerToken, fetchFn = (...a) => fetch(.
       if (e?.name === "ErrorRed") throw e;
       throw new ErrorRed(); // fallo de red (en React Native: TypeError "Network request failed")
     }
+
+    // Archivos (p. ej. .xlsx): se devuelven como bytes, sin pasar por texto
+    if (binario && respuesta.ok) return new Uint8Array(await respuesta.arrayBuffer());
 
     const contenido = await respuesta.text().catch(() => "");
     if (!respuesta.ok) {

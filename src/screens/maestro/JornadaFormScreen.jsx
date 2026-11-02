@@ -33,7 +33,7 @@ import {
 import { usaApi } from "../../config/api";
 import BannerJornada from "../../components/BannerJornada";
 import CalendarioRango from "../../components/CalendarioRango";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonFormularioJornada } from "../../components/Skeleton";
 import { colors } from "../../theme/colors";
 import { CATEGORIAS, categoriaDeJornada } from "../../utils/categorias";
 import { ESPACIOS } from "../../utils/espacios";
@@ -61,17 +61,53 @@ const OPCIONES_DURACION = [
 ];
 const OPCIONES_CATEGORIA = CATEGORIAS.map((c) => ({ valor: c, etiqueta: c }));
 
-function Campo({ etiqueta, error, children }) {
+function Campo({ etiqueta, error, contador, children }) {
   return (
     <View style={styles.campo}>
-      <Text style={styles.etiqueta}>{etiqueta}</Text>
+      <View style={styles.etiquetaFila}>
+        <Text style={styles.etiqueta}>{etiqueta}</Text>
+        {!!contador && <Text style={styles.contador}>{contador}</Text>}
+      </View>
       {children}
       {!!error && (
-        <Text style={styles.error} accessibilityLiveRegion="polite">
-          {error}
-        </Text>
+        <View style={styles.errorFila} accessibilityLiveRegion="polite">
+          <Ionicons name="alert-circle" size={14} color={colors.error} />
+          <Text style={styles.error}>{error}</Text>
+        </View>
       )}
     </View>
+  );
+}
+
+// Tarjeta que agrupa campos relacionados
+function Seccion({ icono, titulo, subtitulo, children }) {
+  return (
+    <View style={styles.seccion}>
+      <View style={styles.seccionCabecera}>
+        <View style={styles.seccionIcono}>
+          <Ionicons name={icono} size={20} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.seccionTitulo}>{titulo}</Text>
+          {!!subtitulo && <Text style={styles.seccionSubtitulo}>{subtitulo}</Text>}
+        </View>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+// Campo de texto que resalta al enfocarlo
+function Entrada({ error, style, ...props }) {
+  const [enfocado, setEnfocado] = useState(false);
+  return (
+    <TextInput
+      style={[styles.input, enfocado && styles.inputEnfocado, !!error && styles.inputError, style]}
+      placeholderTextColor={colors.textDisabled}
+      onFocus={() => setEnfocado(true)}
+      onBlur={() => setEnfocado(false)}
+      {...props}
+    />
   );
 }
 
@@ -155,7 +191,7 @@ export default function JornadaFormScreen({ navigation, route }) {
     if (errores[campo]) setErrores((e) => ({ ...e, [campo]: undefined }));
   };
 
-  if (esEdicion && cargando) return <LoadingSpinner mensaje="Cargando jornada..." />;
+  if (esEdicion && cargando) return <SkeletonFormularioJornada />;
 
   // Defensa en la interfaz; el servidor rechaza igualmente cualquier cambio ajeno
   const permisos = esEdicion && jornada ? permisosJornada({ rol, uid: usuario?.uid, jornada, ahora }) : null;
@@ -276,218 +312,280 @@ export default function JornadaFormScreen({ navigation, route }) {
     ? dayjs(form.dia).locale("es").format("dddd D [de] MMMM [de] YYYY")
     : "Elegir fecha";
 
+  const ajustarCupos = (delta) => {
+    const actual = parseInt(form.cuposTotales, 10) || 0;
+    cambiar("cuposTotales", String(Math.max(1, Math.min(LIMITES.cuposMaximos, actual + delta))));
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.contenedor}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
-        contentContainerStyle={styles.contenido}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Campo etiqueta="Título" error={errores.titulo}>
-          <TextInput
-            style={[styles.input, errores.titulo && styles.inputError]}
-            value={form.titulo}
-            onChangeText={(v) => cambiar("titulo", v)}
-            maxLength={LIMITES.titulo}
-            placeholder="Ej. Jornada de salud"
-            placeholderTextColor={colors.textDisabled}
-            accessibilityLabel="Título"
-          />
-        </Campo>
+      <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
+        <View style={styles.intro}>
+          <View style={styles.introIcono}>
+            <Ionicons name={esEdicion ? "create" : "add-circle"} size={26} color={colors.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.introTitulo}>{esEdicion ? "Editar jornada" : "Nueva jornada"}</Text>
+            <Text style={styles.introTexto}>
+              {esEdicion
+                ? "Cambia lo que necesites. Los inscritos serán avisados."
+                : "Completa los datos para publicarla y abrir las inscripciones."}
+            </Text>
+          </View>
+        </View>
 
-        <Campo etiqueta="Descripción" error={errores.descripcion}>
-          <TextInput
-            style={[styles.input, styles.inputMultilinea, errores.descripcion && styles.inputError]}
-            value={form.descripcion}
-            onChangeText={(v) => cambiar("descripcion", v)}
-            maxLength={LIMITES.descripcion}
-            multiline
-            textAlignVertical="top"
-            placeholder="¿De qué trata la jornada?"
-            placeholderTextColor={colors.textDisabled}
-            accessibilityLabel="Descripción"
-          />
-        </Campo>
-
-        <Campo etiqueta="Entidad organizadora" error={errores.entidad}>
-          <TextInput
-            style={[styles.input, errores.entidad && styles.inputError]}
-            value={form.entidad}
-            onChangeText={(v) => cambiar("entidad", v)}
-            maxLength={LIMITES.entidad}
-            accessibilityLabel="Entidad organizadora"
-          />
-        </Campo>
-
-        <Campo etiqueta="Responsable" error={errores.responsable}>
-          <TextInput
-            style={[styles.input, errores.responsable && styles.inputError]}
-            value={form.responsable}
-            onChangeText={(v) => cambiar("responsable", v)}
-            maxLength={LIMITES.responsable}
-            accessibilityLabel="Responsable"
-          />
-        </Campo>
-
-        {esAdministrador && (
-          <Campo etiqueta="Gestor responsable">
-            <SelectDesplegable
-              titulo="Gestor responsable"
-              icono="person-outline"
-              placeholder="Elegir gestor"
-              valor={gestorId || usuario.uid}
-              opciones={responsables.map((g) => ({ valor: g.id, etiqueta: g.nombre || g.email }))}
-              onChange={(id) => {
-                claveCreacion.current = null;
-                falloPorConexion.current = false;
-                setGestorId(id);
-              }}
+        <Seccion icono="document-text-outline" titulo="Información" subtitulo="Qué es y de qué trata">
+          <Campo etiqueta="Título" error={errores.titulo} contador={`${form.titulo.length}/${LIMITES.titulo}`}>
+            <Entrada
+              error={errores.titulo}
+              value={form.titulo}
+              onChangeText={(v) => cambiar("titulo", v)}
+              maxLength={LIMITES.titulo}
+              placeholder="Ej. Jornada de salud"
+              accessibilityLabel="Título"
             />
           </Campo>
-        )}
 
-        <Campo etiqueta="Categoría" error={errores.categoria}>
-          <SelectDesplegable
-            titulo="Categoría"
-            icono="pricetag-outline"
-            placeholder="Elegir categoría"
-            valor={form.categoria}
-            opciones={OPCIONES_CATEGORIA}
-            onChange={(v) => cambiar("categoria", v)}
-            error={!!errores.categoria}
-          />
-        </Campo>
-
-        <Campo etiqueta="Espacio" error={errores.lugar}>
-          <SelectDesplegable
-            titulo="Espacio"
-            icono="location-outline"
-            placeholder="Elegir espacio"
-            valor={form.lugar}
-            opciones={ESPACIOS.map((espacio) => ({
-              valor: espacio,
-              etiqueta: espacio,
-              // FE-01: ya tiene una jornada a la fecha y hora elegidas (solo informa; se puede elegir)
-              aviso: ocupados.has(espacio) ? "Ocupado a esa hora" : undefined,
-            }))}
-            onChange={(v) => cambiar("lugar", v)}
-            error={!!errores.lugar}
-          />
-          {ocupados.size > 0 && (
-            <Text style={styles.ayuda}>
-              Los espacios con el aviso ya tienen una jornada a esa fecha y hora. Puedes elegirlos
-              igualmente.
-            </Text>
-          )}
-          {!!ocupadosElegido && (
-            <View style={styles.avisoEspacio} accessibilityLiveRegion="polite">
-              <Ionicons name="alert-circle-outline" size={16} color={colors.textPrimary} />
-              <Text style={styles.avisoEspacioTexto}>
-                {`${form.lugar} ya tiene «${ocupadosElegido[0].titulo}»${
-                  ocupadosElegido.length > 1 ? ` y ${ocupadosElegido.length - 1} más` : ""
-                } a esa hora. ${
-                  libres.length > 0
-                    ? `Espacios libres: ${listaCorta(libres)}.`
-                    : "No hay espacios libres a esa hora."
-                }`}
-              </Text>
-            </View>
-          )}
-        </Campo>
-
-        <Campo etiqueta="Fecha" error={errores.dia}>
-          <TouchableOpacity
-            style={[styles.input, styles.selectorFecha, errores.dia && styles.inputError]}
-            onPress={() => setCalendario(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Elegir fecha"
+          <Campo
+            etiqueta="Descripción"
+            error={errores.descripcion}
+            contador={`${form.descripcion.length}/${LIMITES.descripcion}`}
           >
-            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-            <Text style={[styles.selectorFechaTexto, !form.dia && { color: colors.textDisabled }]}>
-              {etiquetaDia}
+            <Entrada
+              error={errores.descripcion}
+              style={styles.inputMultilinea}
+              value={form.descripcion}
+              onChangeText={(v) => cambiar("descripcion", v)}
+              maxLength={LIMITES.descripcion}
+              multiline
+              textAlignVertical="top"
+              placeholder="¿De qué trata la jornada?"
+              accessibilityLabel="Descripción"
+            />
+          </Campo>
+
+          <Campo etiqueta="Categoría" error={errores.categoria}>
+            <SelectDesplegable
+              titulo="Categoría"
+              icono="pricetag-outline"
+              placeholder="Elegir categoría"
+              valor={form.categoria}
+              opciones={OPCIONES_CATEGORIA}
+              onChange={(v) => cambiar("categoria", v)}
+              error={!!errores.categoria}
+            />
+          </Campo>
+        </Seccion>
+
+        <Seccion icono="business-outline" titulo="Organización" subtitulo="Quién la organiza">
+          <Campo etiqueta="Entidad organizadora" error={errores.entidad}>
+            <Entrada
+              error={errores.entidad}
+              value={form.entidad}
+              onChangeText={(v) => cambiar("entidad", v)}
+              maxLength={LIMITES.entidad}
+              accessibilityLabel="Entidad organizadora"
+            />
+          </Campo>
+
+          <Campo etiqueta="Responsables" error={errores.responsable}>
+            <Entrada
+              error={errores.responsable}
+              value={form.responsable}
+              onChangeText={(v) => cambiar("responsable", v)}
+              maxLength={LIMITES.responsable}
+              placeholder="Ej. Ana Pérez, Luis Gómez"
+              accessibilityLabel="Responsables"
+            />
+            <Text style={styles.ayuda}>
+              Si hay más de un responsable, sepáralos con comas. Ejemplo: Ana Pérez, Luis Gómez.
             </Text>
-          </TouchableOpacity>
-        </Campo>
+          </Campo>
 
-        <Campo etiqueta="Hora de inicio" error={errores.hora}>
-          <RelojHora valor={form.hora} onChange={(v) => cambiar("hora", v)} error={!!errores.hora} />
-        </Campo>
+          {esAdministrador && (
+            <Campo etiqueta="Gestor responsable">
+              <SelectDesplegable
+                titulo="Gestor responsable"
+                icono="person-outline"
+                placeholder="Elegir gestor"
+                valor={gestorId || usuario.uid}
+                opciones={responsables.map((g) => ({ valor: g.id, etiqueta: g.nombre || g.email }))}
+                onChange={(id) => {
+                  claveCreacion.current = null;
+                  falloPorConexion.current = false;
+                  setGestorId(id);
+                }}
+              />
+            </Campo>
+          )}
+        </Seccion>
 
-        <Campo etiqueta="Duración" error={errores.duracionMin}>
-          <SelectDesplegable
-            titulo="Duración"
-            icono="hourglass-outline"
-            placeholder="Elegir duración"
-            valor={duracionPersonalizada ? OTRA : form.duracionMin}
-            textoValor={form.duracionMin ? `${form.duracionMin} min` : undefined}
-            opciones={OPCIONES_DURACION}
-            onChange={(v) => {
-              if (v === OTRA) {
-                setDuracionOtra(true);
-                if (DURACIONES_RAPIDAS.map(String).includes(form.duracionMin)) cambiar("duracionMin", "");
-              } else {
-                setDuracionOtra(false);
-                cambiar("duracionMin", v);
-              }
-            }}
-            error={!!errores.duracionMin}
-          />
+        <Seccion icono="calendar-outline" titulo="Lugar y horario" subtitulo="Dónde y cuándo ocurre">
+          <Campo etiqueta="Fecha" error={errores.dia}>
+            <TouchableOpacity
+              style={[styles.input, styles.selectorFecha, errores.dia && styles.inputError]}
+              onPress={() => setCalendario(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Elegir fecha"
+            >
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              <Text style={[styles.selectorFechaTexto, !form.dia && { color: colors.textDisabled }]}>
+                {etiquetaDia}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </Campo>
+
+          <View style={styles.dosColumnas}>
+            <View style={{ flex: 1 }}>
+              <Campo etiqueta="Hora de inicio" error={errores.hora}>
+                <RelojHora valor={form.hora} onChange={(v) => cambiar("hora", v)} error={!!errores.hora} />
+              </Campo>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Campo etiqueta="Duración" error={errores.duracionMin}>
+                <SelectDesplegable
+                  titulo="Duración"
+                  icono="hourglass-outline"
+                  placeholder="Elegir duración"
+                  valor={duracionPersonalizada ? OTRA : form.duracionMin}
+                  textoValor={form.duracionMin ? `${form.duracionMin} min` : undefined}
+                  opciones={OPCIONES_DURACION}
+                  onChange={(v) => {
+                    if (v === OTRA) {
+                      setDuracionOtra(true);
+                      if (DURACIONES_RAPIDAS.map(String).includes(form.duracionMin)) cambiar("duracionMin", "");
+                    } else {
+                      setDuracionOtra(false);
+                      cambiar("duracionMin", v);
+                    }
+                  }}
+                  error={!!errores.duracionMin}
+                />
+              </Campo>
+            </View>
+          </View>
+
           {duracionPersonalizada && (
-            <TextInput
-              style={[styles.input, styles.inputOtra, errores.duracionMin && styles.inputError]}
+            <Entrada
+              error={errores.duracionMin}
+              style={styles.inputOtra}
               value={form.duracionMin}
               onChangeText={(v) => cambiar("duracionMin", v.replace(/[^0-9]/g, ""))}
               maxLength={4}
               keyboardType="number-pad"
               placeholder="Minutos (ej. 75)"
-              placeholderTextColor={colors.textDisabled}
               accessibilityLabel="Duración en minutos"
             />
           )}
-          <Text style={styles.ayuda}>{textoFin}</Text>
-        </Campo>
 
-        <Campo etiqueta="Cupos" error={errores.cuposTotales}>
-          <TextInput
-            style={[styles.input, errores.cuposTotales && styles.inputError]}
-            value={form.cuposTotales}
-            onChangeText={(v) => cambiar("cuposTotales", v.replace(/[^0-9]/g, ""))}
-            maxLength={4}
-            keyboardType="number-pad"
-            placeholder="Ej. 40"
-            placeholderTextColor={colors.textDisabled}
-            accessibilityLabel="Cupos"
-          />
-        </Campo>
+          <View style={styles.resumenHora}>
+            <Ionicons name="time-outline" size={16} color={colors.primary} />
+            <Text style={styles.resumenHoraTexto}>{textoFin}</Text>
+          </View>
 
-        {/* Solo con la API: es quien guarda el campo (las reglas del modo local no lo admiten) */}
-        {usaApi("jornadas") && (
-          <Campo etiqueta="Banner (opcional)" error={errores.bannerUrl}>
-            <TextInput
-              style={[styles.input, errores.bannerUrl && styles.inputError]}
-              value={form.bannerUrl}
-              onChangeText={(v) => cambiar("bannerUrl", v)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="https://ejemplo.com/banner.jpg"
-              placeholderTextColor={colors.textDisabled}
-              accessibilityLabel="Enlace del banner"
+          <Campo etiqueta="Espacio" error={errores.lugar}>
+            <SelectDesplegable
+              titulo="Espacio"
+              icono="location-outline"
+              placeholder="Elegir espacio"
+              valor={form.lugar}
+              opciones={ESPACIOS.map((espacio) => ({
+                valor: espacio,
+                etiqueta: espacio,
+                // FE-01: ya tiene una jornada a la fecha y hora elegidas (solo informa; se puede elegir)
+                aviso: ocupados.has(espacio) ? "Ocupado a esa hora" : undefined,
+              }))}
+              onChange={(v) => cambiar("lugar", v)}
+              error={!!errores.lugar}
             />
-            <Text style={styles.ayuda}>
-              Enlace https de una imagen. Déjalo vacío si la jornada no lleva banner.
-            </Text>
-            <BannerJornada
-              url={form.bannerUrl.trim()}
-              altura={110}
-              mensajeError="No se pudo cargar la imagen de este enlace."
-              style={{ marginTop: 8 }}
-            />
+            {ocupados.size > 0 && !ocupadosElegido && (
+              <Text style={styles.ayuda}>
+                Los espacios con el aviso ya tienen una jornada a esa fecha y hora. Puedes elegirlos igualmente.
+              </Text>
+            )}
+            {!!ocupadosElegido && (
+              <View style={styles.avisoEspacio} accessibilityLiveRegion="polite">
+                <Ionicons name="alert-circle-outline" size={16} color={colors.textPrimary} />
+                <Text style={styles.avisoEspacioTexto}>
+                  {`${form.lugar} ya tiene «${ocupadosElegido[0].titulo}»${
+                    ocupadosElegido.length > 1 ? ` y ${ocupadosElegido.length - 1} más` : ""
+                  } a esa hora. ${
+                    libres.length > 0
+                      ? `Espacios libres: ${listaCorta(libres)}.`
+                      : "No hay espacios libres a esa hora."
+                  }`}
+                </Text>
+              </View>
+            )}
           </Campo>
-        )}
+        </Seccion>
 
+        <Seccion icono="people-outline" titulo="Cupos y difusión" subtitulo="Cuántas personas y cómo se ve">
+          <Campo etiqueta="Cupos" error={errores.cuposTotales}>
+            <View style={styles.cupos}>
+              <TouchableOpacity
+                style={styles.cuposBoton}
+                onPress={() => ajustarCupos(-5)}
+                accessibilityRole="button"
+                accessibilityLabel="Quitar 5 cupos"
+              >
+                <Ionicons name="remove" size={22} color={colors.primary} />
+              </TouchableOpacity>
+              <Entrada
+                error={errores.cuposTotales}
+                style={styles.cuposInput}
+                value={form.cuposTotales}
+                onChangeText={(v) => cambiar("cuposTotales", v.replace(/[^0-9]/g, ""))}
+                maxLength={4}
+                keyboardType="number-pad"
+                placeholder="40"
+                textAlign="center"
+                accessibilityLabel="Cupos"
+              />
+              <TouchableOpacity
+                style={styles.cuposBoton}
+                onPress={() => ajustarCupos(5)}
+                accessibilityRole="button"
+                accessibilityLabel="Agregar 5 cupos"
+              >
+                <Ionicons name="add" size={22} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </Campo>
+
+          {/* Solo con la API: es quien guarda el campo (las reglas del modo local no lo admiten) */}
+          {usaApi("jornadas") && (
+            <Campo etiqueta="Banner (opcional)" error={errores.bannerUrl}>
+              <Entrada
+                error={errores.bannerUrl}
+                value={form.bannerUrl}
+                onChangeText={(v) => cambiar("bannerUrl", v)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://ejemplo.com/banner.jpg"
+                accessibilityLabel="Enlace del banner"
+              />
+              <Text style={styles.ayuda}>
+                Enlace https de una imagen. Déjalo vacío si la jornada no lleva banner.
+              </Text>
+              <BannerJornada
+                url={form.bannerUrl.trim()}
+                altura={110}
+                mensajeError="No se pudo cargar la imagen de este enlace."
+                style={{ marginTop: 8 }}
+              />
+            </Campo>
+          )}
+        </Seccion>
+      </ScrollView>
+
+      {/* Barra de acción fija: el botón siempre a la mano */}
+      <View style={styles.barra}>
         <TouchableOpacity
           style={[styles.boton, guardando && styles.botonDeshabilitado]}
           onPress={guardar}
@@ -499,10 +597,13 @@ export default function JornadaFormScreen({ navigation, route }) {
           {guardando ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.botonTexto}>{esEdicion ? "Guardar cambios" : "Crear jornada"}</Text>
+            <>
+              <Ionicons name={esEdicion ? "save-outline" : "checkmark-circle-outline"} size={20} color={colors.white} />
+              <Text style={styles.botonTexto}>{esEdicion ? "Guardar cambios" : "Crear jornada"}</Text>
+            </>
           )}
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       <CalendarioRango
         visible={calendario}
@@ -522,66 +623,125 @@ export default function JornadaFormScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   contenedor: { flex: 1, backgroundColor: colors.background },
-  contenido: { padding: 20, gap: 4, paddingBottom: 40 },
-  campo: { marginBottom: 14 },
-  etiqueta: { fontSize: 13, fontWeight: "600", color: colors.textPrimary, marginBottom: 6 },
+  contenido: { padding: 16, gap: 14, paddingBottom: 24 },
+  intro: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    padding: 16,
+  },
+  introIcono: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  introTitulo: { fontSize: 20, fontWeight: "800", color: colors.white },
+  introTexto: { fontSize: 13, lineHeight: 18, color: "rgba(255,255,255,0.88)", marginTop: 2 },
+  seccion: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  seccionCabecera: { flexDirection: "row", alignItems: "center", gap: 12 },
+  seccionIcono: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.primaryPale,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  seccionTitulo: { fontSize: 16, fontWeight: "800", color: colors.textPrimary },
+  seccionSubtitulo: { fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+  campo: { gap: 6 },
+  etiquetaFila: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  etiqueta: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+  contador: { fontSize: 11, color: colors.textDisabled },
   input: {
     backgroundColor: colors.surface,
     borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 10,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    minHeight: 48,
+    paddingVertical: 12,
     fontSize: 15,
     color: colors.textPrimary,
   },
-  inputMultilinea: { minHeight: 110 },
+  inputEnfocado: { borderColor: colors.primary, backgroundColor: "#FBFEFC" },
+  inputMultilinea: { minHeight: 110, paddingTop: 12 },
   inputError: { borderColor: colors.error },
-  error: { color: colors.error, fontSize: 12, marginTop: 4 },
-  inputOtra: { marginTop: 8 },
-  ayuda: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
-  espacio: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  espacioOcupado: {
+  errorFila: { flexDirection: "row", alignItems: "center", gap: 4 },
+  error: { color: colors.error, fontSize: 12, flex: 1 },
+  inputOtra: { marginTop: -4 },
+  ayuda: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
+  dosColumnas: { flexDirection: "row", gap: 12 },
+  resumenHora: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    borderColor: colors.warning,
-    backgroundColor: colors.background,
+    gap: 8,
+    backgroundColor: colors.primaryPale,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: -4,
   },
-  espacioActivo: { backgroundColor: colors.primary, borderColor: colors.primary },
-  espacioTexto: { fontSize: 13, fontWeight: "600", color: colors.textPrimary },
-  espacioTextoOcupado: { color: colors.textSecondary },
-  espacioTextoActivo: { color: colors.white },
+  resumenHoraTexto: { flex: 1, fontSize: 12, lineHeight: 17, color: colors.textPrimary, fontWeight: "600" },
   avisoEspacio: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-    marginTop: 8,
     padding: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: "#FFF4DE",
     borderWidth: 1,
     borderColor: colors.warning,
   },
   avisoEspacioTexto: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.textPrimary },
   selectorFecha: { flexDirection: "row", alignItems: "center", gap: 10 },
-  selectorFechaTexto: { fontSize: 15, color: colors.textPrimary, textTransform: "capitalize" },
-  boton: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 15,
+  selectorFechaTexto: { flex: 1, fontSize: 15, color: colors.textPrimary, textTransform: "capitalize" },
+  cupos: { flexDirection: "row", alignItems: "center", gap: 10 },
+  cuposBoton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primaryPale,
     alignItems: "center",
-    marginTop: 10,
+    justifyContent: "center",
+  },
+  cuposInput: { flex: 1, fontSize: 18, fontWeight: "800" },
+  barra: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+  },
+  boton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    minHeight: 52,
   },
   botonDeshabilitado: { opacity: 0.6 },
-  botonTexto: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  botonTexto: { color: colors.white, fontSize: 16, fontWeight: "800" },
   centrado: {
     flex: 1,
     alignItems: "center",
