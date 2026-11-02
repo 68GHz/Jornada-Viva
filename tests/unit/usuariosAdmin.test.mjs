@@ -193,7 +193,7 @@ describe("reporte de jornadas (CSV)", () => {
       { titulo: "Sin cupos", fecha: null, lugar: "Cancha", estado: "Cancelada", gestor: "Hugo", cuposTotales: 0, cuposOcupados: 0 },
     ]);
     const lineas = csv.split("\r\n");
-    assert.equal(lineas[0], "﻿sep=;");
+    assert.equal(lineas[0], "﻿Reporte de jornadas");
     assert.ok(lineas.includes("Total de jornadas;2"));
     assert.ok(lineas.includes("'=1+1;04/11/2026 09:15;Coliseo;Activa;Gina;10;4;40"));
     assert.ok(lineas.includes("Sin cupos;;Cancha;Cancelada;Hugo;0;0;0"));

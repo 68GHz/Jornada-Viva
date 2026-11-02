@@ -12,6 +12,7 @@ import * as estadisticas from "./servicios/estadisticas.js";
 import * as auditoria from "./servicios/auditoria.js";
 import * as espacios from "./servicios/espacios.js";
 import { desactivarVencidas } from "./servicios/mantenimiento.js";
+import { TIPO_XLSX } from "./dominio/planillaXlsx.js";
 import { ANTIGUEDAD_MAX_CANCELACION_MS } from "./dominio/plazoCancelacion.js";
 import { ANTIGUEDAD_MAX_ASISTENCIA_MS } from "./dominio/relojDiferido.js";
 
@@ -137,6 +138,11 @@ export function crearApp({
     res.json(await espacios.alternos(ctx, req.usuario, req.params.id));
   });
 
+  v1.get("/jornadas/:id/planilla.xlsx", async (req, res) => {
+    const { nombre, buffer } = await jornadas.planillaXlsx(ctx, req.usuario, req.params.id);
+    res.type(TIPO_XLSX).set("Content-Disposition", `attachment; filename="${nombre}"`).send(buffer);
+  });
+
   // ---- Asistencia (QR firmado y marcado manual) ----
   v1.post("/jornadas/:id/asistencia/codigo", async (req, res) => {
     res.json(await asistencia.emitirCodigo(ctx, req.usuario, req.params.id));
@@ -194,6 +200,10 @@ export function crearApp({
   // ---- Estadísticas y reportes (M6) ----
   v1.get("/admin/estadisticas", soloAdministrador, async (_req, res) => {
     res.json(await estadisticas.estadisticas(ctx));
+  });
+  v1.get("/admin/reporte-jornadas.xlsx", soloAdministrador, async (req, res) => {
+    const { nombre, buffer } = await estadisticas.reporteJornadasXlsx(ctx, req.usuario);
+    res.type(TIPO_XLSX).set("Content-Disposition", `attachment; filename="${nombre}"`).send(buffer);
   });
   v1.get("/admin/reporte-jornadas.csv", soloAdministrador, async (req, res) => {
     const { nombre, csv } = await estadisticas.reporteJornadas(ctx, req.usuario);

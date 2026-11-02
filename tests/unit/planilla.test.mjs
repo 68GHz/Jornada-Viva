@@ -23,9 +23,10 @@ describe("planilla de inscritos (CSV para Excel)", () => {
   const csv = generarPlanillaCsv(jornada, inscritos);
   const lineas = csv.split("\r\n");
 
-  it("empieza con BOM UTF-8 y la directiva sep=; para que Excel separe en columnas", () => {
+  it("empieza con BOM UTF-8 y NO lleva la directiva sep=; (con ella Excel ignora el BOM y daña tildes y ñ)", () => {
     assert.equal(csv.charCodeAt(0), 0xfeff);
-    assert.equal(lineas[0], "﻿sep=;");
+    assert.equal(lineas[0], "﻿Planilla de inscritos");
+    assert.ok(!csv.includes("sep="));
   });
 
   it("usa saltos de línea CRLF y termina con salto de línea", () => {

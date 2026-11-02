@@ -35,6 +35,7 @@ Límites: título/entidad/responsable ≤ 120, descripción ≤ 2000, cupos 1–
 | `DELETE /v1/jornadas/{id}` | ídem | Las inscripciones se conservan; avisa | `204` |
 | `GET /v1/jornadas/{id}/inscritos` | gestor (suyas), administrador | — | `200 { inscritos: [{ id, userId, nombreUsuario, emailUsuario, inscritoEn (ms), asistio, metodoAsistencia ("qr" \| "manual" \| null) }] }` |
 | `GET /v1/jornadas/{id}/planilla.csv` | ídem | CSV UTF-8 con BOM, `sep=;`, fórmulas neutralizadas | `200 text/csv` (adjunto `planilla-<titulo>.csv`) |
+| `GET /v1/jornadas/{id}/planilla.xlsx` | ídem | **Formato principal.** Excel con encabezado en color, anchos de columna, fechas reales, filtros y fila fija; tildes, ñ y comas intactas (CSV queda para versiones antiguas de la app) | `200 application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (adjunto `planilla-<titulo>.xlsx`) |
 | `POST /v1/mantenimiento/vencidas` | cualquier cuenta activa | Desactiva las activas que ya terminaron (inicio + `duracionMin`; 60 si no la tienen). Una jornada en curso sigue activa. No avisa | `200 { desactivadas }` |
 
 ### Estado de una jornada
@@ -102,6 +103,7 @@ Las notificaciones las crea el servidor al ejecutar los cambios de jornada (la a
 |---|---|
 | `GET /v1/admin/estadisticas` | `200` indicadores (`totalUsuarios`, `estudiantes`, `gestores`, `administradores`, `cuentasInactivas`, `totalJornadas`, `porEstado`, `porEspacio`, `porGestor`, `cuposTotales`, `cuposOcupados`, `ocupacion`) + `porGestorNombre: [{ id, nombre, jornadas }]` |
 | `GET /v1/admin/reporte-jornadas.csv` | `200 text/csv`; registra `reporte.exportar` en la auditoría |
+| `GET /v1/admin/reporte-jornadas.xlsx` | **Formato principal.** Mismo reporte en Excel (resumen, ocupación en %, estado en color); registra `reporte.exportar` en la auditoría |
 
 ## Lo que NO tiene endpoint (a propósito)
 

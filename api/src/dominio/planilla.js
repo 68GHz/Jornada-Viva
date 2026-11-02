@@ -1,9 +1,10 @@
 import { formatearFechaHoraNegocio } from "./zonaNegocio.js";
 
 // Planilla de inscritos en CSV compatible con Excel:
-//  - separador `;` y una primera línea `sep=;` (Excel la usa para separar en columnas
-//    sea cual sea la configuración regional)
+//  - separador `;` (el de Excel en español)
 //  - UTF-8 con BOM (tildes y ñ correctas) y saltos de línea CRLF
+//  - SIN la línea `sep=;`: con ella Excel ignora el BOM y lee el archivo como ANSI, y las tildes y la ñ
+//    salen como «Ã³», «Ã±» (comprobado con una planilla real). El formato recomendado es el .xlsx.
 //  - las celdas que empiezan por = + - @ se neutralizan para que un nombre malicioso no
 //    se ejecute como fórmula al abrir el archivo
 const SEPARADOR = ";";
@@ -30,7 +31,6 @@ export function generarPlanillaCsv(jornada, inscritos) {
   );
 
   const lineas = [
-    `sep=${SEPARADOR}`,
     fila(["Planilla de inscritos"]),
     fila(["Jornada", jornada.titulo]),
     fila(["Fecha", formatearFechaHoraNegocio(jornada.fecha)]),
@@ -79,7 +79,6 @@ export const COLUMNAS_REPORTE = [
 // `filas`: [{ titulo, fecha (ms), lugar, estado, gestor, cuposTotales, cuposOcupados }]
 export function generarReporteJornadasCsv(filas) {
   const lineas = [
-    `sep=${SEPARADOR}`,
     fila(["Reporte de jornadas"]),
     fila(["Total de jornadas", filas.length]),
     "",

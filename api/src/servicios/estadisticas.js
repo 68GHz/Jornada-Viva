@@ -1,6 +1,7 @@
 import { normalizarJornada } from "../dominio/jornadaFecha.js";
 import { ETIQUETA_ESTADO, estadoJornada } from "../dominio/estadoJornada.js";
 import { generarReporteJornadasCsv } from "../dominio/planilla.js";
+import { generarReporteJornadasXlsx } from "../dominio/planillaXlsx.js";
 import { calcularEstadisticas } from "../dominio/usuariosAdmin.js";
 import { actorDe, agregarAuditoria } from "./auditoria.js";
 
@@ -35,7 +36,8 @@ export async function estadisticas(ctx) {
   };
 }
 
-export async function reporteJornadas(ctx, admin) {
+// Filas del reporte de jornadas; deja constancia en la auditoría (en la misma operación)
+async function filasReporte(ctx, admin) {
   const { db } = ctx;
   const { usuarios, jornadas } = await cargarTodo(db);
   const nombres = new Map(usuarios.map((u) => [u.id, u.nombre || u.email]));
@@ -58,5 +60,19 @@ export async function reporteJornadas(ctx, admin) {
     detalle: `${filas.length} jornadas`,
   });
   await lote.commit();
+  return filas;
+}
+
+export async function reporteJornadas(ctx, admin) {
+  const filas = await filasReporte(ctx, admin);
   return { nombre: "reporte-jornadas.csv", csv: generarReporteJornadasCsv(filas) };
+}
+
+// Mismo reporte en Excel (.xlsx)
+export async function reporteJornadasXlsx(ctx, admin) {
+  const filas = await filasReporte(ctx, admin);
+  return {
+    nombre: "reporte-jornadas.xlsx",
+    buffer: await generarReporteJornadasXlsx(filas, { generadoEn: ctx.ahora() }),
+  };
 }

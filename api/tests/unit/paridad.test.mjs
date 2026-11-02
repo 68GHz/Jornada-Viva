@@ -50,7 +50,7 @@ describe("la API usa las mismas reglas puras que la app", () => {
     };
     const casos = [
       {}, { titulo: "" }, { titulo: "x".repeat(121) }, { descripcion: "" }, { descripcion: "x".repeat(2001) },
-      { entidad: "  " }, { responsable: "" }, { lugar: "Piscina" }, { lugar: "" },
+      { entidad: "  " }, { responsable: "" }, { responsable: "Ana,Luis" }, { responsable: " Ana ,, Luis  Gómez , " }, { responsable: " , ," }, { responsable: "x".repeat(301) }, { lugar: "Piscina" }, { lugar: "" },
       { duracionMin: "" }, { duracionMin: "9" }, { duracionMin: "10" }, { duracionMin: "1440" }, { duracionMin: "1441" },
       { duracionMin: "abc" }, { duracionMin: "45.5" }, { duracionMin: "-30" },
       { cuposTotales: "0" }, { cuposTotales: "1001" }, { cuposTotales: "2.5" }, { cuposTotales: "abc" }, { cuposTotales: "" },

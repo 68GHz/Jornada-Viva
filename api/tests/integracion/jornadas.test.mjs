@@ -457,7 +457,8 @@ describe("M3 · gestión de jornadas (gestor y administrador)", () => {
       // fetch().text() descarta el BOM: se comprueban los bytes reales de la respuesta
       const crudo = await fetch(`${api.base}/v1/jornadas/jA/planilla.csv`, { headers: { Authorization: "Bearer gestorA" } });
       assert.deepEqual([...new Uint8Array(await crudo.arrayBuffer()).slice(0, 3)], [0xef, 0xbb, 0xbf], "UTF-8 con BOM");
-      assert.ok(csv.startsWith("sep=;\r\n"));
+      assert.ok(csv.startsWith("Planilla de inscritos\r\n"));
+      assert.ok(!csv.includes("sep="));
       assert.ok(csv.includes("Total de inscritos;2"));
       assert.ok(csv.includes("'=CMD()"), "la fórmula queda neutralizada");
       assert.ok(csv.includes(";Sí"));

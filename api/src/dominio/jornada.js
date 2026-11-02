@@ -8,11 +8,20 @@ export const LIMITES = {
   titulo: 120,
   descripcion: 2000,
   entidad: 120,
-  responsable: 120,
+  responsable: 300,
   cuposMaximos: 1000,
 };
 
 const texto = (v) => String(v ?? "").trim();
+
+// Responsables: se pueden indicar varios separados por comas. Se guardan en un solo texto con el
+// formato «Ana, Luis» (sin espacios de más ni comas vacías).
+const normalizarResponsables = (v) =>
+  String(v ?? "")
+    .split(",")
+    .map((nombre) => nombre.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(", ");
 
 // Valida los datos de una jornada (crear/editar) con las mismas reglas y mensajes que el
 // formulario de la app (validarJornada) y que firestore.rules. La fecha llega ya combinada, en
@@ -32,7 +41,7 @@ export function validarDatosJornada(campos, { ahora, cuposOcupados = 0, exigirFu
   const titulo = texto(c.titulo);
   const descripcion = texto(c.descripcion);
   const entidad = texto(c.entidad);
-  const responsable = texto(c.responsable);
+  const responsable = normalizarResponsables(c.responsable);
   const lugar = texto(c.lugar);
 
   if (!titulo) errores.titulo = "Escribe el título de la jornada.";

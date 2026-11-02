@@ -4,6 +4,7 @@ import { validarDatosJornada } from "../dominio/jornada.js";
 import { fechaAMillis, normalizarJornada } from "../dominio/jornadaFecha.js";
 import { esAdministrador, esGestor, normalizarRol, puedeAdministrarJornada, puedeSerResponsable } from "../dominio/roles.js";
 import { generarPlanillaCsv, nombreArchivoPlanilla } from "../dominio/planilla.js";
+import { aNombreXlsx, generarPlanillaXlsx } from "../dominio/planillaXlsx.js";
 import { ErrorApi, noEncontrado, sinPermiso, validacion } from "../errores.js";
 import { actorDe, agregarAuditoria } from "./auditoria.js";
 import { notificarSinFallar } from "./avisos.js";
@@ -276,4 +277,14 @@ export async function planilla(ctx, usuario, jornadaId) {
   const { jornada, inscritos: lista } = await inscritos(ctx, usuario, jornadaId);
   if (!jornada) throw noEncontrado("La jornada no existe o ya fue eliminada.");
   return { nombre: nombreArchivoPlanilla(jornada), csv: generarPlanillaCsv(jornada, lista) };
+}
+
+// Planilla de inscritos en Excel (.xlsx): formato legible, con columnas ajustadas y fechas reales
+export async function planillaXlsx(ctx, usuario, jornadaId) {
+  const { jornada, inscritos: lista } = await inscritos(ctx, usuario, jornadaId);
+  if (!jornada) throw noEncontrado("La jornada no existe o ya fue eliminada.");
+  return {
+    nombre: aNombreXlsx(nombreArchivoPlanilla(jornada)),
+    buffer: await generarPlanillaXlsx(jornada, lista, { generadoEn: ctx.ahora() }),
+  };
 }

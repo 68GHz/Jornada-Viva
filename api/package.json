@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "dayjs": "^1.11.23",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "firebase-admin": "^13.0.0"
   }

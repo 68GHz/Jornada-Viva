@@ -92,6 +92,16 @@ describe("validación del formulario de jornada", () => {
     }
   });
 
+  it("admite varios responsables separados por comas y los deja ordenados", () => {
+    const resp = (responsable) => validarJornada(formulario({ responsable }), { ahora: AHORA }).datos?.responsable;
+    assert.equal(resp("Ana Pérez, Luis Gómez"), "Ana Pérez, Luis Gómez");
+    assert.equal(resp("Ana,Luis"), "Ana, Luis");
+    assert.equal(resp("  Ana  Pérez ,, Luis ,  "), "Ana Pérez, Luis");
+    assert.ok(errores({ responsable: " , , " }).responsable, "solo comas no es un responsable");
+    assert.ok(errores({ responsable: "x".repeat(LIMITES.responsable + 1) }).responsable);
+    assert.equal(errores({ responsable: "x".repeat(LIMITES.responsable) }).responsable, undefined);
+  });
+
   it("respeta los límites de longitud", () => {
     assert.ok(errores({ titulo: "x".repeat(LIMITES.titulo + 1) }).titulo);
     assert.equal(errores({ titulo: "x".repeat(LIMITES.titulo) }).titulo, undefined);

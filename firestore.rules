@@ -112,7 +112,7 @@ service cloud.firestore {
         && textoValido(d.titulo, 120)
         && textoValido(d.descripcion, 2000)
         && textoValido(d.entidad, 120)
-        && textoValido(d.responsable, 120)
+        && textoValido(d.responsable, 300)
         && d.lugar in [
           'Bloque 1', 'Bloque 2', 'Bloque 3', 'Bloque 4', 'Bloque 5', 'Bloque 6',
           'Bloque 7', 'Bloque 8', 'Bloque 9', 'Bloque 10', 'Bloque 11', 'Bloque 12',

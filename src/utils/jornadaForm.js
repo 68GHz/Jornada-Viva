@@ -9,7 +9,7 @@ export const LIMITES = {
   titulo: 120,
   descripcion: 2000,
   entidad: 120,
-  responsable: 120,
+  responsable: 300,
   cuposMaximos: 1000,
 };
 
@@ -19,6 +19,15 @@ export const DURACION_SUGERIDA = String(DURACION_POR_DEFECTO);
 export const ENTIDAD_POR_DEFECTO = "Institución Universitaria Tecnológico de Antioquia";
 
 const texto = (v) => String(v ?? "").trim();
+
+// Responsables: se pueden indicar varios separados por comas. Se guardan en un solo texto con el
+// formato «Ana, Luis» (sin espacios de más ni comas vacías).
+const normalizarResponsables = (v) =>
+  String(v ?? "")
+    .split(",")
+    .map((nombre) => nombre.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(", ");
 
 // Clave de idempotencia para un intento de «crear jornada». El formulario genera una y la repite
 // al reintentar sin cambiar nada; si el usuario modifica algo, se genera otra. Así un error de
@@ -45,7 +54,7 @@ export function validarJornada(campos, { ahora = Date.now(), cuposOcupados = 0, 
   const titulo = texto(campos.titulo);
   const descripcion = texto(campos.descripcion);
   const entidad = texto(campos.entidad);
-  const responsable = texto(campos.responsable);
+  const responsable = normalizarResponsables(campos.responsable);
   const lugar = texto(campos.lugar);
 
   if (!titulo) errores.titulo = "Escribe el título de la jornada.";

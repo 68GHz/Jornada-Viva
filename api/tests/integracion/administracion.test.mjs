@@ -215,7 +215,8 @@ describe("M6 · estadísticas y reporte global (solo administrador)", () => {
     assert.match(r.cabeceras.get("content-type"), /text\/csv/);
     assert.match(r.cabeceras.get("content-disposition"), /reporte-jornadas\.csv/);
     const csv = r.cuerpo;
-    assert.ok(csv.startsWith("sep=;"));
+    assert.ok(csv.startsWith("Reporte de jornadas"));
+    assert.ok(!csv.includes("sep="));
     assert.ok(csv.includes("Total de jornadas;4"));
     assert.ok(csv.includes("Jornada;Fecha;Espacio;Estado;Gestor;Cupos;Inscritos;Ocupación (%)".replace("Jornada;Fecha", "Jornada;Fecha")));
     assert.ok(csv.includes(";Coliseo;Activa;Gestor A;10;5;50"));
