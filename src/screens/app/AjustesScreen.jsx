@@ -67,7 +67,7 @@ export default function AjustesScreen({ navigation }) {
   return (
     <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
       <View style={styles.perfil}>
-        <AvatarUsuario uid={usuario?.uid} nombre={nombre} size={104} editable />
+        <AvatarUsuario uid={usuario?.uid} nombre={nombre} size={104} editable onPress={() => navigation.navigate("Perfil")} />
         <Text style={styles.nombre}>{nombre}</Text>
         <View style={styles.rol}>
           <Text style={styles.rolTexto}>{etiquetaRol}</Text>

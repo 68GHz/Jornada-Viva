@@ -9,7 +9,7 @@ import { leerLocal, guardarLocal } from "../services/localStore";
 const HUE_INSTITUCIONAL = 158;
 
 // Si el dibujo fallara, se muestra la inicial: el avatar nunca debe tumbar la pantalla
-class LimiteError extends React.Component {
+export class LimiteError extends React.Component {
   state = { fallo: false };
   static getDerivedStateFromError() {
     return { fallo: true };
@@ -19,7 +19,7 @@ class LimiteError extends React.Component {
   }
 }
 
-function Inicial({ nombre, size }) {
+export function Inicial({ nombre, size }) {
   return (
     <View style={[styles.inicial, { width: size, height: size, borderRadius: size / 2 }]}>
       <Text style={[styles.inicialTexto, { fontSize: size * 0.42 }]}>
@@ -32,7 +32,7 @@ function Inicial({ nombre, size }) {
 // Avatar determinista del usuario (Blobatar), calculado en el dispositivo: funciona sin conexión.
 // Es ESTÁTICO: no se mueve por sí solo. Solo cambia cuando el usuario toca «Cambiar avatar» (`editable`),
 // que genera otro diseño con una breve expresión de alegría; la elección se guarda por usuario.
-export default function AvatarUsuario({ uid, nombre, size = 96, editable = false }) {
+export default function AvatarUsuario({ uid, nombre, size = 96, editable = false, onPress }) {
   const [variante, setVariante] = useState(0);
   const [expresion, setExpresion] = useState(idle);
   const temporizador = useRef(null);
@@ -67,7 +67,13 @@ export default function AvatarUsuario({ uid, nombre, size = 96, editable = false
 
   return (
     <View style={styles.contenedor}>
-      <View accessibilityRole="image" accessibilityLabel={`Avatar de ${nombre || "estudiante"}`}>
+      {/* Con `onPress` el avatar es un botón (p. ej. para abrir el perfil); sin él, es solo la imagen */}
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        accessibilityRole={onPress ? "button" : "image"}
+        accessibilityLabel={onPress ? "Abrir mi perfil" : `Avatar de ${nombre || "estudiante"}`}
+      >
         <LimiteError respaldo={<Inicial nombre={nombre} size={size} />}>
           <MorphingBlobatar
             name={semilla}
@@ -77,7 +83,7 @@ export default function AvatarUsuario({ uid, nombre, size = 96, editable = false
             title={`Avatar de ${nombre || "estudiante"}`}
           />
         </LimiteError>
-      </View>
+      </Pressable>
 
       {editable && (
         <Pressable

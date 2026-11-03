@@ -1,22 +1,30 @@
 import React, { useMemo, useState } from "react";
-import { FlatList, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
 import { useTodasJornadas, useUsuarios } from "../../hooks/useAdmin";
 import JornadaCard from "../../components/JornadaCard";
 import CalendarioRango from "../../components/CalendarioRango";
+import SelectDesplegable from "../../components/SelectDesplegable";
 import { SkeletonJornadasAdmin } from "../../components/Skeleton";
-import { estadoParaCard } from "../../components/EstadoJornadaChip";
-import { Boton, Chip, Entrada, Vacio, estilos } from "../../components/AdminUi";
+import { colorEstado, estadoParaCard } from "../../components/EstadoJornadaChip";
+import { Buscador, Chip, Vacio } from "../../components/AdminUi";
 import { colors } from "../../theme/colors";
-import { ESTADOS_JORNADA, ETIQUETA_ESTADO, estadoJornada, ordenarParaMaestro } from "../../utils/estadoJornada";
-import { palabraPlural } from "../../utils/plural";
+import {
+  ESTADOS_JORNADA,
+  ETIQUETA_ESTADO_PLURAL,
+  contarPorEstado,
+  estadoJornada,
+  ordenarParaMaestro,
+} from "../../utils/estadoJornada";
+import { conteoPlural, palabraPlural } from "../../utils/plural";
 import { puedeSerResponsable } from "../../utils/roles";
 import { filtrarJornadas } from "../../utils/usuariosAdmin";
 import { descomponerFecha } from "../../utils/zonaNegocio";
 
 const etiquetaRango = (desde, hasta) => {
-  if (!desde) return "Rango de fechas";
+  if (!desde) return "Todas las fechas";
   const f = (d) => dayjs(d).locale("es").format("D MMM");
   return !hasta || hasta === desde ? f(desde) : `${f(desde)} – ${f(hasta)}`;
 };
@@ -33,6 +41,15 @@ export default function AdminJornadasScreen({ navigation }) {
 
   const nombres = useMemo(() => new Map(usuarios.map((u) => [u.id, u.nombre || u.email])), [usuarios]);
   const responsables = useMemo(() => usuarios.filter((u) => puedeSerResponsable(u.rol)), [usuarios]);
+  const opcionesGestor = useMemo(
+    () => [
+      { valor: "todos", etiqueta: "Todos los gestores" },
+      { valor: "sin-gestor", etiqueta: "Sin gestor asignado" },
+      ...responsables.map((g) => ({ valor: g.id, etiqueta: g.nombre || g.email })),
+    ],
+    [responsables]
+  );
+  const conteo = useMemo(() => contarPorEstado(jornadas, Date.now()), [jornadas]);
   const lista = useMemo(
     () =>
       ordenarParaMaestro(
@@ -46,40 +63,88 @@ export default function AdminJornadasScreen({ navigation }) {
   return (
     <>
       <FlatList
-        style={estilos.pantalla}
-        contentContainerStyle={estilos.contenido}
+        style={styles.pantalla}
+        contentContainerStyle={styles.contenido}
         data={lista}
         keyExtractor={(j) => j.id}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          <View style={{ gap: 12 }}>
-            <Boton texto="Crear jornada" onPress={() => navigation.navigate("JornadaForm")} />
-            <Entrada value={texto} onChangeText={setTexto} placeholder="Buscar por título o espacio" accessibilityLabel="Buscar jornadas" />
-            <View style={estilos.fila}>
-              <Chip etiqueta="Todos los estados" activo={estado === "todos"} onPress={() => setEstado("todos")} />
-              {Object.values(ESTADOS_JORNADA).map((e) => (
-                <Chip key={e} etiqueta={ETIQUETA_ESTADO[e]} activo={estado === e} onPress={() => setEstado(e)} />
-              ))}
+          <View style={styles.cabecera}>
+            <View style={styles.filaBuscar}>
+              <Buscador value={texto} onChangeText={setTexto} placeholder="Buscar por título o espacio" accesibilidad="Buscar jornadas" />
+              <TouchableOpacity
+                style={styles.botonCrear}
+                onPress={() => navigation.navigate("JornadaForm")}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Crear jornada"
+              >
+                <Ionicons name="add" size={26} color={colors.white} />
+              </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              <Chip etiqueta="Todos los gestores" activo={gestor === "todos"} onPress={() => setGestor("todos")} />
-              <Chip etiqueta="Sin gestor" activo={gestor === "sin-gestor"} onPress={() => setGestor("sin-gestor")} />
-              {responsables.map((g) => (
-                <Chip key={g.id} etiqueta={g.nombre || g.email} activo={gestor === g.id} onPress={() => setGestor(g.id)} />
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+              <Chip etiqueta="Todas" contador={conteo.total} activo={estado === "todos"} onPress={() => setEstado("todos")} />
+              {Object.values(ESTADOS_JORNADA).map((e) => (
+                <Chip
+                  key={e}
+                  etiqueta={ETIQUETA_ESTADO_PLURAL[e]}
+                  contador={conteo[e]}
+                  color={colorEstado(e)}
+                  activo={estado === e}
+                  onPress={() => setEstado(e)}
+                />
               ))}
             </ScrollView>
-            <View style={estilos.fila}>
-              <Chip etiqueta={etiquetaRango(rango.desde, rango.hasta)} activo={!!rango.desde} onPress={() => setCalendario(true)} />
-              {!!rango.desde && <Chip etiqueta="Quitar fechas" onPress={() => setRango({ desde: null, hasta: null })} />}
+
+            <View style={styles.filaFiltros}>
+              <View style={{ flex: 1 }}>
+                <SelectDesplegable
+                  titulo="Gestor"
+                  icono="briefcase-outline"
+                  valor={gestor}
+                  opciones={opcionesGestor}
+                  onChange={setGestor}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.fecha, !!rango.desde && styles.fechaActiva]}
+                onPress={() => setCalendario(true)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Rango de fechas: ${etiquetaRango(rango.desde, rango.hasta)}`}
+              >
+                <Ionicons name="calendar-outline" size={18} color={rango.desde ? colors.white : colors.primary} />
+                <Text style={[styles.fechaTexto, !!rango.desde && { color: colors.white }]} numberOfLines={1}>
+                  {etiquetaRango(rango.desde, rango.hasta)}
+                </Text>
+                {!!rango.desde && (
+                  <TouchableOpacity
+                    onPress={() => setRango({ desde: null, hasta: null })}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Quitar fechas"
+                  >
+                    <Ionicons name="close-circle" size={18} color={colors.white} />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
             </View>
-            <Text style={estilos.texto}>
-              {lista.length} de {jornadas.length} jornadas
+
+            <Text style={styles.conteo}>
+              {lista.length} de {conteoPlural(jornadas.length, "jornada", "jornadas")}
             </Text>
-            {!!error && <Text style={{ color: colors.error }}>{error}</Text>}
+            {!!error && (
+              <View style={styles.aviso} accessibilityRole="alert">
+                <Ionicons name="warning-outline" size={18} color={colors.error} />
+                <Text style={styles.avisoTexto}>{error}</Text>
+              </View>
+            )}
           </View>
         }
         ListEmptyComponent={
           <Vacio
+            icono={!enLinea && jornadas.length === 0 ? "cloud-offline-outline" : "calendar-outline"}
             texto={
               !enLinea && jornadas.length === 0
                 ? "Sin conexión. Conéctate a internet para consultar las jornadas."
@@ -88,7 +153,7 @@ export default function AdminJornadasScreen({ navigation }) {
           />
         }
         renderItem={({ item }) => (
-          <View>
+          <View style={{ marginHorizontal: -16 }}>
             <JornadaCard
               jornada={item}
               estado={estadoParaCard(estadoJornada(item))}
@@ -113,3 +178,46 @@ export default function AdminJornadasScreen({ navigation }) {
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  pantalla: { flex: 1, backgroundColor: colors.background },
+  contenido: { padding: 16, gap: 0, paddingBottom: 32 },
+  cabecera: { gap: 12, marginBottom: 6 },
+  filaBuscar: { flexDirection: "row", alignItems: "center", gap: 10 },
+  botonCrear: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chips: { gap: 8, paddingRight: 8 },
+  filaFiltros: { flexDirection: "row", gap: 10, alignItems: "center" },
+  fecha: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    maxWidth: "50%",
+    minHeight: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+  },
+  fechaActiva: { backgroundColor: colors.primary, borderColor: colors.primary },
+  fechaTexto: { fontSize: 14, fontWeight: "600", color: colors.textPrimary, flexShrink: 1 },
+  conteo: { fontSize: 13, fontWeight: "600", color: colors.textSecondary },
+  aviso: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FDF2F2",
+    borderWidth: 1,
+    borderColor: colors.error,
+    borderRadius: 14,
+    padding: 12,
+  },
+  avisoTexto: { flex: 1, fontSize: 13, color: colors.error },
+});

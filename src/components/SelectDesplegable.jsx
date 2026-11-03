@@ -16,6 +16,7 @@ export default function SelectDesplegable({
   error = false,
   icono,
   accesibilidad,
+  deshabilitado = false,
 }) {
   const [abierto, setAbierto] = useState(false);
   const insets = useSafeAreaInsets();
@@ -30,8 +31,9 @@ export default function SelectDesplegable({
   return (
     <>
       <TouchableOpacity
-        style={[styles.campo, error && styles.campoError]}
+        style={[styles.campo, error && styles.campoError, deshabilitado && styles.campoDeshabilitado]}
         onPress={() => setAbierto(true)}
+        disabled={deshabilitado}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={`${accesibilidad || titulo}: ${texto || "sin seleccionar"}`}
@@ -96,6 +98,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   campoError: { borderColor: colors.error },
+  campoDeshabilitado: { opacity: 0.55, backgroundColor: colors.background },
   valor: { flex: 1, fontSize: 15, color: colors.textPrimary },
   placeholder: { color: colors.textDisabled },
   fondo: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },

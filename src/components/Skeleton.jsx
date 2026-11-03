@@ -505,67 +505,112 @@ export function SkeletonPanelAdmin() {
   );
 }
 
-// ADMIN · Usuarios — botón crear, buscador, chips de rol y de estado, conteo y tarjetas de cuenta
+// ADMIN · Usuarios — buscador con botón de crear, chips de rol y de estado con contador, conteo y tarjetas con avatar
 export function SkeletonUsuarios() {
   return (
     <Cargando etiqueta="Cargando usuarios">
       <View style={{ padding: 16, gap: 12 }}>
-        <Skeleton alto={48} radio={10} />
-        <Skeleton alto={48} radio={10} />
-        <ChipsSk anchos={[112, 72, 70, 118]} />
-        <ChipsSk anchos={[124, 70, 76]} />
-        <Skeleton ancho={90} alto={14} />
+        <Fila gap={10}>
+          <Skeleton alto={48} radio={14} style={{ flex: 1 }} />
+          <Skeleton ancho={48} alto={48} radio={14} />
+        </Fila>
+        <Fila gap={8}>
+          {[92, 104, 96, 112].map((a, i) => (
+            <Skeleton key={i} ancho={a} alto={40} radio={20} />
+          ))}
+        </Fila>
+        <Fila gap={8}>
+          {[86, 92, 100].map((a, i) => (
+            <Skeleton key={i} ancho={a} alto={40} radio={20} />
+          ))}
+        </Fila>
+        <Skeleton ancho={96} alto={13} />
         {[0, 1, 2, 3, 4].map((i) => (
-          <TarjetaAdminSk key={i}>
-            <Skeleton ancho="52%" alto={15} />
-            <Skeleton ancho="70%" alto={13} />
-            <Skeleton ancho={i % 2 ? 84 : 56} alto={12} />
-          </TarjetaAdminSk>
+          <View key={i} style={[s.tarjeta, { marginHorizontal: 0, marginVertical: 0, padding: 14 }]}>
+            <Fila gap={14}>
+              <Skeleton ancho={48} alto={48} radio={24} />
+              <View style={[s.col, { gap: 6 }]}>
+                <Skeleton ancho="52%" alto={15} />
+                <Skeleton ancho="72%" alto={12} />
+                <Fila gap={6}>
+                  <Skeleton ancho={i % 2 ? 76 : 60} alto={20} radio={10} />
+                  {i === 2 && <Skeleton ancho={96} alto={20} radio={10} />}
+                </Fila>
+              </View>
+              <Skeleton ancho={18} alto={18} radio={9} />
+            </Fila>
+          </View>
         ))}
       </View>
     </Cargando>
   );
 }
 
-// ADMIN · Detalle de usuario — datos de la cuenta, nombre, rol, botones (y jornadas si es gestor)
+// ADMIN · Detalle de usuario — avatar, nombre y etiquetas, datos de la cuenta y las tarjetas de edición y estado
 export function SkeletonDetalleUsuario() {
+  const tarjeta = (children) => <View style={[s.panel, { gap: 14 }]}>{children}</View>;
   return (
     <Cargando etiqueta="Cargando usuario">
       <View style={{ padding: 16, gap: 14 }}>
-        <TarjetaAdminSk>
-          <Skeleton ancho="58%" alto={22} />
-          <Skeleton ancho="72%" alto={13} />
-          <Skeleton ancho="52%" alto={13} />
-          <Skeleton ancho="44%" alto={13} />
-          <Skeleton ancho="64%" alto={10} />
-        </TarjetaAdminSk>
-        <CampoSk etiqueta={60} />
-        <View style={{ gap: 8 }}>
-          <Skeleton ancho={110} alto={12} />
-          <ChipsSk anchos={[80, 76, 112]} />
+        <View style={{ alignItems: "center", gap: 8, paddingVertical: 8 }}>
+          <Skeleton ancho={88} alto={88} radio={44} />
+          <Skeleton ancho={170} alto={22} />
+          <Skeleton ancho={200} alto={14} />
+          <Fila gap={8}>
+            <Skeleton ancho={84} alto={26} radio={13} />
+            <Skeleton ancho={104} alto={26} radio={13} />
+          </Fila>
         </View>
-        <Skeleton alto={48} radio={10} />
-        <Skeleton alto={48} radio={10} />
+        {tarjeta(
+          [0, 1].map((i) => (
+            <Fila key={i}>
+              <Skeleton ancho={36} alto={36} radio={12} />
+              <View style={[s.col, { gap: 6 }]}>
+                <Skeleton ancho="30%" alto={11} />
+                <Skeleton ancho={i ? "86%" : "56%"} alto={14} />
+              </View>
+            </Fila>
+          ))
+        )}
+        {tarjeta(
+          <>
+            <Skeleton ancho={110} alto={16} />
+            <CampoSk etiqueta={60} />
+            <CampoSk etiqueta={104} />
+            <Skeleton alto={50} radio={14} />
+          </>
+        )}
+        {tarjeta(
+          <>
+            <Skeleton ancho={150} alto={16} />
+            <Skeleton ancho="90%" alto={13} />
+            <Skeleton alto={50} radio={14} />
+          </>
+        )}
       </View>
     </Cargando>
   );
 }
 
-// ADMIN · Jornadas — crear, buscador, tres filas de filtros, conteo y cards con gestor asignado
+// ADMIN · Jornadas — buscador con botón de crear, chips de estado con contador, gestor y fechas, y cards con gestor asignado
 export function SkeletonJornadasAdmin() {
   return (
     <Cargando etiqueta="Cargando jornadas">
       <View style={{ padding: 16, gap: 12 }}>
-        <Skeleton alto={48} radio={10} />
-        <Skeleton alto={48} radio={10} />
-        <ChipsSk anchos={[128, 70, 86, 96, 92]} />
+        <Fila gap={10}>
+          <Skeleton alto={48} radio={14} style={{ flex: 1 }} />
+          <Skeleton ancho={48} alto={48} radio={14} />
+        </Fila>
         <Fila gap={8}>
-          {[132, 100, 120].map((a, i) => (
-            <Skeleton key={i} ancho={a} alto={34} radio={17} />
+          {[88, 98, 104, 96, 100].map((a, i) => (
+            <Skeleton key={i} ancho={a} alto={40} radio={20} />
           ))}
         </Fila>
-        <Skeleton ancho={170} alto={34} radio={17} />
-        <Skeleton ancho={110} alto={14} />
+        <Fila gap={10}>
+          <Skeleton alto={48} radio={12} style={{ flex: 1 }} />
+          <Skeleton ancho="42%" alto={48} radio={12} />
+        </Fila>
+        <Skeleton ancho={120} alto={13} />
       </View>
       {[0, 1].map((i) => (
         <JornadaCardSk key={i} pie="estado" extra />
@@ -574,18 +619,28 @@ export function SkeletonJornadasAdmin() {
   );
 }
 
-// ADMIN · Auditoría — leyenda y registros (acción, detalle, quién y cuándo) separados por línea
+// ADMIN · Auditoría — resumen, encabezado del día y la línea de tiempo (ícono, acción, detalle y quién)
 export function SkeletonAuditoria() {
   return (
     <Cargando etiqueta="Cargando auditoría">
       <View style={{ padding: 16 }}>
-        <Skeleton ancho="62%" alto={14} style={{ marginBottom: 16 }} />
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <View key={i} style={[s.registro, i > 0 && s.registroSep]}>
-            <Skeleton ancho={i % 2 ? "46%" : "38%"} alto={15} />
-            <Skeleton ancho="70%" alto={13} />
-            <Skeleton ancho="58%" alto={12} />
-          </View>
+        <Skeleton ancho="52%" alto={13} />
+        <Skeleton ancho={60} alto={14} style={{ marginTop: 20, marginBottom: 12 }} />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Fila key={i} gap={12} style={{ alignItems: "flex-start" }}>
+            <View style={{ alignItems: "center", width: 36, alignSelf: "stretch" }}>
+              <Skeleton ancho={36} alto={36} radio={12} />
+              {i < 4 && <Skeleton ancho={2} alto="100%" radio={1} style={{ flex: 1, marginVertical: 2 }} />}
+            </View>
+            <View style={[s.col, { gap: 6, paddingBottom: 18 }]}>
+              <Fila style={{ justifyContent: "space-between" }}>
+                <Skeleton ancho={i % 2 ? "46%" : "38%"} alto={15} />
+                <Skeleton ancho={36} alto={11} />
+              </Fila>
+              <Skeleton ancho="72%" alto={13} />
+              <Skeleton ancho="34%" alto={11} />
+            </View>
+          </Fila>
         ))}
       </View>
     </Cargando>
@@ -656,6 +711,22 @@ export function SkeletonReportes() {
           {barras([94, 18, 8])}
         </View>
       </View>
+    </Cargando>
+  );
+}
+
+// PERFIL (todos los roles) · «Mi actividad» — tres cifras mientras se cargan los datos del rol
+export function SkeletonResumenPerfil() {
+  return (
+    <Cargando etiqueta="Cargando tu actividad" enLista>
+      <Fila gap={10}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={s.cifra}>
+            <Skeleton ancho={44} alto={26} radio={8} />
+            <Skeleton ancho="80%" alto={11} />
+          </View>
+        ))}
+      </Fila>
     </Cargando>
   );
 }
