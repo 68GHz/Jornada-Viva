@@ -25,10 +25,13 @@ import { useSync } from "../../context/SyncContext";
 import { TIPOS } from "../../utils/sincronizacion";
 
 export default function EscanearAsistenciaScreen({ navigation, route }) {
-  const { jornadaId, jornadaFecha, duracionMin, tituloJornada } = route.params || {};
+  const { jornadaId, jornadaFecha, duracionMin, asistenciaTodaJornada, tituloJornada } = route.params || {};
   const [permission, requestPermission] = useCameraPermissions();
   const [procesando, setProcesando] = useState(false);
   const [escaneado, setEscaneado] = useState(false);
+  // Si la cámara no arranca se muestra el error con «Reintentar» (el contador fuerza un montaje nuevo)
+  const [errorCamara, setErrorCamara] = useState(null);
+  const [intento, setIntento] = useState(0);
   const { enLinea } = useConnectivity();
   const { estadoInscripcion } = useJornadas();
   const { encolar } = useSync();
@@ -98,7 +101,7 @@ export default function EscanearAsistenciaScreen({ navigation, route }) {
     }
 
     // Aviso rápido con el reloj del dispositivo; quien decide es el servidor
-    const ventana = estadoVentanaAsistencia(jornadaFecha, Date.now(), duracionMin);
+    const ventana = estadoVentanaAsistencia(jornadaFecha, Date.now(), duracionMin, asistenciaTodaJornada === true);
 
     if (jornadaFecha && !ventana.disponible) {
       Alert.alert("Asistencia no disponible", ventana.mensaje, [
@@ -162,20 +165,50 @@ export default function EscanearAsistenciaScreen({ navigation, route }) {
 
   return (
     <View style={styles.contenedor}>
-      <CameraView
-        style={StyleSheet.absoluteFillObject}
-        facing="back"
-        barcodeScannerSettings={{
-          barcodeTypes: ["qr"],
-        }}
-        onBarcodeScanned={escaneado ? undefined : manejarCodigoBarras}
-      />
+      {/* La cámara ocupa el espacio con flex (no con posición absoluta): así Android le da su tamaño real */}
+      {!errorCamara && (
+        <CameraView
+          key={intento}
+          style={styles.camara}
+          facing="back"
+          onMountError={({ message }) => {
+            console.warn("Error al iniciar la cámara:", message);
+            setErrorCamara(message || "No se pudo iniciar la cámara.");
+          }}
+          barcodeScannerSettings={{
+            barcodeTypes: ["qr"],
+          }}
+          onBarcodeScanned={escaneado ? undefined : manejarCodigoBarras}
+        />
+      )}
 
-      <View style={styles.mascara}>
+      {!!errorCamara && (
+        <View style={styles.errorCamara}>
+          <Ionicons name="videocam-off-outline" size={48} color={colors.white} />
+          <Text style={styles.errorCamaraTitulo}>No se pudo abrir la cámara</Text>
+          <Text style={styles.errorCamaraTexto}>
+            Cierra otras apps que estén usando la cámara y vuelve a intentarlo.
+          </Text>
+          <TouchableOpacity
+            style={styles.botonPermiso}
+            onPress={() => {
+              setErrorCamara(null);
+              setIntento((n) => n + 1);
+            }}
+          >
+            <Text style={styles.botonPermisoTexto}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Capa con el recuadro y los textos sobre la imagen; solo los botones reciben toques */}
+      <View style={[StyleSheet.absoluteFill, styles.mascara]} pointerEvents="box-none">
         <View style={styles.cabecera}>
           <Text style={styles.tituloCabecera}>Escanear Asistencia</Text>
           <Text style={styles.subtituloCabecera}>
-            Apunta la cámara al código QR de la jornada (primeros 20 minutos).
+            {asistenciaTodaJornada === true
+              ? "Apunta la cámara al código QR de la jornada."
+              : "Apunta la cámara al código QR de la jornada (primeros 20 minutos)."}
           </Text>
         </View>
 
@@ -244,19 +277,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
+  camara: { flex: 1 },
+  // Sin velo oscuro sobre la vista previa: solo el texto lleva su propio fondo, para que la imagen se vea clara
   mascara: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 40,
+    paddingVertical: 24,
     paddingHorizontal: 20,
   },
   cabecera: {
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.55)",
   },
+  errorCamara: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 32,
+    backgroundColor: "#111",
+  },
+  errorCamaraTitulo: { color: colors.white, fontSize: 18, fontWeight: "800", textAlign: "center" },
+  errorCamaraTexto: { color: "rgba(255,255,255,0.8)", fontSize: 14, textAlign: "center", lineHeight: 20 },
   tituloCabecera: {
     color: colors.white,
     fontSize: 20,
@@ -300,7 +346,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   botonCancelar: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: 24,

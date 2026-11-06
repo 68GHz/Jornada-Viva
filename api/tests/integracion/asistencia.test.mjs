@@ -151,6 +151,55 @@ describe("asistencia · el estudiante registra la suya con el QR", () => {
     assert.equal(r.estado, 200);
   });
 
+  describe("con «asistencia durante toda la jornada» activada por el gestor", () => {
+    const sembrarLarga = async (extra = {}) => {
+      // Empezó hace 5 minutos y dura 2 horas
+      await sembrar("jornadas/larga", docJornada({
+        creadoPor: "gestorA", duracionMin: 120, fecha: Timestamp.fromMillis(reloj.ahora - 5 * MINUTO), ...extra,
+      }));
+      await sembrar("inscripciones/est1_larga", inscripcion("est1", "larga"));
+    };
+
+    it("el estudiante registra su asistencia pasados los 20 minutos, mientras la jornada dure", async () => {
+      await sembrarLarga({ asistenciaTodaJornada: true });
+      reloj.ahora += 60 * MINUTO; // a la hora y cinco de empezar
+      const r = await registrar("est1", await codigoDe("larga"), "larga");
+      assert.equal(r.estado, 200);
+      assert.deepEqual(r.cuerpo, { resultado: "registrada" });
+      assert.equal((await leer("inscripciones/est1_larga")).asistio, true);
+    });
+
+    it("al terminar la jornada ya no se puede", async () => {
+      await sembrarLarga({ asistenciaTodaJornada: true });
+      reloj.ahora += 116 * MINUTO; // 121 min desde el inicio: la jornada duró 120
+      const r = await registrar("est1", await codigoDe("larga"), "larga");
+      assert.equal(r.estado, 409);
+      assert.equal(r.cuerpo.error.codigo, "ASISTENCIA_FUERA_DE_VENTANA");
+      assert.match(r.cuerpo.error.mensaje, /jornada ya terminó/);
+      assert.equal((await leer("inscripciones/est1_larga")).asistio, false);
+    });
+
+    it("sin activarla (o en falso) siguen siendo los 20 minutos de siempre", async () => {
+      for (const extra of [{}, { asistenciaTodaJornada: false }]) {
+        await limpiar();
+        await sembrarPerfiles();
+        await sembrarLarga(extra);
+        reloj.ahora += 60 * MINUTO;
+        const r = await registrar("est1", await codigoDe("larga"), "larga");
+        assert.equal(r.estado, 409, JSON.stringify(extra));
+        assert.match(r.cuerpo.error.mensaje, /20 minutos/);
+        reloj.ahora -= 60 * MINUTO;
+      }
+    });
+
+    it("antes de empezar sigue cerrada aunque esté activada", async () => {
+      await sembrarLarga({ asistenciaTodaJornada: true, fecha: Timestamp.fromMillis(reloj.ahora + 10 * MINUTO) });
+      const r = await registrar("est1", await codigoDe("larga"), "larga");
+      assert.equal(r.estado, 409);
+      assert.match(r.cuerpo.error.mensaje, /iniciará/);
+    });
+  });
+
   it("en una jornada de 10 minutos la ventana es toda la jornada", async () => {
     await sembrar("jornadas/corta", docJornada({ creadoPor: "gestorA", duracionMin: 10, fecha: Timestamp.fromMillis(reloj.ahora - 5 * MINUTO) }));
     await sembrar("inscripciones/est1_corta", inscripcion("est1", "corta"));

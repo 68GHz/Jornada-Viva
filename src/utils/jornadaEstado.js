@@ -17,20 +17,23 @@ export const jornadaVencidaActiva = (jornada, ahora = Date.now()) =>
   estaActiva(jornada) && jornada.fecha != null && jornadaTerminada(jornada, ahora);
 
 // Jornadas del usuario a partir de sus inscripciones y las jornadas en vivo.
-// - Jornada eliminada: se conserva con los datos guardados en la inscripción
-//   y se marca `noDisponible`.
+// - Jornada eliminada (ya no está entre las jornadas en vivo): con `ocultarEliminadas` no se muestra
+//   al estudiante; sin esa opción (todavía no se sabe si las jornadas cargaron completas) se conserva con
+//   los datos guardados en la inscripción y se marca `noDisponible`. Una inscripción pendiente de
+//   sincronizar se mantiene visible aunque su jornada no aparezca.
 // - Jornada desactivada que aún no vence: se oculta.
 // - Jornada que ya terminó (aunque ya esté desactivada): se conserva como `finalizada`
 //   para mantener el historial. Una cancelada cuya fecha de inicio ya llegó cuenta como finalizada.
 // - Jornada que ya empezó y no ha terminado: `enCurso` (cuenta entre las próximas).
 // Orden: próximas y en curso primero (más cercanas arriba), luego las finalizadas.
-export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.now()) {
+export function construirMisJornadas(inscripciones, jornadasPorId, ahora = Date.now(), { ocultarEliminadas = false } = {}) {
   // Una inscripción por jornada (se ignoran duplicados)
   const porJornada = new Map(inscripciones.map((i) => [i.jornadaId, i]));
   const resultado = [];
 
   for (const [jornadaId, inscripcion] of porJornada) {
     const jornada = jornadasPorId.get(jornadaId);
+    if (!jornada && ocultarEliminadas && !inscripcion.pendiente) continue;
     const base =
       jornada ?? {
         ...normalizarJornada(jornadaId, {

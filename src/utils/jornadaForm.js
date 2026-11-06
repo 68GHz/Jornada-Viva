@@ -113,11 +113,18 @@ export function validarJornada(campos, { ahora = Date.now(), cuposOcupados = 0, 
   const categoria = typeof campos.categoria === "string" ? campos.categoria.trim() : campos.categoria;
   if (categoria !== undefined && !esCategoriaValida(categoria)) errores.categoria = MENSAJE_CATEGORIA;
 
+  // «Asistencia durante toda la jornada»: opcional; sin el campo no se envía (queda lo que ya tenía)
+  const asistenciaTodaJornada = campos.asistenciaTodaJornada;
+  if (asistenciaTodaJornada !== undefined && typeof asistenciaTodaJornada !== "boolean") {
+    errores.asistenciaTodaJornada = "Indica si la asistencia se puede registrar durante toda la jornada (sí o no).";
+  }
+
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
     datos: {
       titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales,
+      ...(asistenciaTodaJornada !== undefined ? { asistenciaTodaJornada } : {}),
       ...(categoria !== undefined ? { categoria } : {}),
       ...(bannerUrl !== undefined ? { bannerUrl } : {}),
     },

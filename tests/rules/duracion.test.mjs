@@ -93,6 +93,31 @@ describe("el campo de duración de una jornada", () => {
   });
 });
 
+describe("asistencia por QR durante toda la jornada (booleano opcional)", () => {
+  const crear = (uid, extra) => addDoc(collection(db(uid), "jornadas"), jornadaBase({ creadoPor: uid, ...extra }));
+  const editar = (uid, id, cambios) => updateDoc(doc(db(uid), `jornadas/${id}`), cambios);
+
+  it("acepta verdadero y falso, al crear y al editar", async () => {
+    for (const asistenciaTodaJornada of [true, false]) {
+      await assertSucceeds(crear("gestorA", { asistenciaTodaJornada }));
+      await assertSucceeds(editar("gestorA", "futura", { asistenciaTodaJornada }));
+    }
+    await assertSucceeds(editar("admin1", "futura", { asistenciaTodaJornada: true }));
+  });
+
+  it("rechaza cualquier valor que no sea booleano", async () => {
+    for (const asistenciaTodaJornada of ["true", 1, 0, null, []]) {
+      await assertFails(crear("gestorA", { asistenciaTodaJornada }));
+      await assertFails(editar("gestorA", "futura", { asistenciaTodaJornada }));
+    }
+  });
+
+  it("es opcional y un gestor ajeno no puede cambiarlo", async () => {
+    await assertSucceeds(crear("gestorA", {}));
+    await assertFails(editar("gestorB", "futura", { asistenciaTodaJornada: true }));
+  });
+});
+
 describe("la categoría de una jornada (solo valores de la lista; opcional)", () => {
   const crear = (uid, extra) => addDoc(collection(db(uid), "jornadas"), jornadaBase({ creadoPor: uid, ...extra }));
   const editar = (uid, id, cambios) => updateDoc(doc(db(uid), `jornadas/${id}`), cambios);

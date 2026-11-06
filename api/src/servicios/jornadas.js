@@ -52,6 +52,8 @@ const camposEditables = (d) => ({
   fecha: Timestamp.fromMillis(d.fecha),
   duracionMin: d.duracionMin,
   cuposTotales: d.cuposTotales,
+  // Sin el campo en la petición (app anterior) no se toca lo que la jornada ya tenía
+  ...(d.asistenciaTodaJornada !== undefined ? { asistenciaTodaJornada: d.asistenciaTodaJornada } : {}),
   // Sin categoría en la petición (app anterior al campo) no se toca la que ya tenía
   ...(d.categoria ? { categoria: d.categoria } : {}),
 });

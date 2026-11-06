@@ -1,9 +1,10 @@
 import { DURACION_POR_DEFECTO, duracionJornadaMin } from "./duracion.js";
 
 // Ventana en la que el estudiante puede registrar su propia asistencia con el QR: los primeros
-// 20 minutos de la jornada, o toda la jornada si dura menos. El gestor y el administrador no
-// tienen este límite: pueden marcar o corregir la asistencia en cualquier momento desde que
-// empieza.
+// 20 minutos de la jornada, o toda la jornada si dura menos. Si el gestor activa «asistencia durante
+// toda la jornada» (`asistenciaTodaJornada`), la ventana dura lo que dure la jornada. El gestor y el
+// administrador no tienen este límite: pueden marcar o corregir la asistencia en cualquier momento
+// desde que empieza.
 export const VENTANA_ASISTENCIA_MINUTOS = 20;
 export const VENTANA_ASISTENCIA_MS = VENTANA_ASISTENCIA_MINUTOS * 60 * 1000;
 
@@ -12,15 +13,25 @@ export const VENTANA_ASISTENCIA_MS = VENTANA_ASISTENCIA_MINUTOS * 60 * 1000;
 export const CODIGO_QR_VIGENCIA_MS = 60 * 1000;
 export const CODIGO_QR_RENOVAR_MS = 30 * 1000;
 
-// Minutos que dura la ventana de asistencia de una jornada
-export const ventanaAsistenciaMin = (duracionMin = DURACION_POR_DEFECTO) =>
-  Math.min(VENTANA_ASISTENCIA_MINUTOS, duracionJornadaMin({ duracionMin }));
+// Minutos que dura la ventana de asistencia de una jornada. Solo `true` abre la asistencia durante
+// toda la jornada: cualquier otro valor (incluido un dato que falte) deja los 20 minutos de siempre.
+export const ventanaAsistenciaMin = (duracionMin = DURACION_POR_DEFECTO, todaLaJornada = false) => {
+  const duracion = duracionJornadaMin({ duracionMin });
+  return todaLaJornada === true ? duracion : Math.min(VENTANA_ASISTENCIA_MINUTOS, duracion);
+};
+
+// Aviso para el estudiante sobre cuánto tiempo tiene para registrar su asistencia
+export const textoVentanaAsistencia = (duracionMin, todaLaJornada = false) =>
+  todaLaJornada === true
+    ? "Puedes registrar tu asistencia en cualquier momento mientras dure la jornada."
+    : `Solo puedes registrar asistencia durante los primeros ${ventanaAsistenciaMin(duracionMin)} minutos de la jornada.`;
 
 /**
  * Evalúa el estado de la ventana de asistencia para una jornada.
  * @param {number} fechaJornadaMs - Fecha/hora de inicio de la jornada en epoch ms.
  * @param {number} ahoraMs - Hora actual (opcional, por defecto Date.now()).
  * @param {number} duracionMin - Duración de la jornada en minutos (por defecto, la estándar).
+ * @param {boolean} todaLaJornada - La asistencia se puede registrar durante toda la jornada.
  * @returns {{
  *   disponible: boolean,
  *   estado: 'ANTES' | 'EN_CURSO' | 'EXPIRADA',
@@ -29,7 +40,12 @@ export const ventanaAsistenciaMin = (duracionMin = DURACION_POR_DEFECTO) =>
  *   mensaje: string
  * }}
  */
-export function estadoVentanaAsistencia(fechaJornadaMs, ahoraMs = Date.now(), duracionMin = DURACION_POR_DEFECTO) {
+export function estadoVentanaAsistencia(
+  fechaJornadaMs,
+  ahoraMs = Date.now(),
+  duracionMin = DURACION_POR_DEFECTO,
+  todaLaJornada = false
+) {
   if (!fechaJornadaMs) {
     return {
       disponible: false,
@@ -40,7 +56,7 @@ export function estadoVentanaAsistencia(fechaJornadaMs, ahoraMs = Date.now(), du
     };
   }
 
-  const minutosVentana = ventanaAsistenciaMin(duracionMin);
+  const minutosVentana = ventanaAsistenciaMin(duracionMin, todaLaJornada);
   const finVentanaMs = fechaJornadaMs + minutosVentana * 60 * 1000;
 
   if (ahoraMs < fechaJornadaMs) {
@@ -60,7 +76,10 @@ export function estadoVentanaAsistencia(fechaJornadaMs, ahoraMs = Date.now(), du
       estado: "EXPIRADA",
       minutosRestantes: 0,
       segundosRestantes: 0,
-      mensaje: `La ventana de ${minutosVentana} minutos para tomar asistencia ha finalizado.`,
+      mensaje:
+        todaLaJornada === true
+          ? "La jornada ya terminó: la toma de asistencia ha finalizado."
+          : `La ventana de ${minutosVentana} minutos para tomar asistencia ha finalizado.`,
     };
   }
 

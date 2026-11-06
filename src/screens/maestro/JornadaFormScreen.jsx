@@ -6,6 +6,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -139,6 +140,8 @@ export default function JornadaFormScreen({ navigation, route }) {
     hora: "",
     duracionMin: DURACION_SUGERIDA,
     cuposTotales: "",
+    // Por defecto la asistencia por QR se abre los primeros 20 minutos; activado, dura toda la jornada
+    asistenciaTodaJornada: false,
     categoria: "",
     bannerUrl: "",
   });
@@ -178,6 +181,7 @@ export default function JornadaFormScreen({ navigation, route }) {
       // Las jornadas anteriores al campo salen con la duración por defecto
       duracionMin: String(jornada.duracionMin ?? DURACION_SUGERIDA),
       cuposTotales: String(jornada.cuposTotales ?? ""),
+      asistenciaTodaJornada: jornada.asistenciaTodaJornada === true,
       // Las jornadas anteriores a la categoría salen sin elegir: se pide al guardar
       categoria: categoriaDeJornada(jornada) || "",
       bannerUrl: jornada.bannerUrl || "",
@@ -487,6 +491,24 @@ export default function JornadaFormScreen({ navigation, route }) {
             <Text style={styles.resumenHoraTexto}>{textoFin}</Text>
           </View>
 
+          <View style={styles.filaAsistencia}>
+            <View style={styles.asistenciaTextos}>
+              <Text style={styles.asistenciaTitulo}>Asistencia durante toda la jornada</Text>
+              <Text style={styles.ayuda}>
+                {form.asistenciaTodaJornada
+                  ? "Los estudiantes podrán registrar su asistencia con el QR en cualquier momento mientras dure la jornada."
+                  : "Por defecto, los estudiantes pueden registrar su asistencia con el QR durante los primeros 20 minutos."}
+              </Text>
+            </View>
+            <Switch
+              value={form.asistenciaTodaJornada}
+              onValueChange={(valor) => cambiar("asistenciaTodaJornada", valor)}
+              trackColor={{ false: colors.border, true: colors.primaryLight }}
+              thumbColor={form.asistenciaTodaJornada ? colors.primary : colors.surface}
+              accessibilityLabel="Permitir registrar la asistencia durante toda la jornada"
+            />
+          </View>
+
           <Campo etiqueta="Espacio" error={errores.lugar}>
             <SelectDesplegable
               titulo="Espacio"
@@ -689,6 +711,20 @@ const styles = StyleSheet.create({
   inputOtra: { marginTop: -4 },
   ayuda: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
   dosColumnas: { flexDirection: "row", gap: 12 },
+  filaAsistencia: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 10,
+  },
+  asistenciaTextos: { flex: 1, gap: 2 },
+  asistenciaTitulo: { fontSize: 14, fontWeight: "700", color: colors.textPrimary },
   resumenHora: {
     flexDirection: "row",
     alignItems: "center",

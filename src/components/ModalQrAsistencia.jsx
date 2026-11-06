@@ -37,7 +37,7 @@ export default function ModalQrAsistencia({ visible, jornada, alCerrar, ahora = 
 
   // Con la ventana de asistencia ya cerrada el QR no sirve: no se piden más códigos
   const expirada = jornada
-    ? estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin).estado === "EXPIRADA"
+    ? estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin, jornada.asistenciaTodaJornada === true).estado === "EXPIRADA"
     : false;
   const jornadaId = jornada?.id;
 
@@ -70,7 +70,7 @@ export default function ModalQrAsistencia({ visible, jornada, alCerrar, ahora = 
 
   if (!jornada) return null;
 
-  const ventana = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin);
+  const ventana = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin, jornada.asistenciaTodaJornada === true);
   const payload = codigo ? generarPayloadQrAsistencia(jornada, codigo) : null;
 
   const guardarOCompartirImagen = async () => {

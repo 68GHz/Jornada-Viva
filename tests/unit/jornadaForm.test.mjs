@@ -171,6 +171,27 @@ describe("validación del formulario de jornada", () => {
     });
   });
 
+  describe("asistencia durante toda la jornada (opcional)", () => {
+    const resultado = (extra) => validarJornada(formulario(extra), { ahora: AHORA });
+
+    it("sin el campo no se envía (el servidor conserva lo que ya tenía)", () => {
+      assert.equal("asistenciaTodaJornada" in resultado({}).datos, false);
+    });
+
+    it("acepta verdadero y falso y los envía tal cual", () => {
+      assert.equal(resultado({ asistenciaTodaJornada: true }).datos.asistenciaTodaJornada, true);
+      assert.equal(resultado({ asistenciaTodaJornada: false }).datos.asistenciaTodaJornada, false);
+    });
+
+    it("rechaza cualquier otro tipo de valor", () => {
+      for (const valor of ["true", 1, 0, null, [], {}]) {
+        const r = resultado({ asistenciaTodaJornada: valor });
+        assert.ok(r.errores.asistenciaTodaJornada, JSON.stringify(valor));
+        assert.equal(r.datos, null);
+      }
+    });
+  });
+
   describe("banner opcional (enlace https a una imagen)", () => {
     const datosDe = (extra) => validarJornada(formulario(extra), { ahora: AHORA }).datos;
 

@@ -259,6 +259,35 @@ describe("M3 · gestión de jornadas (gestor y administrador)", () => {
     });
   });
 
+  describe("asistencia durante toda la jornada (opcional)", () => {
+    it("se guarda al crear y al editar; sin el campo en la edición no se toca", async () => {
+      const creada = await api.llamar("gestorA", "POST", "/v1/jornadas", cuerpoJornada({ asistenciaTodaJornada: true }));
+      assert.equal(creada.estado, 201);
+      assert.equal((await leer(`jornadas/${creada.cuerpo.id}`)).asistenciaTodaJornada, true);
+
+      const sinCampo = await api.llamar("gestorA", "PUT", `/v1/jornadas/${creada.cuerpo.id}`, cuerpoJornada({ titulo: "Otro título" }));
+      assert.equal(sinCampo.estado, 204);
+      assert.equal((await leer(`jornadas/${creada.cuerpo.id}`)).asistenciaTodaJornada, true, "una app anterior no lo borra");
+
+      const apagada = await api.llamar("gestorA", "PUT", `/v1/jornadas/${creada.cuerpo.id}`, cuerpoJornada({ asistenciaTodaJornada: false }));
+      assert.equal(apagada.estado, 204);
+      assert.equal((await leer(`jornadas/${creada.cuerpo.id}`)).asistenciaTodaJornada, false);
+    });
+
+    it("una jornada creada sin el campo no lo lleva (rigen los 20 minutos)", async () => {
+      const r = await api.llamar("gestorA", "POST", "/v1/jornadas", cuerpoJornada());
+      assert.equal("asistenciaTodaJornada" in (await leer(`jornadas/${r.cuerpo.id}`)), false);
+    });
+
+    it("rechaza un valor que no sea verdadero o falso", async () => {
+      for (const valor of ["true", 1, null, []]) {
+        const r = await api.llamar("gestorA", "POST", "/v1/jornadas", cuerpoJornada({ asistenciaTodaJornada: valor }));
+        assert.equal(r.estado, 400, JSON.stringify(valor));
+        assert.ok(r.cuerpo.error.campos.asistenciaTodaJornada);
+      }
+    });
+  });
+
   describe("editar y reasignar", () => {
     it("el gestor edita su propia jornada", async () => {
       const r = await api.llamar("gestorA", "PUT", "/v1/jornadas/jA", cuerpoJornada({ titulo: "Nuevo título", cuposTotales: 20 }));

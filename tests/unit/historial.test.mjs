@@ -48,6 +48,40 @@ describe("construirMisJornadas lleva «asistió» de cada inscripción", () => {
   });
 });
 
+describe("construirMisJornadas oculta las jornadas eliminadas", () => {
+  const opciones = { ocultarEliminadas: true };
+
+  it("no muestra la inscripción de una jornada que ya no existe, ni como inscrita ni como asistida", () => {
+    const viva = jornada("viva", AHORA + 2 * DIA);
+    const lista = construirMisJornadas(
+      [inscripcion("viva"), inscripcion("borrada"), inscripcion("borrada-asistida", { asistio: true, fechaJornada: AHORA - DIA })],
+      mapa(viva),
+      AHORA,
+      opciones
+    );
+    assert.deepEqual(lista.map((j) => j.id), ["viva"]);
+    assert.deepEqual(contarHistorial(lista), { inscritas: 1, asistidas: 0 });
+  });
+
+  it("sigue mostrando las jornadas desactivadas o finalizadas que sí existen", () => {
+    const pasada = jornada("pasada", AHORA - 3 * DIA, { activa: false });
+    const lista = construirMisJornadas([inscripcion("pasada", { asistio: true })], mapa(pasada), AHORA, opciones);
+    assert.equal(lista.length, 1);
+    assert.equal(lista[0].finalizada, true);
+  });
+
+  it("mantiene visible una inscripción pendiente de sincronizar", () => {
+    const lista = construirMisJornadas([inscripcion("nueva", { pendiente: "INSCRIBIR" })], new Map(), AHORA, opciones);
+    assert.equal(lista.length, 1);
+  });
+
+  it("sin la opción (lista de jornadas aún no confirmada) se conserva como no disponible", () => {
+    const lista = construirMisJornadas([inscripcion("borrada")], new Map(), AHORA);
+    assert.equal(lista.length, 1);
+    assert.equal(lista[0].noDisponible, true);
+  });
+});
+
 describe("distintivoHistorial", () => {
   const casos = [
     [{ pendiente: "INSCRIBIR" }, "pendiente", "Pendiente por sincronizar"],

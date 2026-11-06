@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useConnectivity } from "../../context/ConnectivityContext";
@@ -23,7 +24,7 @@ import {
   jornadaYaPaso,
 } from "../../utils/jornadaFecha";
 import { jornadaDisponible } from "../../utils/jornadaEstado";
-import { estadoVentanaAsistencia } from "../../utils/asistencia";
+import { estadoVentanaAsistencia, textoVentanaAsistencia } from "../../utils/asistencia";
 import { formatearDuracion, jornadaTerminada } from "../../utils/duracion";
 import { categoriaDeJornada } from "../../utils/categorias";
 import { palabraPlural } from "../../utils/plural";
@@ -47,6 +48,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
     asistenciaPendiente,
     cargando: cargandoJornadas,
     ahora,
+    recargar,
   } = useJornadas();
   const { enLinea } = useConnectivity();
   const { inscribirse, cancelarInscripcion } = useAccionesInscripcion();
@@ -73,10 +75,21 @@ export default function JornadaDetailScreen({ route, navigation }) {
     [inscripciones, jornada.id]
   );
   const yaAsistio = Boolean(inscripcionActual?.asistio);
-  const ventanaAsistencia = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin);
+  const ventanaAsistencia = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin, jornada.asistenciaTodaJornada === true);
 
   const [inscribiendo, setInscribiendo] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [actualizando, setActualizando] = useState(false);
+
+  // Arrastrar hacia abajo vuelve a pedir las jornadas e inscripciones (cupos, estado, asistencia…)
+  const onRefresh = async () => {
+    setActualizando(true);
+    try {
+      await recargar();
+    } finally {
+      setActualizando(false);
+    }
+  };
 
   const cuposRestantes = jornada.cuposTotales - jornada.cuposOcupados;
   const sinCupos = cuposRestantes <= 0;
@@ -258,7 +271,18 @@ export default function JornadaDetailScreen({ route, navigation }) {
   };
 
   return (
-    <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
+    <ScrollView
+      style={styles.contenedor}
+      contentContainerStyle={styles.contenido}
+      refreshControl={
+        <RefreshControl
+          refreshing={actualizando}
+          onRefresh={onRefresh}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+    >
       {/* Banner opcional: si no hay enlace o no carga, no ocupa espacio */}
       <BannerJornada url={jornada.bannerUrl} altura={170} />
 
@@ -426,6 +450,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
                     jornadaId: jornada.id,
                     jornadaFecha: jornada.fecha,
                     duracionMin: jornada.duracionMin,
+                    asistenciaTodaJornada: jornada.asistenciaTodaJornada === true,
                     tituloJornada: jornada.titulo,
                   })
                 }
@@ -442,7 +467,7 @@ export default function JornadaDetailScreen({ route, navigation }) {
               </TouchableOpacity>
               {ventanaAsistencia.disponible && (
                 <Text style={styles.asistenciaNota}>
-                  Solo puedes registrar asistencia durante los primeros 20 minutos de la jornada.
+                  {textoVentanaAsistencia(jornada.duracionMin, jornada.asistenciaTodaJornada === true)}
                 </Text>
               )}
             </View>

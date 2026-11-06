@@ -283,6 +283,11 @@ export default function JornadaAdminScreen({ navigation, route }) {
         />
         <Fila icono="time-outline" etiqueta="Hora" valor={formatearHora(jornada.fecha)} />
         <Fila icono="hourglass-outline" etiqueta="Duración" valor={formatearDuracion(jornada.duracionMin)} />
+        <Fila
+          icono="qr-code-outline"
+          etiqueta="Asistencia por QR"
+          valor={jornada.asistenciaTodaJornada === true ? "Durante toda la jornada" : "Primeros 20 minutos"}
+        />
         <Fila icono="location-outline" etiqueta="Espacio" valor={jornada.lugar} />
         <Fila icono="person-outline" etiqueta={(jornada.responsable || "").includes(",") ? "Responsables" : "Responsable"} valor={jornada.responsable} />
         {esAdministrador && (

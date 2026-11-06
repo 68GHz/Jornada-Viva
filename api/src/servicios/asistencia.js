@@ -22,7 +22,8 @@ import { exigirGestor, exigirPropiedad } from "./jornadas.js";
 //    el QR; su pantalla lo renueva cada pocos segundos.
 //  - El estudiante inscrito lo escanea y la API valida el código, que la jornada esté activa y que
 //    esté dentro de la ventana de asistencia (los primeros 20 minutos, o toda la jornada si dura
-//    menos) antes de registrar su asistencia.
+//    menos; o toda la jornada si el gestor activó `asistenciaTodaJornada`) antes de registrar su
+//    asistencia.
 //  - El gestor o el administrador pueden marcar o corregir la asistencia a mano en cualquier
 //    momento desde que empieza la jornada. Queda anotado quién lo hizo y cuándo; si lo hace un
 //    administrador, también en la auditoría.
@@ -107,7 +108,8 @@ export async function registrar(ctx, usuario, jornadaId, cuerpo = {}) {
       throw negocio("JORNADA_NO_DISPONIBLE", "La jornada fue desactivada.");
     }
 
-    const ventana = estadoVentanaAsistencia(fecha, instante, duracionMin);
+    // Por defecto la ventana son los primeros 20 minutos; el gestor puede dejarla abierta toda la jornada
+    const ventana = estadoVentanaAsistencia(fecha, instante, duracionMin, datos.asistenciaTodaJornada === true);
     if (!ventana.disponible) throw negocio("ASISTENCIA_FUERA_DE_VENTANA", ventana.mensaje);
 
     if (inscripciones.empty) throw negocio("NO_INSCRITO", "No estás inscrito en esta jornada.");

@@ -4,6 +4,7 @@ import {
   estadoVentanaAsistencia,
   generarPayloadQrAsistencia,
   parsearPayloadQrAsistencia,
+  textoVentanaAsistencia,
   ventanaAsistenciaMin,
   VENTANA_ASISTENCIA_MS,
 } from "../../src/utils/asistencia.js";
@@ -85,5 +86,45 @@ describe("asistencia y ventana de 20 minutos", () => {
     );
     assert.equal(antiguo.valido, false);
     assert.match(antiguo.error, /antiguo/);
+  });
+});
+
+describe("asistencia durante toda la jornada (opción del gestor)", () => {
+  const inicio = 1700000000000;
+  const MIN = 60 * 1000;
+
+  it("por defecto sigue siendo de 20 minutos, también con el valor en falso o ausente", () => {
+    for (const todaLaJornada of [undefined, false, null, "true", 1]) {
+      assert.equal(ventanaAsistenciaMin(120, todaLaJornada), 20, String(todaLaJornada));
+      assert.equal(estadoVentanaAsistencia(inicio, inicio + 30 * MIN, 120, todaLaJornada).estado, "EXPIRADA");
+    }
+  });
+
+  it("activada, la ventana dura lo que dura la jornada", () => {
+    assert.equal(ventanaAsistenciaMin(120, true), 120);
+    assert.equal(ventanaAsistenciaMin(10, true), 10);
+    assert.equal(estadoVentanaAsistencia(inicio, inicio + 30 * MIN, 120, true).disponible, true);
+    assert.equal(estadoVentanaAsistencia(inicio, inicio + 119 * MIN, 120, true).disponible, true);
+    assert.equal(estadoVentanaAsistencia(inicio, inicio + 120 * MIN, 120, true).disponible, true, "justo al terminar todavía vale");
+  });
+
+  it("al terminar la jornada se cierra, y antes de empezar sigue sin abrirse", () => {
+    const tarde = estadoVentanaAsistencia(inicio, inicio + 121 * MIN, 120, true);
+    assert.equal(tarde.disponible, false);
+    assert.equal(tarde.estado, "EXPIRADA");
+    assert.match(tarde.mensaje, /jornada ya terminó/);
+    const antes = estadoVentanaAsistencia(inicio, inicio - 5 * MIN, 120, true);
+    assert.equal(antes.disponible, false);
+    assert.equal(antes.estado, "ANTES");
+  });
+
+  it("la duración por defecto (60 min) se usa si la jornada no la trae", () => {
+    assert.equal(ventanaAsistenciaMin(undefined, true), 60);
+  });
+
+  it("el aviso al estudiante cambia según la opción", () => {
+    assert.match(textoVentanaAsistencia(120, false), /primeros 20 minutos/);
+    assert.match(textoVentanaAsistencia(10, false), /primeros 10 minutos/);
+    assert.match(textoVentanaAsistencia(120, true), /cualquier momento mientras dure la jornada/);
   });
 });

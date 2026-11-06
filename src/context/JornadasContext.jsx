@@ -47,6 +47,9 @@ export function JornadasProvider({ children }) {
   const [inscripciones, setInscripciones] = useState([]);
   const [jornadasListas, setJornadasListas] = useState(false);
   const [inscripcionesListas, setInscripcionesListas] = useState(false);
+  // Ya se recibió la lista de jornadas (del servidor o de lo guardado): si una inscripción apunta a una
+  // jornada que no está en ella, esa jornada fue eliminada y no se le muestra al estudiante
+  const [jornadasConfirmadas, setJornadasConfirmadas] = useState(false);
   const [hidratado, setHidratado] = useState(false);
   const [error, setError] = useState(null);
   const [clave, setClave] = useState(0);
@@ -63,6 +66,7 @@ export function JornadasProvider({ children }) {
     setInscripciones([]);
     setJornadasListas(false);
     setInscripcionesListas(false);
+    setJornadasConfirmadas(false);
     setHidratado(false);
     setError(null);
     delServidor.current = { jornadas: false, inscripciones: false };
@@ -82,6 +86,7 @@ export function JornadasProvider({ children }) {
       if (guardadasJ?.datos && !delServidor.current.jornadas) {
         setJornadas(guardadasJ.datos);
         setJornadasListas(true);
+        if (guardadasJ.datos.length > 0) setJornadasConfirmadas(true);
       }
       if (guardadasI?.datos && !delServidor.current.inscripciones) {
         setInscripciones(guardadasI.datos);
@@ -134,6 +139,7 @@ export function JornadasProvider({ children }) {
 
         const datos = snapshot.docs.map((d) => normalizarJornada(d.id, d.data()));
         setJornadas(datos);
+        setJornadasConfirmadas(true);
         setError(null);
         setJornadasListas(true);
         terminarRecarga();
@@ -236,12 +242,13 @@ export function JornadasProvider({ children }) {
       construirMisJornadas(
         aplicarPendientesAInscripciones(inscripciones, pendientesPorJornada),
         jornadasPorId,
-        ahora
+        ahora,
+        { ocultarEliminadas: jornadasConfirmadas }
       ).map((j) =>
         // Asistencia guardada en el dispositivo y aún sin enviar (se verá como «Asistencia pendiente»)
         asistenciasPendientes.has(j.id) && !j.asistio ? { ...j, asistenciaPendiente: true } : j
       ),
-    [inscripciones, pendientesPorJornada, asistenciasPendientes, jornadasPorId, ahora]
+    [inscripciones, pendientesPorJornada, asistenciasPendientes, jornadasPorId, ahora, jornadasConfirmadas]
   );
 
   const inscritasEnServidor = useMemo(

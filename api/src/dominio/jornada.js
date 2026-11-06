@@ -97,11 +97,19 @@ export function validarDatosJornada(campos, { ahora, cuposOcupados = 0, exigirFu
   const categoria = typeof c.categoria === "string" ? c.categoria.trim() : c.categoria;
   if (categoria !== undefined && !esCategoriaValida(categoria)) errores.categoria = MENSAJE_CATEGORIA;
 
+  // «Asistencia durante toda la jornada»: opcional (las versiones anteriores de la app no lo envían y
+  // entonces no se toca lo que la jornada ya tenía; sin valor guardado rigen los 20 minutos de siempre)
+  const asistenciaTodaJornada = c.asistenciaTodaJornada;
+  if (asistenciaTodaJornada !== undefined && typeof asistenciaTodaJornada !== "boolean") {
+    errores.asistenciaTodaJornada = "Indica si la asistencia se puede registrar durante toda la jornada (sí o no).";
+  }
+
   if (Object.keys(errores).length > 0) return { errores, datos: null };
   return {
     errores,
     datos: {
       titulo, descripcion, entidad, responsable, lugar, fecha, duracionMin, cuposTotales,
+      ...(asistenciaTodaJornada !== undefined ? { asistenciaTodaJornada } : {}),
       ...(categoria !== undefined ? { categoria } : {}),
       ...(bannerUrl !== undefined ? { bannerUrl } : {}),
     },
