@@ -14,7 +14,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A6B4A"
       },
-      "package": "com.brigadas.app"
+      "package": "com.brigadas.app",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -24,6 +28,19 @@
       "expo-status-bar",
       "expo-font",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Jornada Viva usa la cámara para escanear el código QR de asistencia.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1A6B4A"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
@@ -32,6 +49,12 @@
           "imageWidth": 200
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "375f05cc-475a-45ee-94db-3666d822251c"
+      }
+    },
+    "owner": "aldanam4r"
   }
 }
