@@ -14,7 +14,9 @@ export default function SaludoHeader({ nombre, texto, rol }) {
   return (
     <View style={styles.saludo} accessibilityRole="header">
       <View style={styles.circuloGrande} />
+      <View style={styles.circuloGrande2} />
       <View style={styles.circuloPequeno} />
+      <View style={styles.circuloPequeno2} />
       <View style={styles.fila}>
         <Text style={styles.hora}>{saludoSegunHora()}</Text>
         {!!rol && (
@@ -43,19 +45,37 @@ const styles = StyleSheet.create({
   circuloGrande: {
     position: "absolute",
     right: -40,
-    top: -50,
+    top: -30,
     width: 160,
     height: 160,
     borderRadius: 80,
     backgroundColor: "rgba(255,255,255,0.08)",
   },
+  circuloGrande2: {
+    position: "absolute",
+    right: 140,
+    top: 60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
   circuloPequeno: {
     position: "absolute",
-    right: 75,
-    bottom: 25,
+    right: 95,
+    bottom: 10,
     width: 80,
     height: 80,
     borderRadius: 40,
+    backgroundColor: "rgba(245,166,35,0.25)",
+  },
+  circuloPequeno2: {
+    position: "absolute",
+    right: 270,
+    bottom: 45,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: "rgba(245,166,35,0.25)",
   },
   fila: { flexDirection: "row", alignItems: "center", gap: 8 },
