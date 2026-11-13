@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,74 +7,125 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  doc,
-  updateDoc,
-  increment,
-} from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
-import "dayjs/locale/es";
-import { db } from "../../../firebaseConfig";
-import { useAuth } from "../../context/AuthContext";
+import { useConnectivity } from "../../context/ConnectivityContext";
+import { useJornadas } from "../../context/JornadasContext";
+import { useAccionesInscripcion } from "../../hooks/useAccionesInscripcion";
+import BannerJornada from "../../components/BannerJornada";
+import EspaciosAlternos from "../../components/EspaciosAlternos";
 import { colors } from "../../theme/colors";
+import {
+  puedeCancelarInscripcion,
+  DIAS_LIMITE_CANCELACION,
+  formatearFecha,
+  formatearHora,
+  jornadaYaPaso,
+} from "../../utils/jornadaFecha";
+import { jornadaDisponible } from "../../utils/jornadaEstado";
+import { estadoVentanaAsistencia, textoVentanaAsistencia } from "../../utils/asistencia";
+import { formatearDuracion, jornadaTerminada } from "../../utils/duracion";
+import { categoriaDeJornada } from "../../utils/categorias";
+import { palabraPlural } from "../../utils/plural";
+import { formatearTiempoRestante } from "../../utils/tiempoRestante";
 
-dayjs.locale("es");
+const TITULO_ERROR = {
+  YA_INSCRITO: "Ya inscrito",
+  SIN_CUPOS: "Sin cupos",
+  JORNADA_NO_DISPONIBLE: "Jornada no disponible",
+  PLAZO_VENCIDO: "Plazo vencido",
+  ACCION_DEMASIADO_ANTIGUA: "Cancelación demasiado antigua",
+};
 
-export default function JornadaDetailScreen({ route }) {
+export default function JornadaDetailScreen({ route, navigation }) {
   const { jornada: jornadaInicial } = route.params;
-  const { usuario } = useAuth();
 
-  const [jornada, setJornada] = useState(jornadaInicial);
+  const {
+    jornadasPorId,
+    inscripciones,
+    estadoInscripcion,
+    asistenciaPendiente,
+    cargando: cargandoJornadas,
+    ahora,
+    recargar,
+  } = useJornadas();
+  const { enLinea } = useConnectivity();
+  const { inscribirse, cancelarInscripcion } = useAccionesInscripcion();
 
-  const [inscrito, setInscrito] = useState(false);
-  const [verificando, setVerificando] = useState(true);
+  // Datos en vivo de Firestore (cupos, estado, etc.) sobre los recibidos al navegar
+  const jornadaEnVivo = jornadasPorId.get(jornadaInicial.id);
+  const jornada = useMemo(
+    () => (jornadaEnVivo ? { ...jornadaInicial, ...jornadaEnVivo } : jornadaInicial),
+    [jornadaInicial, jornadaEnVivo]
+  );
+  // Todas las jornadas guardadas en el dispositivo (FE-01: también las de otros espacios)
+  const todasLasJornadas = useMemo(() => Array.from(jornadasPorId.values()), [jornadasPorId]);
+  const vencida = jornadaYaPaso(jornada.fecha, ahora);
+  // Mientras cargan los datos no se bloquea; luego debe existir, estar activa y no vencida
+  const disponible =
+    cargandoJornadas || (!!jornadaEnVivo && jornadaDisponible(jornadaEnVivo, ahora));
+
+  // Incluye lo pendiente de sincronizar: `pendiente` es "INSCRIBIR", "CANCELAR" o null
+  const { inscrito, pendiente } = estadoInscripcion(jornada.id);
+  const verificando = cargandoJornadas;
+
+  const inscripcionActual = useMemo(
+    () => inscripciones?.find((i) => i.jornadaId === jornada.id),
+    [inscripciones, jornada.id]
+  );
+  const yaAsistio = Boolean(inscripcionActual?.asistio);
+  const ventanaAsistencia = estadoVentanaAsistencia(jornada.fecha, ahora, jornada.duracionMin, jornada.asistenciaTodaJornada === true);
+
   const [inscribiendo, setInscribiendo] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [actualizando, setActualizando] = useState(false);
+
+  // Arrastrar hacia abajo vuelve a pedir las jornadas e inscripciones (cupos, estado, asistencia…)
+  const onRefresh = async () => {
+    setActualizando(true);
+    try {
+      await recargar();
+    } finally {
+      setActualizando(false);
+    }
+  };
 
   const cuposRestantes = jornada.cuposTotales - jornada.cuposOcupados;
   const sinCupos = cuposRestantes <= 0;
+  const puedeCancelar = puedeCancelarInscripcion(jornada.fecha);
 
-  // Verificar si el usuario ya está inscrito
-  useEffect(() => {
-    const verificarInscripcion = async () => {
-      try {
-        const q = query(
-          collection(db, "inscripciones"),
-          where("userId", "==", usuario.uid),
-          where("jornadaId", "==", jornada.id)
-        );
-        const snap = await getDocs(q);
-        setInscrito(!snap.empty);
-      } catch (err) {
-        console.error("Error verificando inscripción:", err);
-      } finally {
-        setVerificando(false);
-      }
-    };
-
-    verificarInscripcion();
-  }, [jornada.id, usuario.uid]);
+  const mostrarError = (err, mensajeGeneral) => {
+    if (err?.name === "ErrorNegocio") {
+      Alert.alert(TITULO_ERROR[err.codigo] || "No se pudo completar", err.message);
+      return;
+    }
+    console.error(mensajeGeneral, err);
+    Alert.alert("Error", `${mensajeGeneral} Intenta de nuevo.`);
+  };
 
   const manejarInscripcion = async () => {
+    if (!disponible) {
+      Alert.alert("Jornada no disponible", "Esta jornada ya no está disponible para inscripción.");
+      return;
+    }
+
     if (sinCupos) {
       Alert.alert("Sin cupos", "Esta jornada ya no tiene cupos disponibles.");
       return;
     }
 
+    const aviso = enLinea
+      ? ""
+      : "\n\nSin conexión: tu inscripción quedará guardada en el dispositivo como pendiente y se enviará automáticamente cuando recuperes internet. Solo se confirmará si aún hay cupos disponibles.";
+
     Alert.alert(
       "Confirmar inscripción",
-      `¿Deseas inscribirte en "${jornada.titulo}"?\n\nFecha: ${dayjs(jornada.fecha).format("DD [de] MMMM [de] YYYY")}\nLugar: ${jornada.lugar}`,
+      `¿Deseas inscribirte en "${jornada.titulo}"?\n\nFecha: ${formatearFecha(jornada.fecha, "DD [de] MMMM [de] YYYY")}\nHora: ${formatearHora(jornada.fecha)}\nLugar: ${jornada.lugar}${aviso}`,
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Sí, inscribirme",
+          text: enLinea ? "Sí, inscribirme" : "Sí, continuar",
           style: "default",
           onPress: confirmarInscripcion,
         },
@@ -82,53 +133,89 @@ export default function JornadaDetailScreen({ route }) {
     );
   };
 
-const confirmarInscripcion = async () => {
-  setInscribiendo(true);
-  try {
-    // Doble verificación en el momento de inscribir (evita condición de carrera)
-    const q = query(
-      collection(db, "inscripciones"),
-      where("userId", "==", usuario.uid),
-      where("jornadaId", "==", jornada.id)
-    );
-    const verificacion = await getDocs(q);
-    if (!verificacion.empty) {
-      setInscrito(true);
-      Alert.alert("Ya inscrito", "Ya tienes una inscripción activa en esta jornada.");
+  const confirmarInscripcion = async () => {
+    setInscribiendo(true);
+    try {
+      const { estado } = await inscribirse(jornada);
+
+      if (estado === "completada") {
+        Alert.alert(
+          "¡Inscripción exitosa! ✅",
+          `Quedaste registrado en "${jornada.titulo}".\n\nRecuerda presentarte el ${formatearFecha(jornada.fecha, "DD [de] MMMM")} a las ${formatearHora(jornada.fecha)} en ${jornada.lugar}.`
+        );
+      } else if (estado === "pendiente") {
+        Alert.alert(
+          "Pendiente por sincronizar",
+          `Tu inscripción en "${jornada.titulo}" quedó guardada en el dispositivo y se enviará cuando recuperes la conexión. Solo se confirmará si aún hay cupos disponibles.`
+        );
+      } else if (estado === "anulada") {
+        Alert.alert(
+          "Cancelación anulada",
+          "Tenías una cancelación pendiente de enviar. Se anuló y sigues inscrito."
+        );
+      } else {
+        Alert.alert("Ya en proceso", "Esta inscripción ya está pendiente de sincronizar.");
+      }
+    } catch (err) {
+      mostrarError(err, "No se pudo completar la inscripción.");
+    } finally {
+      setInscribiendo(false);
+    }
+  };
+
+  const manejarCancelacion = () => {
+    if (!puedeCancelarInscripcion(jornada.fecha)) {
+      Alert.alert(
+        "Plazo vencido",
+        `Solo puedes cancelar hasta ${DIAS_LIMITE_CANCELACION} días antes de la jornada.`
+      );
       return;
     }
 
-    await addDoc(collection(db, "inscripciones"), {
-      userId: usuario.uid,
-      jornadaId: jornada.id,
-      nombreUsuario: usuario.displayName || usuario.email,
-      emailUsuario: usuario.email,
-      tituloJornada: jornada.titulo,
-      fechaJornada: jornada.fecha,
-      inscritoEn: serverTimestamp(),
-      asistio: false,
-    });
+    const aviso = enLinea
+      ? ""
+      : "\n\nSin conexión: la cancelación quedará guardada en el dispositivo como pendiente y se enviará automáticamente cuando recuperes internet. El plazo se valida con la fecha de este dispositivo.";
 
-    await updateDoc(doc(db, "jornadas", jornada.id), {
-      cuposOcupados: increment(1),
-    });
+    Alert.alert(
+      "Cancelar inscripción",
+      `¿Seguro que deseas cancelar tu inscripción en "${jornada.titulo}"?\n\nTu cupo quedará disponible para otras personas.${aviso}`,
+      [
+        { text: "Mantener inscripción", style: "cancel" },
+        {
+          text: enLinea ? "Sí, cancelar" : "Sí, continuar",
+          style: "destructive",
+          onPress: confirmarCancelacion,
+        },
+      ]
+    );
+  };
 
-    setJornada((prev) => ({ ...prev, cuposOcupados: prev.cuposOcupados + 1 }));
-    setInscrito(true);
-    Alert.alert(
-      "¡Inscripción exitosa! ✅",
-      `Quedaste registrado en "${jornada.titulo}".\n\nRecuerda presentarte el ${dayjs(jornada.fecha).format("DD [de] MMMM")} a las ${jornada.hora} en ${jornada.lugar}.`
-    );
-  } catch (err) {
-    console.error("Error al inscribirse:", err);
-    Alert.alert(
-      "Error",
-      "No se pudo completar la inscripción. Verifica tu conexión e intenta de nuevo."
-    );
-  } finally {
-    setInscribiendo(false);
-  }
-};
+  const confirmarCancelacion = async () => {
+    setCancelando(true);
+    try {
+      const { estado } = await cancelarInscripcion(jornada);
+
+      if (estado === "completada") {
+        Alert.alert("Inscripción cancelada", `Cancelaste tu inscripción en "${jornada.titulo}".`);
+      } else if (estado === "pendiente") {
+        Alert.alert(
+          "Pendiente por sincronizar",
+          `La cancelación de tu inscripción en "${jornada.titulo}" quedó guardada en el dispositivo. Tu cupo se liberará cuando recuperes la conexión.`
+        );
+      } else if (estado === "anulada") {
+        Alert.alert(
+          "Inscripción anulada",
+          "Tu inscripción aún no se había enviado, así que se anuló y no se registrará en el servidor."
+        );
+      } else {
+        Alert.alert("Ya en proceso", "Esta cancelación ya está pendiente de sincronizar.");
+      }
+    } catch (err) {
+      mostrarError(err, "No se pudo cancelar la inscripción.");
+    } finally {
+      setCancelando(false);
+    }
+  };
 
   const renderBotonInscripcion = () => {
     if (verificando) {
@@ -142,9 +229,19 @@ const confirmarInscripcion = async () => {
 
     if (inscrito) {
       return (
-        <View style={styles.botonInscrito}>
+        <View style={[styles.botonInscrito, pendiente === "INSCRIBIR" && styles.botonPendiente]}>
           <Ionicons name="checkmark-circle" size={20} color={colors.white} />
-          <Text style={styles.botonTexto}>Ya estás inscrito</Text>
+          <Text style={styles.botonTexto}>
+            {pendiente === "INSCRIBIR" ? "Inscripción pendiente por sincronizar" : "Ya estás inscrito"}
+          </Text>
+        </View>
+      );
+    }
+
+    if (!disponible) {
+      return (
+        <View style={[styles.botonInscripcion, styles.botonAgotado]}>
+          <Text style={styles.botonTexto}>Jornada no disponible</Text>
         </View>
       );
     }
@@ -174,12 +271,42 @@ const confirmarInscripcion = async () => {
   };
 
   return (
-    <ScrollView style={styles.contenedor} contentContainerStyle={styles.contenido}>
+    <ScrollView
+      style={styles.contenedor}
+      contentContainerStyle={styles.contenido}
+      refreshControl={
+        <RefreshControl
+          refreshing={actualizando}
+          onRefresh={onRefresh}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+    >
+      {/* Banner opcional: si no hay enlace o no carga, no ocupa espacio */}
+      <BannerJornada url={jornada.bannerUrl} altura={170} />
+
       {/* Encabezado */}
       <View style={styles.encabezado}>
         <Text style={styles.titulo}>{jornada.titulo}</Text>
-        <Text style={styles.entidad}>{jornada.entidad}</Text>
+        <Text style={styles.entidad}>
+          {jornada.entidad}
+          {categoriaDeJornada(jornada) ? ` · ${categoriaDeJornada(jornada)}` : ""}
+        </Text>
       </View>
+
+      {!disponible && (
+        <View style={styles.avisoNoDisponible}>
+          <Ionicons name="alert-circle-outline" size={18} color={colors.error} />
+          <Text style={styles.avisoNoDisponibleTexto}>
+            {vencida
+              ? jornadaTerminada(jornada, ahora)
+                ? "Esta jornada ya finalizó."
+                : "Esta jornada ya comenzó y no admite nuevas inscripciones."
+              : "Esta jornada fue desactivada y no está disponible por el momento."}
+          </Text>
+        </View>
+      )}
 
       {/* Cupos */}
       <View
@@ -192,10 +319,11 @@ const confirmarInscripcion = async () => {
           {sinCupos ? "0" : cuposRestantes}
         </Text>
         <Text style={styles.cuposEtiqueta}>
-          {sinCupos ? "Sin cupos" : "cupos disponibles"}
+          {sinCupos ? "Sin cupos" : palabraPlural(cuposRestantes, "cupo disponible", "cupos disponibles")}
         </Text>
         <Text style={styles.cuposSub}>
-          {jornada.cuposOcupados} de {jornada.cuposTotales} lugares ocupados
+          {jornada.cuposOcupados} de {jornada.cuposTotales}{" "}
+          {palabraPlural(jornada.cuposTotales, "lugar ocupado", "lugares ocupados")}
         </Text>
       </View>
 
@@ -208,7 +336,7 @@ const confirmarInscripcion = async () => {
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Fecha</Text>
             <Text style={styles.filaValor}>
-              {dayjs(jornada.fecha).format("dddd, DD [de] MMMM [de] YYYY")}
+              {formatearFecha(jornada.fecha, "dddd, DD [de] MMMM [de] YYYY")}
             </Text>
           </View>
         </View>
@@ -219,7 +347,19 @@ const confirmarInscripcion = async () => {
           <Ionicons name="time-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
             <Text style={styles.filaEtiqueta}>Hora</Text>
-            <Text style={styles.filaValor}>{jornada.hora}</Text>
+            <Text style={styles.filaValor}>{formatearHora(jornada.fecha)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.separador} />
+
+        <View style={styles.filaInfo}>
+          <Ionicons name="hourglass-outline" size={18} color={colors.primary} style={styles.filaIcono} />
+          <View style={styles.filaTexto}>
+            <Text style={styles.filaEtiqueta}>Duración</Text>
+            <Text style={[styles.filaValor, { textTransform: "none" }]}>
+              {formatearDuracion(jornada.duracionMin)}
+            </Text>
           </View>
         </View>
 
@@ -238,11 +378,19 @@ const confirmarInscripcion = async () => {
         <View style={styles.filaInfo}>
           <Ionicons name="person-outline" size={18} color={colors.primary} style={styles.filaIcono} />
           <View style={styles.filaTexto}>
-            <Text style={styles.filaEtiqueta}>Responsable</Text>
+            <Text style={styles.filaEtiqueta}>{(jornada.responsable || "").includes(",") ? "Responsables" : "Responsable"}</Text>
             <Text style={styles.filaValor}>{jornada.responsable}</Text>
           </View>
         </View>
       </View>
+
+      {/* FE-01: espacios alternos si la jornada fue cancelada o su espacio está ocupado */}
+      <EspaciosAlternos
+        jornada={jornada}
+        jornadas={todasLasJornadas}
+        ahora={ahora}
+        enLinea={enLinea}
+      />
 
       {/* Descripción */}
       <View style={styles.seccion}>
@@ -253,6 +401,15 @@ const confirmarInscripcion = async () => {
       {/* Botón de inscripción */}
       <View style={styles.accion}>{renderBotonInscripcion()}</View>
 
+      {pendiente === "CANCELAR" && (
+        <View style={styles.pendienteCard}>
+          <Ionicons name="sync-outline" size={18} color={colors.textPrimary} />
+          <Text style={styles.pendienteTexto}>
+            Cancelación pendiente por sincronizar. Tu cupo se liberará cuando recuperes la conexión.
+          </Text>
+        </View>
+      )}
+
       {inscrito && (
         <View style={styles.confirmacionCard}>
           <View style={styles.confirmacionFila}>
@@ -260,8 +417,85 @@ const confirmarInscripcion = async () => {
             <Text style={styles.confirmacionTitulo}>¡Estás inscrito!</Text>
           </View>
           <Text style={styles.confirmacionTexto}>
-            Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado.
+            {pendiente === "INSCRIBIR"
+              ? "Tu inscripción está guardada en el dispositivo y se confirmará al sincronizar."
+              : "Tu lugar en esta jornada está reservado. Recuerda asistir el día indicado."}
           </Text>
+
+          {/* Asistencia (Autónoma por QR) */}
+          {yaAsistio ? (
+            <View style={styles.asistenciaExitosaCard}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={styles.asistenciaExitosaTexto}>
+                ¡Asistencia confirmada para esta jornada!
+              </Text>
+            </View>
+          ) : asistenciaPendiente(jornada.id) ? (
+            <View style={styles.pendienteCard}>
+              <Ionicons name="sync-outline" size={18} color={colors.textPrimary} />
+              <Text style={styles.pendienteTexto}>
+                Asistencia guardada, pendiente por sincronizar. Se confirmará cuando recuperes la conexión.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.bloqueAsistencia}>
+              <TouchableOpacity
+                style={[
+                  styles.botonEscanearAsistencia,
+                  !ventanaAsistencia.disponible && styles.botonDeshabilitado,
+                ]}
+                disabled={!ventanaAsistencia.disponible}
+                onPress={() =>
+                  navigation?.navigate("EscanearAsistencia", {
+                    jornadaId: jornada.id,
+                    jornadaFecha: jornada.fecha,
+                    duracionMin: jornada.duracionMin,
+                    asistenciaTodaJornada: jornada.asistenciaTodaJornada === true,
+                    tituloJornada: jornada.titulo,
+                  })
+                }
+                activeOpacity={0.85}
+              >
+                <Ionicons name="qr-code-outline" size={20} color={colors.white} />
+                <Text style={styles.botonEscanearTexto}>
+                  {ventanaAsistencia.disponible
+                    ? "Registrar asistencia (Escanear QR)"
+                    : ventanaAsistencia.estado === "ANTES"
+                    ? `Asistencia disponible en ${formatearTiempoRestante(ventanaAsistencia.minutosRestantes)}`
+                    : "Ventana de asistencia finalizada"}
+                </Text>
+              </TouchableOpacity>
+              {ventanaAsistencia.disponible && (
+                <Text style={styles.asistenciaNota}>
+                  {textoVentanaAsistencia(jornada.duracionMin, jornada.asistenciaTodaJornada === true)}
+                </Text>
+              )}
+            </View>
+          )}
+          {puedeCancelar ? (
+            <TouchableOpacity
+              style={[styles.botonCancelar, cancelando && styles.botonDeshabilitado]}
+              onPress={manejarCancelacion}
+              disabled={cancelando}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Cancelar inscripción"
+              accessibilityHint="Libera tu cupo en esta jornada"
+            >
+              {cancelando ? (
+                <ActivityIndicator color={colors.error} />
+              ) : (
+                <>
+                  <Ionicons name="close-circle-outline" size={18} color={colors.error} />
+                  <Text style={styles.botonCancelarTexto}>Cancelar inscripción</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.cancelacionNota}>
+              El plazo para cancelar terminó ({DIAS_LIMITE_CANCELACION} días antes de la jornada).
+            </Text>
+          )}
         </View>
       )}
     </ScrollView>
@@ -410,6 +644,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  botonCancelar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    minHeight: 48,
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.error,
+    backgroundColor: colors.white,
+  },
+  botonCancelarTexto: {
+    color: colors.error,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  botonPendiente: {
+    backgroundColor: colors.warning,
+  },
+  pendienteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: `${colors.warning}30`,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  pendienteTexto: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: "600",
+  },
+  avisoNoDisponible: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: `${colors.error}15`,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  avisoNoDisponibleTexto: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.error,
+    fontWeight: "600",
+  },
+  cancelacionNota: {
+    fontSize: 12,
+    color: colors.textDisabled,
+    marginTop: 4,
+  },
   confirmacionCard: {
     backgroundColor: colors.primaryPale,
     borderRadius: 12,
@@ -433,5 +722,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 19,
+  },
+  bloqueAsistencia: {
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 6,
+  },
+  botonEscanearAsistencia: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  botonEscanearTexto: {
+    color: colors.white,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  asistenciaNota: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  asistenciaExitosaCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(46, 125, 50, 0.12)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(46, 125, 50, 0.3)",
+  },
+  asistenciaExitosaTexto: {
+    color: colors.success,
+    fontWeight: "700",
+    fontSize: 13,
+    flex: 1,
   },
 });

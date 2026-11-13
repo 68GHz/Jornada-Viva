@@ -43,6 +43,8 @@ export default function LoginScreen({ navigation }) {
         mensaje = "El formato del correo no es válido.";
       } else if (error.code === "auth/too-many-requests") {
         mensaje = "Demasiados intentos fallidos. Espera unos minutos.";
+      } else if (error.code === "auth/network-request-failed") {
+        mensaje = "Sin conexión a internet. Conéctate para iniciar sesión.";
       }
       Alert.alert("Error al ingresar", mensaje);
     } finally {

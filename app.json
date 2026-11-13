@@ -1,24 +1,60 @@
 {
   "expo": {
-    "name": "JornadaViva",
-    "slug": "jornadaviva",
+    "name": "Jornada Viva",
+    "slug": "jornada-viva",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "com.brigadas.app"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1A6B4A"
       },
-      "package": "com.brigadas.app"
+      "package": "com.brigadas.app",
+      "versionCode": 5,
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Jornada Viva usa la cámara para escanear el código QR de asistencia.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1A6B4A"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#1A6B4A",
+          "resizeMode": "contain",
+          "imageWidth": 200
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "375f05cc-475a-45ee-94db-3666d822251c"
+      }
+    },
+    "owner": "aldanam4r"
   }
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -6,66 +6,53 @@ import {
   StyleSheet,
   RefreshControl,
 } from "react-native";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-} from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
-import { db } from "../../../firebaseConfig";
+import { useConnectivity } from "../../context/ConnectivityContext";
+import { useJornadas } from "../../context/JornadasContext";
 import JornadaCard from "../../components/JornadaCard";
-import LoadingSpinner from "../../components/LoadingSpinner";
+import { SkeletonJornadasDisponibles } from "../../components/Skeleton";
+import FiltrosJornadas, { FILTROS_INICIALES } from "../../components/FiltrosJornadas";
 import { colors } from "../../theme/colors";
-import { combinarFechaHora } from "../../utils/jornadaFecha";
+import { normalizarTexto, opcionesUnicas } from "../../utils/textoFiltro";
+import { coincideFiltroFecha } from "../../utils/jornadaFecha";
+
 
 export default function JornadasListScreen({ navigation }) {
-  const [jornadas, setJornadas] = useState([]);
-  const [cargando, setCargando] = useState(true);
+  const {
+    jornadasDisponibles: jornadas,
+    estadoInscripcion,
+    cargando,
+    error,
+    recargar,
+  } = useJornadas();
+  const { enLinea } = useConnectivity();
   const [actualizando, setActualizando] = useState(false);
-  const [error, setError] = useState(null);
+  const [filtros, setFiltros] = useState(FILTROS_INICIALES);
 
-  const cargarJornadas = async () => {
-    try {
-      setError(null);
-      const q = query(
-        collection(db, "jornadas"),
-        where("activa", "==", true)
-      );
-      const snapshot = await getDocs(q);
-      const ahora = dayjs();
-      const datos = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((jornada) => {
-          const fechaHora = combinarFechaHora(jornada.fecha, jornada.hora);
-          return fechaHora?.isValid() && fechaHora.isAfter(ahora);
-        });
-
-      // Ordenar por fecha en el cliente
-      datos.sort((a, b) => (a.fecha > b.fecha ? 1 : -1));
-      setJornadas(datos);
-    } catch (err) {
-      console.error("Error cargando jornadas:", err);
-      setError("No se pudieron cargar las jornadas. Verifica tu conexión.");
-    } finally {
-      setCargando(false);
-      setActualizando(false);
-    }
-  };
-
-  useEffect(() => {
-    cargarJornadas();
-  }, []);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setActualizando(true);
-    cargarJornadas();
+    await recargar();
+    setActualizando(false);
   };
+
+  // Opciones de filtro derivadas de los datos cargados
+  const categorias = useMemo(() => opcionesUnicas(jornadas, "categoria"), [jornadas]);
+  const lugares = useMemo(() => opcionesUnicas(jornadas, "lugar"), [jornadas]);
+
+  const jornadasFiltradas = useMemo(() => {
+    const texto = normalizarTexto(filtros.busqueda);
+
+    return jornadas.filter((j) => {
+      if (texto && !normalizarTexto(j.titulo).includes(texto)) return false;
+      if (filtros.categoria && normalizarTexto(j.categoria) !== filtros.categoria) return false;
+      if (filtros.lugar && normalizarTexto(j.lugar) !== filtros.lugar) return false;
+
+      return coincideFiltroFecha(j.fecha, filtros.fecha, filtros.desde, filtros.hasta);
+    });
+  }, [jornadas, filtros]);
 
   if (cargando) {
-    return <LoadingSpinner mensaje="Buscando jornadas disponibles..." />;
+    return <SkeletonJornadasDisponibles />;
   }
 
   if (error) {
@@ -77,20 +64,48 @@ export default function JornadasListScreen({ navigation }) {
     );
   }
 
+  const hayFiltros =
+    filtros.busqueda.trim() !== "" ||
+    filtros.categoria ||
+    filtros.lugar ||
+    filtros.fecha !== "todas";
+
   return (
+    <View style={styles.contenedor}>
+    <FiltrosJornadas
+      filtros={filtros}
+      onCambiar={setFiltros}
+      categorias={categorias}
+      lugares={lugares}
+    />
     <FlatList
-      data={jornadas}
+      keyboardShouldPersistTaps="handled"
+      data={jornadasFiltradas}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <JornadaCard
-          jornada={item}
-          onPress={() =>
-            navigation.navigate("JornadaDetail", { jornada: item })
-          }
-        />
-      )}
+      renderItem={({ item }) => {
+        const { pendiente } = estadoInscripcion(item.id);
+        return (
+          <JornadaCard
+            jornada={item}
+            estado={
+              pendiente
+                ? {
+                    texto:
+                      pendiente === "CANCELAR"
+                        ? "Cancelación pendiente"
+                        : "Pendiente por sincronizar",
+                    color: colors.warning,
+                  }
+                : undefined
+            }
+            onPress={() =>
+              navigation.navigate("JornadaDetail", { jornada: item })
+            }
+          />
+        );
+      }}
       contentContainerStyle={
-        jornadas.length === 0 ? styles.listaVacia : styles.lista
+        jornadasFiltradas.length === 0 ? styles.listaVacia : styles.lista
       }
       style={{ backgroundColor: colors.background }}
       refreshControl={
@@ -103,24 +118,36 @@ export default function JornadasListScreen({ navigation }) {
       }
       ListHeaderComponent={
         <Text style={styles.encabezadoLista}>
-          {jornadas.length} jornada{jornadas.length !== 1 ? "s" : ""} disponible
-          {jornadas.length !== 1 ? "s" : ""}
+          {jornadasFiltradas.length} jornada{jornadasFiltradas.length !== 1 ? "s" : ""} disponible
+          {jornadasFiltradas.length !== 1 ? "s" : ""}
         </Text>
       }
       ListEmptyComponent={
         <View style={styles.centrado}>
-          <Ionicons name="file-tray-outline" size={44} color={colors.textDisabled} />
+          <Ionicons
+            name={hayFiltros ? "search-outline" : "file-tray-outline"}
+            size={44}
+            color={colors.textDisabled}
+          />
           <Text style={styles.vacioTexto}>
-            No hay jornadas disponibles en este momento.{"\n"}
-            Vuelve a revisar pronto.
+            {hayFiltros
+              ? "No encontramos jornadas con esos criterios.\nPrueba con otra búsqueda o limpia los filtros."
+              : !enLinea
+              ? "Sin conexión y sin jornadas guardadas en el dispositivo.\nConéctate a internet para descargarlas."
+              : "No hay jornadas disponibles en este momento.\nVuelve a revisar pronto."}
           </Text>
         </View>
       }
     />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  contenedor: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   lista: {
     paddingVertical: 8,
     paddingBottom: 24,

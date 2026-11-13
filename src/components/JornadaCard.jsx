@@ -1,66 +1,94 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import dayjs from "dayjs";
 import { colors } from "../theme/colors";
+import { formatearFecha, formatearHora } from "../utils/jornadaFecha";
+import { categoriaDeJornada } from "../utils/categorias";
+import { conteoPlural } from "../utils/plural";
+import BannerJornada from "./BannerJornada";
 
-export default function JornadaCard({ jornada, onPress }) {
-  const cuposRestantes = jornada.cuposTotales - jornada.cuposOcupados;
-  const sinCupos = cuposRestantes <= 0;
-  const pocosCupos = cuposRestantes > 0 && cuposRestantes <= 10;
+// Card de jornada, idéntica para todos los roles.
+// `extra` (opcional): línea adicional (p. ej. los cupos ocupados para gestor y administrador).
+// `estado` (opcional): { texto, color } reemplaza el indicador de cupos (ej. "Inscrito").
+export default function JornadaCard({ jornada, onPress, estado, extra }) {
+  const total = Number(jornada.cuposTotales) || 0;
+  const ocupados = Number(jornada.cuposOcupados) || 0;
+  const restantes = total - ocupados;
+  const sinCupos = !estado && restantes <= 0;
+  const pocos = restantes > 0 && restantes <= 10;
+  const ocupacion = total > 0 ? Math.min(1, Math.max(0, ocupados / total)) : 0;
+  const colorCupos = sinCupos ? colors.textDisabled : pocos ? colors.accent : colors.success;
+  const categoria = categoriaDeJornada(jornada);
 
   return (
     <TouchableOpacity
       style={[styles.card, sinCupos && styles.cardAgotada]}
       onPress={onPress}
-      activeOpacity={0.85}
+      activeOpacity={0.88}
+      accessibilityRole="button"
+      accessibilityLabel={`${jornada.titulo}${estado ? `, ${estado.texto}` : ""}`}
     >
-      {/* Barra lateral de color */}
-      <View style={[styles.barraLateral, sinCupos && styles.barraAgotada]} />
+      <BannerJornada url={jornada.bannerUrl} altura={120} style={{ borderRadius: 0 }} />
 
-      <View style={styles.contenido}>
-        {/* Encabezado */}
-        <View style={styles.fila}>
+      <View style={styles.cuerpo}>
+        <View style={styles.fecha}>
+          <Text style={styles.fechaDia}>{formatearFecha(jornada.fecha, "DD")}</Text>
+          <Text style={styles.fechaMes}>{formatearFecha(jornada.fecha, "MMM").replace(".", "").toUpperCase()}</Text>
+        </View>
+
+        <View style={styles.info}>
+          {!!categoria && (
+            <View style={styles.categoria}>
+              <Text style={styles.categoriaTexto}>{categoria}</Text>
+            </View>
+          )}
           <Text style={styles.titulo} numberOfLines={2}>
             {jornada.titulo}
           </Text>
-          {sinCupos ? (
-            <View style={[styles.badge, styles.badgeAgotado]}>
-              <Text style={styles.badgeTexto}>Sin cupos</Text>
-            </View>
-          ) : pocosCupos ? (
-            <View style={[styles.badge, styles.badgePoco]}>
-              <Text style={styles.badgeTexto}>{cuposRestantes} restantes</Text>
-            </View>
-          ) : (
-            <View style={[styles.badge, styles.badgeDisponible]}>
-              <Text style={styles.badgeTexto}>{cuposRestantes} cupos</Text>
+          {!!jornada.entidad && (
+            <Text style={styles.entidad} numberOfLines={1}>
+              {jornada.entidad}
+            </Text>
+          )}
+          <View style={styles.meta}>
+            <Ionicons name="time-outline" size={14} color={colors.primary} />
+            <Text style={styles.metaTexto}>{formatearHora(jornada.fecha)}</Text>
+            {!!jornada.lugar && (
+              <>
+                <Ionicons name="location-outline" size={14} color={colors.primary} style={styles.metaIcono} />
+                <Text style={[styles.metaTexto, styles.metaLugar]} numberOfLines={1}>
+                  {jornada.lugar}
+                </Text>
+              </>
+            )}
+          </View>
+          {!!extra && (
+            <View style={styles.meta}>
+              <Ionicons name="people-outline" size={14} color={colors.primary} />
+              <Text style={[styles.metaTexto, styles.metaLugar]} numberOfLines={2}>
+                {extra}
+              </Text>
             </View>
           )}
         </View>
+      </View>
 
-        {/* Entidad */}
-        <Text style={styles.entidad}>{jornada.entidad}</Text>
-
-        {/* Detalles */}
-        <View style={styles.detalles}>
-          <View style={styles.detalleFila}>
-            <Ionicons name="calendar-outline" size={13} color={colors.textSecondary} />
-            <Text style={styles.detalleTexto}>
-              {dayjs(jornada.fecha).format("DD [de] MMMM [de] YYYY")}
+      <View style={styles.pie}>
+        {estado ? (
+          <View style={[styles.estado, { backgroundColor: estado.color }]}>
+            <Text style={styles.estadoTexto}>{estado.texto}</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.pista}>
+              <View style={[styles.relleno, { width: `${ocupacion * 100}%`, backgroundColor: colorCupos }]} />
+            </View>
+            <Text style={[styles.cupos, { color: sinCupos ? colors.textSecondary : colorCupos }]}>
+              {sinCupos ? "Sin cupos" : conteoPlural(restantes, "cupo", "cupos")}
             </Text>
-          </View>
-          <View style={styles.detalleFila}>
-            <Ionicons name="time-outline" size={13} color={colors.textSecondary} />
-            <Text style={styles.detalleTexto}>{jornada.hora}</Text>
-          </View>
-          <View style={styles.detalleFila}>
-            <Ionicons name="location-outline" size={13} color={colors.textSecondary} />
-            <Text style={styles.detalleTexto} numberOfLines={1}>
-              {jornada.lugar}
-            </Text>
-          </View>
-        </View>
+          </>
+        )}
+        <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
       </View>
     </TouchableOpacity>
   );
@@ -69,84 +97,58 @@ export default function JornadaCard({ jornada, onPress }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 18,
     marginHorizontal: 16,
-    marginVertical: 6,
-    flexDirection: "row",
+    marginVertical: 8,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 3,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  cardAgotada: {
-    opacity: 0.6,
+  cardAgotada: { opacity: 0.65 },
+  cuerpo: { flexDirection: "row", gap: 14, padding: 14 },
+  fecha: {
+    width: 54,
+    height: 62,
+    borderRadius: 14,
+    backgroundColor: colors.primaryPale,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  barraLateral: {
-    width: 5,
-    backgroundColor: colors.primary,
-  },
-  barraAgotada: {
-    backgroundColor: colors.textDisabled,
-  },
-  contenido: {
-    flex: 1,
-    padding: 14,
-    gap: 6,
-  },
-  fila: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  titulo: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.textPrimary,
-    lineHeight: 21,
-  },
-  entidad: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: "500",
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
+  fechaDia: { fontSize: 22, fontWeight: "800", color: colors.primary, lineHeight: 26 },
+  fechaMes: { fontSize: 11, fontWeight: "800", color: colors.primaryLight, letterSpacing: 0.8 },
+  info: { flex: 1, gap: 4 },
+  categoria: {
     alignSelf: "flex-start",
+    backgroundColor: colors.primaryPale,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  badgeTexto: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.white,
-  },
-  badgeDisponible: {
-    backgroundColor: colors.success,
-  },
-  badgePoco: {
-    backgroundColor: colors.accent,
-  },
-  badgeAgotado: {
-    backgroundColor: colors.textDisabled,
-  },
-  detalles: {
-    marginTop: 4,
-    gap: 3,
-  },
-  detalleFila: {
+  categoriaTexto: { fontSize: 11, fontWeight: "700", color: colors.primary },
+  titulo: { fontSize: 16, fontWeight: "800", color: colors.textPrimary, lineHeight: 21 },
+  entidad: { fontSize: 12, color: colors.textSecondary, fontWeight: "500" },
+  meta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  metaIcono: { marginLeft: 8 },
+  metaTexto: { fontSize: 12, color: colors.textSecondary, fontWeight: "600" },
+  metaLugar: { flex: 1 },
+  pie: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
   },
-  detalleTexto: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    flex: 1,
-  },
+  pista: { flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: "hidden" },
+  relleno: { height: 6, borderRadius: 3 },
+  cupos: { fontSize: 12, fontWeight: "800" },
+  estado: { flex: 1, alignSelf: "flex-start", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  estadoTexto: { fontSize: 11, fontWeight: "700", color: colors.white },
 });

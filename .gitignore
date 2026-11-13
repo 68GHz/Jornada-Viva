@@ -44,3 +44,10 @@ yarn.lock
 
 # Claude Code local config (not synced to remote)
 .claude/
+# emuladores de Firebase
+firestore-debug.log
+ui-debug.log
+firebase-debug.log
+
+# compilado temporal de las pruebas de equivalencia
+tests/equivalencia/.build/
